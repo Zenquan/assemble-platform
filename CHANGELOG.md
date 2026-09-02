@@ -85,4 +85,8 @@ M1 收尾 · 单条产线 Demo —— **后端服务层跑通 + 前端 SimEngine
 
 ## [Unreleased]
 
+### Changed
+
+- **git(0.1.0 保留分支)**：按「每个版本/里程碑分支合回 main 后保留不删」约定，为 v0.1.0（M1 技术验证基线）补建保留分支 `feat/0.1.0-baseline`，指向 `2da0421`（引入 Vue 前端代码前的最后提交，`apps/` 内仅存深色科技 design mockup）。此前 0.1.0 内容系一次性线性合进 main、并无独立版本分支；建此分支使 v0.1.0 也可按版本归因与回溯 diff。已保留分支汇总见 `AGENTS.md`。
+
 <!-- 后续改动按 Conventional Commits 归类追加，勿手填版本号（由发布流程决定） -->
