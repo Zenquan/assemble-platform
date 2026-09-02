@@ -1,5 +1,5 @@
 import { errToStatus } from '@assemble/http';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import { createAssemblyRepos, type AssemblyRepos } from './repositories/index.js';
 import { registerLineRoutes } from './routes/lines.js';
 
@@ -29,7 +29,7 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
 
   registerLineRoutes(app, repos);
 
-  app.setErrorHandler((error, _req, reply) => {
+  app.setErrorHandler((error: FastifyError, _req, reply) => {
     const code = error.message ?? 'INTERNAL_ERROR';
     const status = errToStatus(code);
     void reply.status(status >= 400 && status < 500 ? status : 500).send({
