@@ -1,0 +1,311 @@
+/**
+ * SimEngine 的 Noop 测试替身实现（本轮范围）
+ *
+ * 目的（对应本轮交付验收）：
+ *   1. **接口稳定**：不 import '@babylonjs/core'，业务组件可安全注入本实现先行开发，
+ *      后续切换真 Babylon 实现只改 `createSimEngine` 工厂返回，业务代码零改动。
+ *   2. **可被 mock / 可真跑算法**：渲染类能力（Scene/Asset/Interaction 视觉部分）为
+ *      类型安全的 no-op；装配状态机（mode/step/已装配集合）与实时干涉 **复用
+ *      clearance-core 纯算法真实执行** —— 从而装配/干涉契约可被 vitest 无 WebGL 验证。
+ *
+ * 本文件内约定：
+ *   - 命名带 `Noop*` 前缀的即纯占位实现；`NoopAssembler` / `NoopClearance` 为真实逻辑。
+ *   - 绝无 DOM / WebGL / Babylon 副作用（DOM 依赖集中在 SceneManager 的 mount 入参）。
+ */
+
+import { ClearanceDetector, type ClearancePart } from '@assemble/clearance-core';
+import type { AssemblyMode, InterferenceHit, OBB } from '@assemble/domain';
+
+import type {
+  AssemblyController,
+  AssetManager,
+  CameraPose,
+  CameraViewId,
+  ClearanceController,
+  EngineHealth,
+  InteractionManager,
+  ModeSwitchResult,
+  PickResult,
+  SceneManager,
+  SimEngine,
+} from './types.js';
+
+/* ------------------------------------------------------------------ */
+/* 相机位姿默认表（noop 亦返回稳定值，供 UI 读取视角状态）             */
+/* ------------------------------------------------------------------ */
+
+const CAMERA_PRESETS: Record<CameraViewId, CameraPose> = {
+  iso: { viewId: 'iso', position: [120, 160, 200], target: [0, 40, 0], orthographic: true },
+  front: { viewId: 'front', position: [0, 80, 220], target: [0, 40, 0], orthographic: true },
+  top: { viewId: 'top', position: [0, 260, 0], target: [0, 40, 0], orthographic: true },
+  side: { viewId: 'side', position: [240, 80, 0], target: [0, 40, 0], orthographic: true },
+  free: { viewId: 'free', position: [150, 180, 150], target: [0, 40, 0], orthographic: false },
+};
+
+/* ------------------------------------------------------------------ */
+/* 实时干涉控制器 —— 委托 clearance-core 纯算法（真实逻辑）           */
+/* ------------------------------------------------------------------ */
+
+export class NoopClearance implements ClearanceController {
+  private detector = new ClearanceDetector();
+
+  registerAssembled(parts: ReadonlyArray<{ partId: string; obb: OBB }>): number {
+    const mapped: ClearancePart[] = parts.map((p) => ({ partId: p.partId, obb: p.obb }));
+    this.detector.loadAll(mapped);
+    return this.detector.partCount;
+  }
+
+  queryInteractive(moving: { partId: string; obb: OBB }): InterferenceHit[] {
+    const part: ClearancePart = { partId: moving.partId, obb: moving.obb };
+    // clearance 的 queryInteractive 返回"命中的已存在零件 id"，据此组装 hits。
+    // 为获得稳定 phase 标注，这里返回轻量命中（阶段统一 narrow，供 UI 展示）。
+    const hitIds = this.detector.queryInteractive(part);
+    return hitIds.map((otherId) => ({
+      firstPartId: moving.partId < otherId ? moving.partId : otherId,
+      secondPartId: moving.partId < otherId ? otherId : moving.partId,
+      severity: 'error',
+      overlapEstimate: 1,
+      contactPoint: [0, 0, 0] as const,
+      phase: 'narrow',
+    }));
+  }
+
+  runFull(parts: ReadonlyArray<{ partId: string; obb: OBB }>): import('@assemble/domain').InterferenceReport {
+    const mapped: ClearancePart[] = parts.map((p) => ({ partId: p.partId, obb: p.obb }));
+    const r = this.detector.loadAll(mapped).runFull();
+    return {
+      reportId: `fe-${Date.now().toString(36)}`,
+      lineId: '',
+      source: 'interactive',
+      totalPartCount: r.totalPartCount,
+      pairsChecked: r.pairsChecked,
+      hitCount: r.hits.length,
+      hits: r.hits,
+      elapsedMs: r.elapsedMs,
+      broadCullRatio: r.broadCullRatio,
+      createdAt: new Date().toISOString(),
+    };
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 装配状态机 —— 真实三模式/步骤/集合状态（无渲染依赖，可单测）        */
+/* ------------------------------------------------------------------ */
+
+export class NoopAssembler implements AssemblyController {
+  private _mode: AssemblyMode = 'manual';
+  private _bom = null as AssemblyController['bom'];
+  private _assembled: string[] = [];
+  private _step = 0;
+  private _playing = false;
+  readonly clearance: ClearanceController;
+
+  constructor(clearance: ClearanceController) {
+    this.clearance = clearance;
+  }
+
+  get mode(): AssemblyMode {
+    return this._mode;
+  }
+  get assembledPartIds(): readonly string[] {
+    return this._assembled;
+  }
+  get currentStepSeq(): number {
+    return this._step;
+  }
+  get bom() {
+    return this._bom;
+  }
+
+  load(bom: NonNullable<AssemblyController['bom']>): void {
+    this._bom = bom;
+    this._assembled = [];
+    this._step = 0;
+    this._playing = false;
+    // 初始清空算法集合（装配从 0 开始）
+    this.clearance.registerAssembled([]);
+  }
+
+  switchMode(to: AssemblyMode): ModeSwitchResult {
+    const from = this._mode;
+    if (from === to) return { from, to, ok: true };
+    // 手动模式离开前若有"正拖拽未落位"零件则拒绝（本轮简化：无可拖拽状态即放行）
+    this._mode = to;
+    return { from, to, ok: true };
+  }
+
+  /** 按当前装配顺序取出"下一待装配"零件（auto/replay 用） */
+  private nextPendingPartId(): string | undefined {
+    if (!this._bom) return undefined;
+    const done = new Set(this._assembled);
+    return this._bom.parts.find((p) => !done.has(p.id))?.id;
+  }
+
+  assemble(partId: string): boolean {
+    if (!this._bom || this._assembled.includes(partId)) return false;
+    // 手动模式允许任意顺序？否 —— 严格按步骤序保证与工艺一致。
+    const expected = this._bom.steps[this._step];
+    if (!expected || expected.partId !== partId) return false;
+    this._assembled.push(partId);
+    this._step += 1;
+    return true;
+  }
+
+  undo(): boolean {
+    if (this._assembled.length === 0) return false;
+    const removed = this._assembled.pop();
+    if (removed) this._step = Math.max(0, this._step - 1);
+    return true;
+  }
+
+  play(): boolean {
+    if (this._mode === 'manual') return false;
+    this._playing = true;
+    return true;
+  }
+  pause(): boolean {
+    this._playing = false;
+    return true;
+  }
+
+  seekTo(stepSeq: number): boolean {
+    if (!this._bom) return false;
+    const n = this._bom.steps.length;
+    if (stepSeq < 0 || stepSeq > n) return false;
+    this._step = stepSeq;
+    this._assembled = this._bom.steps.slice(0, stepSeq).map((s) => s.partId);
+    return true;
+  }
+
+  checkPlacement(partId: string, targetObb: OBB): InterferenceHit[] | null {
+    // 手动模式落位校验：把"待装配件目标位姿"与"已装配集合"做实时检测。
+    const hits = this.clearance.queryInteractive({ partId, obb: targetObb });
+    return hits.length > 0 ? hits : null;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 占位能力（渲染相关，本轮不真跑 WebGL）                              */
+/* ------------------------------------------------------------------ */
+
+class NoopScene implements SceneManager {
+  private viewId: CameraViewId = 'iso';
+  private rendering = false;
+  private mounted = false;
+
+  mount(_container: HTMLElement): boolean {
+    this.mounted = true;
+    return true;
+  }
+  unmount(): void {
+    this.mounted = false;
+    this.rendering = false;
+  }
+  setCamera(viewId: CameraViewId): CameraPose {
+    this.viewId = viewId;
+    return CAMERA_PRESETS[viewId];
+  }
+  frameToPart(_partIds: readonly string[]): void {
+    /* noop：真 Babylon 实现时改为聚焦包围盒 */
+  }
+  requestRender(): boolean {
+    return this.mounted;
+  }
+  setRendering(on: boolean): void {
+    this.rendering = on;
+  }
+}
+
+class NoopAssets implements AssetManager {
+  private _loaded = 0;
+  get loadedPartCount(): number {
+    return this._loaded;
+  }
+  async loadLine(_line: unknown, bom: { parts: readonly unknown[] }): Promise<readonly string[]> {
+    // 占位：仅登记数量，不真拉 glTF / 建网格
+    const ids = bom.parts.map((p) => (p as { id: string }).id);
+    this._loaded = ids.length;
+    return ids;
+  }
+  dispose(): void {
+    this._loaded = 0;
+  }
+}
+
+class NoopInteraction implements InteractionManager {
+  /** 拖拽中零件的最近位置（noop 内存态，供测试注入命中行为可覆盖） */
+  private picked: PickResult = { partId: '', ok: false };
+
+  pick(_clientX: number, _clientY: number): PickResult {
+    // 未接真实射线：返回上一次记录（无命中表则 miss）
+    return this.picked;
+  }
+  beginDrag(partId: string): boolean {
+    this.picked = { partId, ok: true };
+    return true;
+  }
+  dragTo(_partId: string, _delta: readonly [number, number, number]): void {
+    /* noop：位置由真引擎计算 */
+  }
+  endDrag(partId: string): { ok: boolean; hits: InterferenceHit[] } {
+    // 结束拖拽无算法归属（真引擎由交互系统结算）；本替身默认放行
+    return { ok: true, hits: [] };
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 顶层 NoopSimEngine + 工厂                                           */
+/* ------------------------------------------------------------------ */
+
+export class NoopSimEngine implements SimEngine {
+  readonly backend = 'noop' as const;
+  readonly scene: SceneManager;
+  readonly assets: AssetManager;
+  readonly interaction: InteractionManager;
+  readonly assembly: AssemblyController;
+  readonly clearance: ClearanceController;
+
+  private _activeLineId: string | null = null;
+  private _initialized = false;
+  private _fps = 0;
+
+  constructor() {
+    this.clearance = new NoopClearance();
+    this.scene = new NoopScene();
+    this.assets = new NoopAssets();
+    this.interaction = new NoopInteraction();
+    this.assembly = new NoopAssembler(this.clearance);
+  }
+
+  init(opts: { container?: HTMLElement; line?: import('@assemble/domain').ProductionLine }): EngineHealth {
+    if (opts.container) this.scene.mount(opts.container);
+    if (opts.line) this._activeLineId = opts.line.id;
+    this._initialized = true;
+    this._fps = 0;
+    return this.health();
+  }
+
+  dispose(): void {
+    this.scene.unmount();
+    this.assets.dispose();
+    this._activeLineId = null;
+    this._initialized = false;
+  }
+
+  health(): EngineHealth {
+    return {
+      ok: this._initialized,
+      backend: 'noop',
+      activeLineId: this._activeLineId,
+      fps: this._fps,
+      assembledParts: this.assembly.assembledPartIds.length,
+      totalParts: this.assembly.bom?.parts.length ?? 0,
+      rendering: false,
+    };
+  }
+}
+
+/** 工厂 —— 门面唯一构造入口；后续真 Babylon 实现在此按条件切换，业务不感知 */
+export function createSimEngine(): SimEngine {
+  return new NoopSimEngine();
+}

@@ -1,0 +1,87 @@
+/* ============================================================
+   sim-platform 深色科技扁平 · 全局设计令牌
+   色板/字号/字体严格承接 apps/sim-platform/design/sim-platform-tech-mockup.html，
+   勿临时改色造成跑偏（assemble-platform-workflow skill）。
+   ============================================================ */
+
+:root {
+  /* 背景层级 */
+  --bg: #0a111f;        /* 整页 / 应用底 */
+  --bg-2: #0c1422;      /* 左右栏面板底 */
+  --bg-3: #0d1626;      /* 卡片 / 行底 */
+  --panel: #0a1322;     /* 浮层面板 */
+  --app-bg: #060b15;    /* body 底（比页面更深） */
+
+  /* 描边 */
+  --line: #1c2740;
+  --line-2: #223352;
+  --line-3: #1a2538;
+
+  /* 文字 */
+  --ink: #e8eefc;       /* 正文主 */
+  --ink-2: #c3d2ea;     /* 次文 */
+  --ink-3: #94a9c9;
+  --mute: #64748b;      /* 弱文 / 注释 */
+  --faint: #4b5f7d;
+  --ghost: #3f5578;
+
+  /* 语义色（涨跌红绿无关，属引擎状态语义） */
+  --cyan: #22d3ee;      /* 主色-青（CTA/激活/引擎在线） */
+  --blue: #1f6feb;      /* 主色-蓝 */
+  --blue-2: #378add;
+  --green: #34d399;     /* 就绪 / 无干涉 */
+  --amber: #fbbf24;     /* 待检修 / 预警 */
+  --red: #f43f5e;       /* 干涉命中 / 瓶颈 */
+
+  /* 渐变与字体 */
+  --grad: linear-gradient(90deg, #1f6feb, #22d3ee);
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--sans);
+  background: var(--app-bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 等宽数字 */
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 细滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #223352;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 主题下可点击元素去掉默认浏览器焦光晕（键盘可访问性另行补 focus-visible） */
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: var(--cyan);
+  text-decoration: none;
+}

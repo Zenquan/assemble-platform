@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["vite/client"],
+    "jsx": "preserve",
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@assemble/domain": ["../../packages/domain/src/index.ts"],
+      "@assemble/clearance-core": ["../../packages/clearance-core/src/index.ts"],
+      "@assemble/sim-utils": ["../../packages/sim-utils/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}
