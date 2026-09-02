@@ -9,6 +9,9 @@
 | `VERSIONING.md` | 版本计划与策略（SemVer + 版本演进路线 + 各阶段目标） | 判断当前做到哪、下一步版本目标 |
 | `CODE_STYLE.md` | 前后端代码风格/命名/结构/错误处理/工程化约定 | 每次提交前对照 |
 | `GIT_GUIDE.md` | Git 分支模型 / Conventional Commits / PR / tag 发版规则 | 每次提交/开分支前对照 |
+| `TESTING.md` | 测试策略：分层/类型/性能基准门禁/提交门禁 | 动手改核心算法前必读 |
+
+> 根目录 `CHANGELOG.md` 记录版本变更历史（Keep a Changelog，发布流程详见 `VERSIONING.md`）。
 
 ## 文档间关系
 
