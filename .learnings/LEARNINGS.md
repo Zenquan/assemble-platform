@@ -104,3 +104,27 @@ pnpm 装全量依赖（services 层 96 包）时反复 `ERR_PNPM_CODEBUDDY_BROKE
 - Pattern-Key: build.pnpm_broker_tmpdir
 
 ---
+
+## [LRN-20260902-005] correction
+
+**Logged**: 2026-09-02T23:55:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: git
+
+### Summary
+版本/里程碑分支合回 main 后应**保留不删**，用于按版本归因错误与回溯 diff。
+
+### Details
+0.2.0 后端分支 `feat/0.2.0-services-runtime` 已 FF 合回 main 后被删；用户纠偏"分支留着，便于定位哪个版本引入的问题"。已用 `git branch feat/0.2.0-services-runtime <tip>` 恢复（FF 合并使 main==该分支 tip）。约定已写 workflow skill Phase3 + AGENTS.md。
+
+### Suggested Action
+任何版本/里程碑分支合并后保留；仅特性级小分支可删。合 main 建议用 merge(保留分支拓扑) 而非只 FF+删。
+
+### Metadata
+- Source: user_feedback
+- Related Files: .agent/skills/assemble-platform-workflow/SKILL.md, AGENTS.md
+- Tags: git, branch, milestone
+- Pattern-Key: git.keep_milestone_branch
+
+---
