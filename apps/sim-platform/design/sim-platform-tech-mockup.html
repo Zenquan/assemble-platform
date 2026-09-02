@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>sim-platform · 深色科技版设计稿</title>
+<style>
+  :root{
+    --bg:#0a111f; --bg-2:#0c1422; --bg-3:#0d1626; --panel:#0a1322;
+    --line:#1c2740; --line-2:#223352; --line-3:#1a2538;
+    --ink:#e8eefc; --ink-2:#c3d2ea; --ink-3:#94a9c9; --mute:#64748b; --faint:#4b5f7d; --ghost:#3f5578;
+    --cyan:#22d3ee; --blue:#1f6feb; --blue-2:#378add; --green:#34d399; --amber:#fbbf24; --red:#f43f5e;
+    --grad:linear-gradient(90deg,#1f6feb,#22d3ee);
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:#060b15;color:var(--ink);padding:28px 20px 60px;line-height:1}
+  .wrap{max-width:1180px;margin:0 auto}
+  .docbar{display:flex;align-items:center;gap:16px;margin-bottom:6px}
+  .docbar h1{font-size:17px;font-weight:500;letter-spacing:.02em}
+  .docbar h1 em{font-style:normal;color:var(--cyan)}
+  .docbar .tag{font-size:11px;letter-spacing:.14em;color:var(--cyan);border:1px solid rgba(34,211,238,.4);padding:3px 9px;border-radius:4px;text-transform:uppercase}
+  .docsub{font-size:12px;color:var(--faint);margin-bottom:18px}
+  .tabs{display:flex;gap:8px;margin-bottom:16px}
+  .tab{font-size:13px;color:var(--mute);border:1px solid var(--line-2);background:var(--bg-2);padding:9px 20px;border-radius:8px;cursor:pointer}
+  .tab.on{color:#04121f;background:var(--grad);border-color:transparent;font-weight:500}
+  .shell{display:none}
+  .shell.on{display:block;animation:in .25s ease}
+  @keyframes in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .note{background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin:18px 0;font-size:12px;color:var(--ink-3);line-height:1.9}
+  .note b{color:var(--cyan);font-weight:500}
+  .note .mono{font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
+  .sw{display:flex;gap:18px;flex-wrap:wrap}
+  .sw .s{display:flex;flex-direction:column;gap:6px}
+  .sw .lbl{font-size:11px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase}
+  .chip{width:34px;height:18px;border-radius:4px;border:1px solid rgba(255,255,255,.08)}
+
+  /* ---------- shared UI ---------- */
+  .ds{background:var(--bg);border:1px solid #1c2740;border-radius:14px;overflow:hidden;position:relative;line-height:1}
+  .gridbg{position:absolute;inset:0;background-image:linear-gradient(rgba(64,140,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(64,140,255,.05) 1px,transparent 1px);background-size:22px 22px;pointer-events:none}
+  .hd{display:flex;align-items:center;gap:12px;padding:16px 22px;border-bottom:1px solid #1c2740;background:rgba(9,15,28,.6);position:relative}
+  .hdlogo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#1f6feb,#0891b2);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px}
+  .hd-name{font-size:14px;color:#e8eefc;font-weight:500}
+  .hd-sub{font-size:11px;color:#4b5f7d;margin-top:3px;letter-spacing:.04em}
+  .badge{font-size:11px;letter-spacing:.1em;color:#5eead4;border:1px solid rgba(94,234,212,.35);padding:3px 9px;border-radius:4px;text-transform:uppercase}
+  .hbtns{margin-left:auto;display:flex;gap:10px}
+  .hbtn{font-size:12px;color:#cbd5e1;border:1px solid #2a3a5c;background:#111a2e;padding:7px 14px;border-radius:7px;font-family:var(--sans)}
+  .hbtn.prim{color:#04121f;background:linear-gradient(90deg,#1f6feb,#22d3ee);border-color:transparent;font-weight:500}
+  .cta{font-size:12px;color:#04121f;background:linear-gradient(90deg,#1f6feb,#22d3ee);padding:8px 14px;border-radius:7px;font-weight:500;display:inline-block}
+  .link{font-size:12px;color:#7dd3fc;display:flex;align-items:center;gap:6px}
+  .kpi{background:#0a1322;border:1px solid #1c2c4a;border-radius:9px;padding:10px 12px}
+  .kpi .lb{font-size:11px;color:#64748b;display:flex;align-items:center;gap:6px}
+  .kpi .lb .ic{width:6px;height:6px;border-radius:2px;background:#1f6feb}
+  .kpi .num{font-family:var(--mono);font-size:19px;color:#dbeafe;margin-top:6px;letter-spacing:.02em}
+  .kpi .num small{font-size:11px;color:#475569;font-family:inherit}
+  .kpi.good .lb .ic{background:#34d399}
+  .kpi.danger .lb .ic{background:#f43f5e}.kpi.danger .num{color:#fda4af}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="docbar">
+    <h1>sim-platform 深色科技版 <em>UI 设计稿</em></h1>
+    <span class="tag">Design spec · v2</span>
+  </div>
+  <div class="docsub">产线3D装配仿真平台 · 前端关键页定稿 · Babylon.js 视口经 SimEngine 门面接入 · 落 Vue3 组件以此为准</div>
+
+  <div class="tabs">
+    <button class="tab on" data-v="line">① 产线选择页</button>
+    <button class="tab" data-v="work">② 装配工作台</button>
+  </div>
+
+  <!-- ============ PAGE 1: 产线选择页 ============ -->
+  <section class="shell on" id="v-line">
+    <div class="ds">
+      <div class="gridbg"></div>
+      <div class="hd">
+        <div class="hdlogo">3D</div>
+        <div>
+          <div class="hd-name">产线装配仿真平台</div>
+          <div class="hd-sub">ASSEMBLY SIMULATION CONSOLE</div>
+        </div>
+        <span class="badge">● 引擎在线</span>
+        <div class="hbtns">
+          <button class="hbtn">导入模型</button>
+          <button class="hbtn prim">＋ 新建产线</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px 22px;position:relative">
+        <div style="grid-column:1/-1;display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:2px">
+          <div>
+            <div style="font-size:15px;color:#e8eefc">产线列表 <b style="color:#22d3ee;font-weight:500">/ 2 条</b></div>
+            <div style="font-size:12px;color:#64748b;margin-top:6px">进入前已离线预检 · 干涉数来自 clearance-core</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <span style="font-size:12px;color:#a5f3fc;border:1px solid #22d3ee;background:rgba(34,211,238,.08);padding:6px 12px;border-radius:999px">全部</span>
+            <span style="font-size:12px;color:#8aa0bf;border:1px solid #26385a;background:#0e1626;padding:6px 12px;border-radius:999px">就绪</span>
+            <span style="font-size:12px;color:#8aa0bf;border:1px solid #26385a;background:#0e1626;padding:6px 12px;border-radius:999px">待检修</span>
+          </div>
+        </div>
+        <!-- 卡片 B1 -->
+        <div style="border:1px solid #223352;border-radius:12px;background:#0d1626;overflow:hidden;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #1b2942">
+            <div style="width:52px;height:44px;border-radius:8px;background:linear-gradient(180deg,#14233f,#0c1424);border:1px solid #263a5e;display:flex;align-items:center;justify-content:center;font-size:10px;color:#5b7bb0">B1</div>
+            <div>
+              <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#5eead4"><span style="width:8px;height:8px;border-radius:50%;background:#34d399;box-shadow:0 0 0 3px rgba(52,211,153,.15)"></span>就绪 · 无干涉</div>
+              <div style="font-size:14px;color:#e8eefc;margin-top:4px">主装配线 B1</div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px">12 工位 · 标准节拍 42s</div>
+            </div>
+          </div>
+          <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+              <div class="kpi good"><div class="lb"><span class="ic"></span>零部件</div><div class="num">186</div></div>
+              <div class="kpi good"><div class="lb"><span class="ic"></span>干涉预检</div><div class="num">0</div></div>
+              <div class="kpi"><div class="lb"><span class="ic"></span>预检耗时</div><div class="num">96<small> ms</small></div></div>
+            </div>
+            <div style="margin-top:2px;height:3px;border-radius:2px;background:#1c2c4a;overflow:hidden"><i style="display:block;height:100%;width:82%;background:linear-gradient(90deg,#1f6feb,#22d3ee)"></i></div>
+          </div>
+          <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid #1b2942">
+            <span class="link">查看详情</span>
+            <span class="cta">进入装配工作台 →</span>
+          </div>
+        </div>
+        <!-- 卡片 B2 -->
+        <div style="border:1px solid #223352;border-radius:12px;background:#0d1626;overflow:hidden;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #1b2942">
+            <div style="width:52px;height:44px;border-radius:8px;background:linear-gradient(180deg,#14233f,#0c1424);border:1px solid #263a5e;display:flex;align-items:center;justify-content:center;font-size:10px;color:#5b7bb0">B2</div>
+            <div>
+              <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#fbbf24"><span style="width:8px;height:8px;border-radius:50%;background:#fbbf24;box-shadow:0 0 0 3px rgba(251,191,36,.15)"></span>待检修 · 干涉预警</div>
+              <div style="font-size:14px;color:#e8eefc;margin-top:4px">副装配线 B2</div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px">9 工位 · 标准节拍 55s</div>
+            </div>
+          </div>
+          <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+              <div class="kpi good"><div class="lb"><span class="ic"></span>零部件</div><div class="num">142</div></div>
+              <div class="kpi danger"><div class="lb"><span class="ic"></span>干涉预检</div><div class="num">3</div></div>
+              <div class="kpi"><div class="lb"><span class="ic"></span>预检耗时</div><div class="num">74<small> ms</small></div></div>
+            </div>
+            <div style="margin-top:2px;height:3px;border-radius:2px;background:#1c2c4a;overflow:hidden"><i style="display:block;height:100%;width:58%;background:linear-gradient(90deg,#1f6feb,#22d3ee)"></i></div>
+          </div>
+          <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid #1b2942">
+            <span class="link">查看详情</span>
+            <span class="cta">处理干涉 →</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>状态源：</b>就绪绿 / 待检修琥珀光晕圆点（产线健康）；<b>指标格=入口离线预检快照</b>，干涉预检走红即引导「处理干涉」，无干涉走「进入装配工作台」；数字等宽、耗时带 ms 单位。B2 卡片 3 处干涉来自 clearance-core 离线 <span class="mono">runFull()</span> 的 <span class="mono">hits</span>。
+    </div>
+  </section>
+
+  <!-- ============ PAGE 2: 装配工作台 ============ -->
+  <section class="shell" id="v-work">
+    <div class="wb ds">
+      <div class="hd">
+        <div>
+          <div class="hd-name">主装配线 B1 · 装配工作台</div>
+          <div class="hd-sub">SIMULATION WORKBENCH</div>
+        </div>
+        <span style="display:flex;align-items:center;gap:7px;font-size:12px;color:#5eead4"><span style="width:8px;height:8px;border-radius:50%;background:#34d399"></span>引擎实时 · 60fps</span>
+        <div style="margin-left:auto;display:flex;border:1px solid #243a5e;border-radius:8px;overflow:hidden">
+          <span style="font-size:12px;padding:7px 16px;color:#8aa0bf;background:#0d1626">自动</span>
+          <span style="font-size:12px;padding:7px 16px;color:#04121f;background:linear-gradient(90deg,#1f6feb,#22d3ee);font-weight:500">手动</span>
+          <span style="font-size:12px;padding:7px 16px;color:#8aa0bf;background:#0d1626">回放</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-left:14px">
+          <button class="hbtn">复位</button><button class="hbtn">导出报告</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:196px 1fr 270px;min-height:440px">
+        <!-- 左栏 BOM -->
+        <div style="border-right:1px solid #1a2538;padding:14px;display:flex;flex-direction:column;gap:10px;background:#0c1422">
+          <div style="font-size:11px;color:#5c7699;letter-spacing:.12em;display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border:1px solid #22d3ee;border-radius:2px"></span>零件 / BOM</div>
+          <div style="display:flex;flex-direction:column;gap:2px;font-size:12px">
+            <div style="color:#c3d2ea;margin-top:2px;padding:5px 8px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:1.5px;background:#2a3a5c"></span>壳体总成<span style="margin-left:auto;font-size:10px;color:#4b5f7d">42</span></div>
+            <div style="color:#94a9c9;padding:5px 8px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:1.5px;background:#2a3a5c"></span>底座 housing_1<span style="margin-left:auto;color:#34d399;font-size:10px">✓</span></div>
+            <div style="color:#94a9c9;padding:5px 8px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:1.5px;background:#2a3a5c"></span>罩体 cover_2<span style="margin-left:auto;color:#34d399;font-size:10px">✓</span></div>
+            <div style="color:#c3d2ea;margin-top:2px;padding:5px 8px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:1.5px;background:#2a3a5c"></span>传动组<span style="margin-left:auto;font-size:10px;color:#4b5f7d">28</span></div>
+            <div style="color:#a5f3fc;padding:5px 8px;display:flex;align-items:center;gap:7px;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.35);border-radius:6px"><span style="width:6px;height:6px;border-radius:1.5px;background:#22d3ee"></span>轴 shaft_2<span style="margin-left:auto;font-size:10px;color:#67e8f9">●装配中</span></div>
+            <div style="color:#94a9c9;padding:5px 8px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:1.5px;background:#f43f5e"></span>齿轮 gear_6<span style="margin-left:auto;color:#fda4af;font-size:10px">✕命中</span></div>
+            <div style="color:#c3d2ea;margin-top:2px;padding:5px 8px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:1.5px;background:#2a3a5c"></span>电机<span style="margin-left:auto;font-size:10px;color:#4b5f7d">6</span></div>
+            <div style="color:#94a9c9;padding:5px 8px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:1.5px;background:#2a3a5c"></span>定子 stator_1</div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;gap:6px;border-top:1px solid #1a2538;padding-top:10px">
+            <span style="font-size:11px;color:#6b83a5;border:1px solid #1e2e4e;background:#0e1828;border-radius:6px;padding:6px 4px;flex:1;text-align:center">轴测</span>
+            <span style="font-size:11px;color:#6b83a5;border:1px solid #1e2e4e;background:#0e1828;border-radius:6px;padding:6px 4px;flex:1;text-align:center">剖切</span>
+            <span style="font-size:11px;color:#6b83a5;border:1px solid #1e2e4e;background:#0e1828;border-radius:6px;padding:6px 4px;flex:1;text-align:center">隐藏</span>
+            <span style="font-size:11px;color:#6b83a5;border:1px solid #1e2e4e;background:#0e1828;border-radius:6px;padding:6px 4px;flex:1;text-align:center">适配</span>
+          </div>
+        </div>
+        <!-- 中栏 视口 -->
+        <div style="position:relative;background:#070c18;overflow:hidden;display:flex">
+          <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(56,120,220,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(56,120,220,.06) 1px,transparent 1px);background-size:20px 20px"></div>
+          <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(56,120,220,.03),transparent 60%)"></div>
+          <div style="position:absolute;top:10px;left:12px;font-size:11px;color:#3f5578;font-family:var(--mono)">WORLD · ortho</div>
+          <div style="position:absolute;top:10px;right:12px;display:flex;align-items:center;gap:8px;background:rgba(10,17,31,.75);border:1px solid #223352;border-radius:7px;padding:6px 11px;font-size:12px;color:#7dd3fc">STEP <b style="color:#22d3ee;font-size:14px;font-weight:500">07</b> / 18</div>
+          <!-- 3D 占位 -->
+          <div style="position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:190px;height:132px">
+            <div style="position:absolute;left:8px;bottom:64px;right:8px;height:14px;background:linear-gradient(180deg,#101b30,#0b1424);border:1px solid #1d2e4d;border-radius:3px"></div>
+            <div style="position:absolute;left:20px;top:20px;width:56px;height:42px;background:linear-gradient(160deg,#1b2e52,#12203c);border:1px solid #2b4776"></div>
+            <div style="position:absolute;left:66px;top:8px;width:32px;height:28px;background:linear-gradient(160deg,#1b2e52,#12203c);border:1px solid #3475c4"></div>
+            <div style="position:absolute;left:88px;top:46px;width:64px;height:32px;background:linear-gradient(160deg,#1b2e52,#12203c);border:1px solid #2b4776"></div>
+            <div style="position:absolute;left:20px;top:64px;width:46px;height:28px;background:linear-gradient(160deg,#1b2e52,#12203c);border:1px solid #2b4776"></div>
+            <div style="position:absolute;left:42px;top:2px;width:92px;height:68px;border:2px solid #f43f5e;border-radius:5px;box-shadow:0 0 0 1px rgba(244,63,94,.4),0 0 22px rgba(244,63,94,.25);display:flex;align-items:center;justify-content:center;overflow:hidden">
+              <div style="position:absolute;inset:0;background:repeating-linear-gradient(45deg,rgba(244,63,94,.14) 0 6px,transparent 6px 12px)"></div>
+              <span style="position:absolute;top:-18px;left:0;font-size:10px;color:#fda4af;letter-spacing:.05em">◉ INTERFERENCE</span>
+            </div>
+            <div style="position:absolute;top:60px;left:80px;width:82px;height:2px;background:linear-gradient(90deg,transparent,#22d3ee)"></div>
+            <div style="position:absolute;top:0;left:120px;width:2px;height:150px;background:linear-gradient(180deg,transparent,#22d3ee)"></div>
+          </div>
+          <!-- 坐标轴 -->
+          <div style="position:absolute;right:14px;bottom:66px;width:54px;height:54px;opacity:.9">
+            <div style="position:absolute;left:26px;top:0;width:2px;height:26px;background:#22d3ee"></div>
+            <div style="position:absolute;left:26px;top:26px;width:26px;height:2px;background:#f43f5e"></div>
+            <div style="position:absolute;left:0;top:26px;width:26px;height:2px;background:#378add"></div>
+            <div style="position:absolute;right:2px;top:0;font-size:9px;color:#22d3ee">Y</div>
+            <div style="position:absolute;right:0;bottom:2px;font-size:9px;color:#f43f5e">X</div>
+            <div style="position:absolute;left:0;top:0;font-size:9px;color:#378add">Z</div>
+          </div>
+          <!-- 播放条 -->
+          <div style="position:absolute;left:0;right:0;bottom:0;height:46px;background:rgba(9,15,28,.9);border-top:1px solid #1a2538;display:flex;align-items:center;gap:14px;padding:0 16px">
+            <span style="width:30px;height:30px;border-radius:50%;border:1px solid #2a3a5c;color:#cbd5e1;display:flex;align-items:center;justify-content:center;background:#101b30;font-size:11px">◀</span>
+            <span style="width:30px;height:30px;border-radius:50%;background:linear-gradient(90deg,#1f6feb,#22d3ee);color:#04121f;display:flex;align-items:center;justify-content:center;font-size:12px">▶</span>
+            <span style="width:30px;height:30px;border-radius:50%;border:1px solid #2a3a5c;color:#cbd5e1;display:flex;align-items:center;justify-content:center;background:#101b30;font-size:11px">⏭</span>
+            <div style="flex:1;height:3px;background:#1c2c4a;border-radius:2px;position:relative">
+              <i style="position:absolute;left:0;top:0;bottom:0;width:38%;background:linear-gradient(90deg,#1f6feb,#22d3ee);border-radius:2px"></i>
+              <span style="position:absolute;left:38%;top:50%;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:#22d3ee;box-shadow:0 0 8px rgba(34,211,238,.5)"></span>
+            </div>
+            <span style="font-size:11px;color:#4b5f7d;font-family:var(--mono)">00:07.4 / 00:19.2</span>
+          </div>
+        </div>
+        <!-- 右栏 -->
+        <div style="border-left:1px solid #1a2538;padding:14px;display:flex;flex-direction:column;gap:11px;background:#0c1422">
+          <div style="background:rgba(244,63,94,.07);border:1px solid rgba(244,63,94,.55);border-radius:9px;padding:11px 12px">
+            <div style="display:flex;align-items:center;gap:7px;color:#fda4af;font-size:12px;font-weight:500"><span style="width:7px;height:7px;border-radius:2px;background:#f43f5e"></span>实时干涉 · 已拦截</div>
+            <div style="color:#fdba74;font-size:11px;margin-top:7px;display:flex;gap:5px"><span style="font-family:var(--mono);color:#fca5a5">shaft_2</span>↔<span style="font-family:var(--mono);color:#fca5a5">bearing_1</span></div>
+            <div style="color:#64748b;font-size:11px;margin-top:5px">OBB-SAT 命中 · 建议调整姿态后重试</div>
+            <div style="margin-top:9px;font-size:11px;color:#fb7185;border:1px solid rgba(244,63,94,.4);border-radius:6px;padding:5px 0;text-align:center;background:rgba(244,63,94,.05)">本次落位被拦截，不执行装配</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:4px">
+            <span style="font-size:11px;color:#5c7699;letter-spacing:.1em">装配步骤</span>
+            <span style="margin-left:auto;font-size:11px;color:#4b5f7d">当前 STEP 07 / 18</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="border:1px solid #1b2942;background:#0d1626;border-radius:8px;padding:8px 11px;display:flex;align-items:center;gap:9px">
+              <span style="width:20px;height:20px;border-radius:6px;background:#14233f;color:#5b7bb0;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none">06</span>
+              <span style="flex:1;min-width:0;font-size:12.5px;color:#c3d2ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">安装罩体 cover_2</span>
+              <span style="color:#34d399;font-size:11px">✓</span>
+            </div>
+            <div style="border:1px solid rgba(34,211,238,.5);background:rgba(34,211,238,.06);border-radius:8px;padding:8px 11px;display:flex;align-items:center;gap:9px">
+              <span style="width:20px;height:20px;border-radius:6px;background:rgba(34,211,238,.15);color:#22d3ee;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none">07</span>
+              <span style="flex:1;min-width:0">
+                <div style="font-size:12.5px;color:#e8eefc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">装入传动轴 shaft_2</div>
+                <div style="font-size:10.5px;color:#4b5f7d;margin-top:2px">压装 · ±0.02mm</div>
+              </span>
+              <span style="color:#22d3ee;font-size:11px">●</span>
+            </div>
+            <div style="border:1px solid #1b2942;background:#0d1626;border-radius:8px;padding:8px 11px;display:flex;align-items:center;gap:9px">
+              <span style="width:20px;height:20px;border-radius:6px;background:#14233f;color:#5b7bb0;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none">08</span>
+              <span style="flex:1;min-width:0;font-size:12.5px;color:#c3d2ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">啮合齿轮 gear_6</span>
+              <span style="color:#2a3a5c;font-size:11px">○</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:4px">
+            <span style="font-size:11px;color:#5c7699;letter-spacing:.1em">节拍监测</span>
+            <span style="margin-left:auto;font-size:11px;color:#4b5f7d">标准 42s</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;font-size:11px">
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:62px;color:#8aa0bf;flex:none">工位 04</span><div style="flex:1;height:8px;background:#14233f;border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:76%;border-radius:4px;background:linear-gradient(90deg,#1f6feb,#22d3ee)"></i></div><span style="width:32px;text-align:right;color:#7dd3fc;font-family:var(--mono)">31s</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:62px;color:#8aa0bf;flex:none">工位 07</span><div style="flex:1;height:8px;background:#14233f;border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:96%;border-radius:4px;background:#f43f5e"></i></div><span style="width:32px;text-align:right;color:#fda4af;font-family:var(--mono)">41s</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:62px;color:#8aa0bf;flex:none">工位 09</span><div style="flex:1;height:8px;background:#14233f;border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:58%;border-radius:4px;background:#f59e0b"></i></div><span style="width:32px;text-align:right;color:#fdba74;font-family:var(--mono)">24s</span></div>
+          </div>
+          <div style="color:#3f5578;font-size:10.5px;line-height:1.7;border-top:1px solid #141f33;padding-top:9px">瓶颈: 工位 07 (41s) · 建议拆分压装节拍<br>broad-cull 86% · BVH 深度 9</div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>实时干涉链路：</b>手动模式拖拽 shaft_2 → 前端 <span class="mono">queryInteractive()</span> BVH vs 单件检测命中 → 中栏视口斜纹红框 <span class="mono">INTERFERENCE</span> 高亮 + 右栏红卡 <span class="mono">shaft_2 ↔ bearing_1</span>（OBB-SAT 命中）→ 本次落位被拦截。节拍工位 07 超 42s 标红瓶颈，直接复用 <span class="mono">taktCore</span> 输出。
+    </div>
+  </section>
+
+  <!-- ============ token ============ -->
+  <div class="note" style="margin-top:6px">
+    <b>设计令牌（转 Vue3 时用 CSS 变量承接）</b>
+    <div class="sw" style="margin-top:12px">
+      <div class="s"><span class="lbl">主色-蓝</span><span class="chip" style="background:#1f6feb"></span></div>
+      <div class="s"><span class="lbl">主色-青</span><span class="chip" style="background:#22d3ee"></span></div>
+      <div class="s"><span class="lbl">就绪</span><span class="chip" style="background:#34d399"></span></div>
+      <div class="s"><span class="lbl">待检修</span><span class="chip" style="background:#fbbf24"></span></div>
+      <div class="s"><span class="lbl">干涉命中</span><span class="chip" style="background:#f43f5e"></span></div>
+      <div class="s"><span class="lbl">视口底</span><span class="chip" style="background:#070c18"></span></div>
+      <div class="s"><span class="lbl">面板底</span><span class="chip" style="background:#0c1422"></span></div>
+      <div class="s"><span class="lbl">卡片底</span><span class="chip" style="background:#0d1626"></span></div>
+    </div>
+    <div style="margin-top:12px">色板：深蓝黑 <span class="mono">#0a111f</span> · 面板 <span class="mono">#0c1422</span> · 卡片 <span class="mono">#0d1626</span> · 线框 <span class="mono">#1c2740</span> · 正文 <span class="mono">#e8eefc</span> · 次文 <span class="mono">#94a9c9</span> · 弱文 <span class="mono">#64748b</span>。CTA/激活态走 <span class="mono">linear-gradient(90deg,#1f6feb,#22d3ee)</span>。所有数字等宽 <span class="mono">ui-monospace</span>。</div>
+  </div>
+</div>
+<script>
+  document.querySelectorAll('.tab').forEach(function(t){
+    t.addEventListener('click', function(){
+      document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('on')});
+      document.querySelectorAll('.shell').forEach(function(x){x.classList.remove('on')});
+      t.classList.add('on');
+      document.getElementById('v-'+t.getAttribute('data-v')).classList.add('on');
+    });
+  });
+</script>
+</body>
+</html>
