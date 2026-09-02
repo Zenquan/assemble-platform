@@ -34,10 +34,11 @@ description: 产线3D装配仿真平台（assemble-platform）的本工程开发
 - 规划落地时维护 `CHANGELOG.md` 的 Unreleased（归类 feat/fix/perf）。
 - 本阶段完成 → commit（`docs(...)` 前缀）。
 
-### Phase 2 —— 设计稿（UI 相关用 Workbuddy 出 mockup）
-- 涉及前端页面的改动，先用 **Workbuddy 内嵌 mockup**（`show_widget` + mockup 模块）绘制关键页线框稿，对齐布局与信息架构，**先给人看再编码**。
-- 设计稿需贴合当前浅色主题；聚焦关键页（产线选择、装配工作台、干涉提示、节拍可视），不必每页都画。
-- 设计确认后落一份设计稿资产（可内嵌或存档），→ commit（`docs:` 或 `design:` 前缀，若入仓则 `chore`/`feat` 视改动）。
+### Phase 2 —— 设计稿（UI 相关用 Workbuddy 出设计稿）
+- 涉及前端页面的改动，先用 **Workbuddy** 绘制关键页设计稿，对齐布局与信息架构，**先给人看再编码**。
+- **风格固定为「深色科技扁平」**（色板/令牌/视觉语言见 `apps/sim-platform/design/sim-platform-tech-mockup.html` 与 `docs/sim-platform-design.md` §1），**不要**画成贴合宿主 IDE 的浅色 mockup——产品 UI 是深色工业大屏感。
+- 聚焦关键页（产线选择、装配工作台、干涉提示、节拍可视），不必每页都画。
+- 设计确认后落一份设计稿资产（可内嵌或存档，高保真稿放 `apps/sim-platform/design/`），→ commit（`docs:` 或 `design:` 前缀，若入仓则 `chore`/`feat` 视改动）。
 
 ### Phase 3 —— 小步实现（红绿驱动）
 - 切 `feat/<名>` 或 `fix/<名>` 分支（从 `main`）。
