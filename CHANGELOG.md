@@ -44,7 +44,7 @@ Monorepo 技术验证（M1）基线：领域契约 + 干涉算法 + 数学库 + 
 
 ## [0.2.0] - 2026-09-02
 
-M1 收尾 · 单条产线 Demo —— **后端服务层跑通**（0.2.x 后端半程）。
+M1 收尾 · 单条产线 Demo —— **后端服务层跑通 + 前端 SimEngine 门面与产线选择页落地**（0.2.x 全半程）。
 
 ### Added
 
@@ -55,18 +55,29 @@ M1 收尾 · 单条产线 Demo —— **后端服务层跑通**（0.2.x 后端�
   - `takt-svc`(7104)：`POST /takt/simulate` 节拍瓶颈仿真（taktCore）
   - `auth-svc`(7105)：roles/token/`authorize` RBAC 权限校验（super_admin 放行 / viewer 拒绝）
 - 依赖树：pnpm-lock 新增 96 包（fastify 5.12 + @fastify/* + workspace 链接）
+- **apps/sim-platform · Vue3 + Vite 前端骨架与产线选择页**（依 `ARCHITECTURE.md §2` 门面放 `src/engine` 而非 packages 共享层）：
+  - **SimEngine 门面**（types.ts + noop.ts）：引擎无关窄接口，5 个 Manager（Scene/Asset/Interaction/Assembly/Clearance）；NoopSimEngine 替身：装配状态机 + 实时干涉**委托 clearance-core 真实算法**（无 WebGL、可单测）；后续 Babylon 接入仅替换门面内部实现
+  - **产线选择页**（design 稿页面 A）：深色科技扁平，3D 徽标 + 引擎在线 + 过滤芯片（全部/就绪/待检修）+ 产线卡（就绪绿/待检修琥珀/红 干涉告警 + 零部件/干涉预检/预检耗时 KPI + 进度条 + CTA），数据真拉 assembly-svc + interference-svc
+  - 装配工作台：路由占位，演示 `createSimEngine()` 工厂注入（待 Babylon 接入替换 canvas）
+  - 工程基线：vue3.5 + vue-router4 + vite5 + vue-tsc；dev 代理 `/lines → 7101` `/interference → 7102`
+  - 单测 14 例全绿：10 例门面契约 + 4 例健康派生态（ready/attention/disabled 语义锁定）
+- 视觉验收截图归档：`docs/line-select-v0.2.0-frontend.png`
 
 ### Verified
 
 - 5 服务 `GET /healthz` 均 200
 - interference 性能（HTTP 实测）：500 件 19.6ms、**2000 件 33.4ms**，BVH broad phase 剔除率 99.9%（远超 200 件 <200ms 门禁）
+- 产线选择页 E2E（playwright 截图）：前端真调通 assembly-svc(`/lines`)+ interference-svc(`/interference/offline`)，KPI（180 零部件 / 135 命中 / 5ms 预检耗时）实时来自 clearance-core
+- 根 vitest 23 例回归绿（clearance-core 7 + sim-utils 3 × hoisted 3 + sim-platform 14 独立运行）
+- vue-tsc 0 错；vite build 53 modules transformed 0 警告
 
 ### Fixed
 
 - `assembly-svc` 声明缺失 `@assemble/http` 依赖（TS2307）
 - `assembly-svc` setErrorHandler 显式标注 `error: FastifyError`，消除 fastify v5 `unknown` 类型错
+- 根 `vitest.config.ts` 排除 `apps/**`（apps 自带 vite.config 与 `@/*` alias，根仅负责 packages/services 回归）
 
-> ⚠️ 0.2.0 前端半程（sim-platform Vue3 + SimEngine 门面、产线选择页）待续，届时补齐 0.2.0 出口门禁后再发版 tag。
+> ⚠️ 0.2.0 出口门禁待补：Babylon 接入装配工作台、清洁就绪产线种子（FEAT-20260903-001）、一键起前端+服务脚本；完成后发版 tag v0.2.0。
 
 ---
 

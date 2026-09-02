@@ -1,0 +1,109 @@
+<script setup lang="ts">
+// 顶部品牌栏 —— 复用于产线选择页与装配工作台。
+// props.title/subtitle 可覆盖；无则回落到平台默认品牌。
+// engineOnline：引擎在线状态（默认 true = 在线，绿光晕）
+const props = withDefaults(
+  defineProps<{
+    title?: string;
+    subtitle?: string;
+    engineOnline?: boolean;
+  }>(),
+  { engineOnline: true },
+);
+</script>
+
+<template>
+  <header class="hd">
+    <div class="hdlogo">3D</div>
+    <div>
+      <div class="hd-name">{{ title ?? '产线装配仿真平台' }}</div>
+      <div class="hd-sub">{{ subtitle ?? 'ASSEMBLY SIMULATION CONSOLE' }}</div>
+    </div>
+    <span class="badge" :class="{ on: engineOnline !== false }">
+      <i class="dot"></i>引擎{{ engineOnline === false ? '离线' : '在线' }}
+    </span>
+    <div class="hbtns">
+      <slot name="actions">
+        <button class="hbtn" type="button" title="本轮未接入">导入模型</button>
+        <button class="hbtn prim" type="button" title="本轮未接入">＋ 新建产线</button>
+      </slot>
+    </div>
+  </header>
+</template>
+
+<style scoped>
+.hd {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(9, 15, 28, 0.6);
+}
+.hdlogo {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1f6feb, #0891b2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+.hd-name {
+  font-size: 14px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.hd-sub {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--faint);
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #5eead4;
+  margin-left: 2px;
+}
+.badge .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.15);
+}
+.badge.off .dot {
+  background: var(--amber);
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.15);
+}
+.hbtns {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+.hbtn {
+  font-size: 12px;
+  color: #cbd5e1;
+  border: 1px solid #2a3a5c;
+  background: #111a2e;
+  padding: 7px 14px;
+  border-radius: 7px;
+}
+.hbtn.prim {
+  color: #04121f;
+  background: var(--grad);
+  border-color: transparent;
+  font-weight: 500;
+}
+.hbtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+</style>

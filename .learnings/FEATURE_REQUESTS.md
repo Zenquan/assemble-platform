@@ -36,7 +36,8 @@ medium
 
 **Logged**: 2026-09-02T23:00:00+08:00
 **Priority**: medium
-**Status**: pending
+**Status**: resolved
+**Resolution**: 2026-09-03T00:10:00+08:00 on branch feat/0.2.0-sim-platform（SimEngine 门面 + 产线选择页就绪；装配工作台为占位；Babylon 接入与清洁就绪产线为下一轮见 FEAT-20260903-001）
 **Area**: frontend
 
 ### Requested Capability
@@ -56,3 +57,30 @@ complex
 - Related Features: sim-platform
 
 ---
+
+---
+
+## [FEAT-20260903-001] clean_ready_line_seed
+
+**Logged**: 2026-09-03T00:10:00+08:00
+**Priority**: low
+**Status**: pending
+**Area**: data
+
+### Requested Capability
+在 interference-svc 种子几何或 assembly-svc 产线中，引入一条「装配良好、离线预检 0 干涉」的产线（例如 `kind=optimized` 或新启一条启用冷链但几何稀疏），使产线选择页能同时呈现 design 稿 B1「就绪·无干涉(绿)」与 B2「待检修·干涉告警(红)」两种真实状态。
+
+### User Context
+现 FEAT-002 落地后，产线选择页两端 (`sorting` / `fresh-cut`) 种子几何（synthesizePartsForLine 的 cluster+jitter 策略）确定性命中 0.75·partCount 件干涉，两卡均显示「待检修·135 干涉」。绿态派生态由单测锁定（deriveHealth 0→ready），但 E2E 视觉缺一绿色就绪卡。设计稿页面 A 的 B1/B2 双态对照是 demo 必要组成。
+
+### Complexity Estimate
+small
+
+### Suggested Implementation
+两个走法任选其一：
+  (a) `synthesizePartsForLine` 接收 lineKind 时，对 `cold-chain` 或新 `optimized` kind 改用全稀疏无 jitter 布局（hitCount 始终 0），assembly-svc 种子加一条启用 cold-chain 产线；与现 `kind ∈ {sorting, fresh-cut}` 不冲突。
+  (b) 在 assembly-svc 注入一条 BOM 显式声明 0 干涉的产线（前端跳过预检直接 ready），需新增领域字段 `forceReady: boolean` 或等价 precheck-skip 标记。
+
+### Metadata
+- Frequency: first_time
+- Related Features: sim-platform, interference-svc, assembly-svc

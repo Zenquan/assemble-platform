@@ -14,6 +14,9 @@ export default defineConfig({
   },
   test: {
     include: ['**/test/**/*.test.ts', '**/tests/**/*.test.ts', '**/*.test.ts'],
+    // apps/* 自带 vite.config 含内部 alias 与 vue plugin，由各自包内 `vitest run` 执行；
+    // 根 vitest 仅覆盖 packages/services 的共享/服务侧回归，避免 alias 冲突。
+    exclude: ['node_modules/**', 'dist/**', 'apps/**'],
     environment: 'node',
   },
 });

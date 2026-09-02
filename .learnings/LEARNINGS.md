@@ -128,3 +128,69 @@ pnpm 装全量依赖（services 层 96 包）时反复 `ERR_PNPM_CODEBUDDY_BROKE
 - Pattern-Key: git.keep_milestone_branch
 
 ---
+
+### LRN-20260903-001 · SimEngine 门面放 apps/ 而非 packages/
+
+**Context**: 0.2.0 sim-platform FEAT-002 落地时，新建 `packages/sim-engine/` 空目录预做门面包。
+ARCHITECTURE §2 显式规划门面在 `apps/sim-platform/src/engine`，理由：
+- 门面依赖 WebGL 渲染库（Babylon），属于浏览器专用；
+- 单一 app 私有，跨 app 复用概率低；
+- `packages/*` 红线要求「无 DOM/Node 专属依赖、可被前后端同源复用」，
+  把浏览器专用渲染门面放进 packages 会破坏该约定并拖入 Babylon 进 Node 构建图。
+
+**Decision**: 删 `packages/sim-engine` 空目录，门面落 `apps/sim-platform/src/engine`。
+用户经 AskUserQuestion 确认。
+
+**Consequence**: 架构红线（业务不 import @babylonjs/core）仍成立——业务只触 `src/engine`
+公开的窄接口与工厂 `createSimEngine()`；Babylon 替换 noop 仅改门面内部实现。
+
+**Rule for future**: 浏览器专用、单 app 私有层不进入 packages 共享层。
+packages/* 限定为：纯算法/纯类型/可跨端复用、降级基础设施。
+
+---
+
+### LRN-20260903-002 · vite.config.ts 块注释里的 `*/` 终止注释
+
+**Symptom**: esbuild 解析 apps/sim-platform/vite.config.ts 时报
+`Expected ";" but found "（"` 位置在 `packages/*/src（测试...）`，无法启动 vite/vitest。
+
+**Root cause**: 块注释 `/** ... */` 内的 `packages/*/src` 含 `*/` 子串，被当作块注释结束符，
+后续中文字符变非法 token。
+
+**Fix**: 块注释内若需表示通配路径，写成 `packages/<pkg>/src` 或 `packages/*[1]` 等不含
+完整 `*/` 的形式。
+
+**Consequence**: vite dev 启动后 vitest 顺利通过，单测 10/10 绿。
+
+---
+
+### LRN-20260903-003 · 根 vitest 与 app 内 vitest 的 alias 范围
+
+**Context**: 根 `vitest.config.ts` 仅 alias workspace 共享包（@assemble/domain 等），
+不包含 app 内部 `@/*` 与 vue 插件。app 自己的 vite.config.ts 含 `@` 与 vue plugin。
+若根 `vitest` 用 `**/*.test.ts` 收集 apps 下的测试，会因找不到 `@/*` 而 fail。
+
+**Decision**: 根 `vitest.config.ts` `exclude: ['node_modules/**', 'dist/**', 'apps/**']`。
+app 测试由各 app 目录的 `pnpm test` / `vitest run` 走本地 vite.config 执行；
+根 `vitest` 仅覆盖 packages/services 的共享/服务侧回归。
+
+**Rule for future**: 跨工作区测试套件分两层：根负责 packages/services 回归（无 app 内部 alias），
+各 app 负责自身 UI/组件/门面契约（自带 vite.config + app 内部 alias）。
+
+---
+
+### LRN-20260903-004 · 前端 E2E 视觉冒烟一次性编排（start→wait→shot→kill）
+
+**Context**: 前端联调后端要可视化验收，跨 Bash 调用的 `&` 起的服务会随 shell 退出被杀。
+每次截图重启三个进程（assembly-svc + interference-svc + vite dev）需可复现。
+
+**Pattern**: 写单文件 `shot-*.mjs`，spawn 三个子进程 → 轮询 healthz/200 等就绪 →
+playwright `goto` + `networkidle` + `screenshot` → finally 逐个 SIGTERM。
+整过程单次 Bash 调用内完成，零外部依赖、零手操作。
+
+**Files**:
+- /tmp/shot-line-select.mjs（命令与代码）
+- 截图归档：docs/line-select-v0.2.0-frontend.png（commit 时一并入仓）
+
+**Rule for future**: 任何「前后端联调视觉验收」均走此一次性编排；截图归档到 docs/<name>.png
+入仓，作为里程碑可追溯物证。
