@@ -42,6 +42,34 @@ Monorepo 技术验证（M1）基线：领域契约 + 干涉算法 + 数学库 + 
 
 ---
 
+## [0.2.0] - 2026-09-02
+
+M1 收尾 · 单条产线 Demo —— **后端服务层跑通**（0.2.x 后端半程）。
+
+### Added
+
+- **5 个后端服务全部可 install + build + smoke run**（此前为"代码写好但从未验证可运行"悬空态）：
+  - `assembly-svc`(7101)：产线列表/详情/增改，走降级 storage（3 条种子产线）
+  - `interference-svc`(7102)：`POST /interference/offline` 离线整线批量干涉预检，调 `clearance-core` BVH+OBB-SAT 真算；`GET /interference/algorithm` 元信息
+  - `model-svc`(7103)：资产列表/CDN presign/`POST /model/compress`（draco/meshopt 压缩版本录入演示）
+  - `takt-svc`(7104)：`POST /takt/simulate` 节拍瓶颈仿真（taktCore）
+  - `auth-svc`(7105)：roles/token/`authorize` RBAC 权限校验（super_admin 放行 / viewer 拒绝）
+- 依赖树：pnpm-lock 新增 96 包（fastify 5.12 + @fastify/* + workspace 链接）
+
+### Verified
+
+- 5 服务 `GET /healthz` 均 200
+- interference 性能（HTTP 实测）：500 件 19.6ms、**2000 件 33.4ms**，BVH broad phase 剔除率 99.9%（远超 200 件 <200ms 门禁）
+
+### Fixed
+
+- `assembly-svc` 声明缺失 `@assemble/http` 依赖（TS2307）
+- `assembly-svc` setErrorHandler 显式标注 `error: FastifyError`，消除 fastify v5 `unknown` 类型错
+
+> ⚠️ 0.2.0 前端半程（sim-platform Vue3 + SimEngine 门面、产线选择页）待续，届时补齐 0.2.0 出口门禁后再发版 tag。
+
+---
+
 ## [Unreleased]
 
 <!-- 后续改动按 Conventional Commits 归类追加，勿手填版本号（由发布流程决定） -->
