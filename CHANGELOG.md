@@ -61,13 +61,15 @@ M1 收尾 · 单条产线 Demo —— **后端服务层跑通 + 前端 SimEngine
   - 装配工作台：路由占位，演示 `createSimEngine()` 工厂注入（待 Babylon 接入替换 canvas）
   - 工程基线：vue3.5 + vue-router4 + vite5 + vue-tsc；dev 代理 `/lines → 7101` `/interference → 7102`
   - 单测 14 例全绿：10 例门面契约 + 4 例健康派生态（ready/attention/disabled 语义锁定）
-- 视觉验收截图归档：`docs/line-select-v0.2.0-frontend.png`
+- 视觉验收截图归档：`docs/line-select-v0.2.0-frontend.png`（含「就绪·无干涉」绿卡 +「待检修·135 干涉」红卡双态）
+- interference-svc 冷链线（`kind=cold-chain`）改用全稀疏无 jitter 布局，离线预检稳定 0 干涉
+- assembly-svc 启用 `line-cold-01`（冷链预包装线），并把播种逻辑改为按 id 同步 enabled 字段（demo 状态可演进）
 
 ### Verified
 
 - 5 服务 `GET /healthz` 均 200
 - interference 性能（HTTP 实测）：500 件 19.6ms、**2000 件 33.4ms**，BVH broad phase 剔除率 99.9%（远超 200 件 <200ms 门禁）
-- 产线选择页 E2E（playwright 截图）：前端真调通 assembly-svc(`/lines`)+ interference-svc(`/interference/offline`)，KPI（180 零部件 / 135 命中 / 5ms 预检耗时）实时来自 clearance-core
+- 产线选择页 E2E（playwright 截图）：前端真调通 assembly-svc(`/lines`)+ interference-svc(`/interference/offline`)，KPI（180 零部件 / 135 命中 / 5ms 预检耗时）实时来自 clearance-core；冷链线（cold-chain）实测 0 干涉→「就绪·无干涉」绿卡，绿/红双态真实对照 design 稿 B1/B2
 - 根 vitest 23 例回归绿（clearance-core 7 + sim-utils 3 × hoisted 3 + sim-platform 14 独立运行）
 - vue-tsc 0 错；vite build 53 modules transformed 0 警告
 

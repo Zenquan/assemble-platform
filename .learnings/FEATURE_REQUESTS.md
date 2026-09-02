@@ -64,7 +64,8 @@ complex
 
 **Logged**: 2026-09-03T00:10:00+08:00
 **Priority**: low
-**Status**: pending
+**Status**: resolved
+**Resolution**: 2026-09-03T00:14:00+08:00 on branch feat/0.2.0-sim-platform（采用走法 a：interference-svc cold-chain kind 改稀疏布局 0 命中 + assembly-svc 启用 line-cold-01 并把播种改为按 id 同步 enabled 字段；E2E 截图 docs/line-select-v0.2.0-frontend.png 确认绿/红双态真实对照 design 稿 B1/B2）
 **Area**: data
 
 ### Requested Capability

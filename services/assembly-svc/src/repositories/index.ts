@@ -47,7 +47,7 @@ export function buildSeedLines(): ProductionLine[] {
       name: '冷链预包装线',
       kind: 'cold-chain',
       modelVersion: 'sha3-v2.0.0',
-      enabled: false,
+      enabled: true,
       createdAt: now,
       updatedAt: now,
       stations: [
@@ -69,12 +69,17 @@ export function createAssemblyRepos(): AssemblyRepos {
   );
   const repos: AssemblyRepos = { lines };
 
-  // 首次运行播种
+  // 首次运行播种：空时插入种子；已有时按 id 同步种子最新字段（保证 demo 状态可演进）
   void (async () => {
     const existing = await lines.list();
-    if (existing.length === 0) {
-      for (const line of buildSeedLines()) {
-        await lines.upsert(line);
+    const byId = new Map(existing.map((l) => [l.id, l]));
+    for (const seed of buildSeedLines()) {
+      const cur = byId.get(seed.id);
+      if (!cur) {
+        await lines.upsert(seed);
+      } else if (cur.enabled !== seed.enabled) {
+        // 种子字段（如 enabled）变化时同步到仓储，便于 demo 状态演进无需清盘
+        await lines.upsert({ ...cur, enabled: seed.enabled, updatedAt: seed.updatedAt });
       }
     }
   })();
