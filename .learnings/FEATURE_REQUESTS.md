@@ -10,7 +10,8 @@ Capabilities requested by the user.
 
 **Logged**: 2026-09-02T23:00:00+08:00
 **Priority**: high
-**Status**: pending
+**Status**: resolved
+**Resolution**: 2026-09-02T23:40:00+08:00 on branch feat/0.2.0-services-runtime
 **Area**: backend
 
 ### Requested Capability

@@ -25,6 +25,7 @@
 ## 本仓快速事实
 
 - **包管理**：pnpm（`pnpm-lock.yaml`），Monorepo。本环境用 corepack 的 pnpm 调入口；`.npmrc` 强制 `node-linker=hoisted`。
+- **版本迭代走分支**：每个版本/里程碑（0.2.0/0.3.x…）开 `feat/<版本>-<名>` 或 `release/vX.Y.Z` 分支，小步 commit 到该分支，收尾 merge 回 `main`（用户已明确此约定，勿再直接往 main 堆里程碑）。
 - **仓库**：本目录是**独立 git 仓**（main 主干），不从属于父 resume 仓。
 - **共享层**：`packages/*`（domain/sim-utils/clearance-core/storage/http）。契约先动 `domain`，纯算法无 DOM。
 - **性能红线**：clearance-core **200 件 `runFull <200ms`** 不得突破。
@@ -38,4 +39,8 @@
 pnpm test              # packages 单测全量
 pnpm typecheck         # 全量类型检查
 pnpm --filter @assemble/clearance-core test
+
+# 装依赖/构建务必 unset NODE_OPTIONS（否则 node-language-shim broker 会误拒 pnpm 的 *_tmp_* mkdir，见 .learnings LRN-20260902-004）
+env -u NODE_OPTIONS node /Users/zenquan/.workbuddy/binaries/corepack/v1/pnpm/9.15.4/bin/pnpm.cjs install --store-dir node_modules/.assemble-pnpm-store
+env -u NODE_OPTIONS node ./node_modules/.bin/tsc -p services/<svc>/tsconfig.json
 ```
