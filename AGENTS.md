@@ -4,11 +4,13 @@
 
 ## 你是谁、要遵守什么
 
-本仓库遵循「文档驱动 + 小步可发布」的开发哲学。任何功能/修复/里程碑任务，**先加载流程技能**再动手：
+本仓库遵循「文档驱动 + 小步可发布」的开发哲学，且有一套**三 skill 自洽流程**（主流程 + 两个强制环节）。任何功能/修复/里程碑任务，**先加载流程技能**再动手：
 
-- 加载 `.agent/skills/assemble-platform-workflow` 项目流程技能 —— 它规定 Phase 0→4（需求澄清 → 文档/契约 → Workbuddy 设计稿 → 小步实现/提交）与提交规范。
-- 需求边界不清时，加载 `.agent/skills/grill-me` 追问澄清，不猜。
-- 遇到错误/纠正/知识缺口，按 `.agent/skills/self-improving-agent` 的日志约定记录（可选，见其 SKILL.md）。
+- 加载 `.agent/skills/assemble-platform-workflow` 项目流程技能 —— 它规定 Phase 0→4（需求澄清 → 文档/契约 → Workbuddy 深色科技设计稿 → 小步实现/提交）与提交规范。
+- **需求澄清（Phase 0，强制）**：需求边界不清/新需求/跨层改动，加载 `.agent/skills/grill-me` 按 GRILL 五问追问，产出并得到确认的「需求共识」后才写码。
+- **学习记录（贯穿全程，强制）**：遇到错误、用户纠正、知识缺口、API 坑、跨包踩坑 → 按 `.agent/skills/self-improving-agent` **即时**记入 `.learnings/`（团队共享、随提交入库）；每阶段/里程碑收尾 review + promote 重要约定到 `docs/` 或本文件。
+
+**`.learnings/` 三件套**：`LEARNINGS.md`（纠正/洞见/知识缺口/最佳实践）、`ERRORS.md`（命令/算法失败）、`FEATURE_REQUESTS.md`（用户待建能力）。格式与 ID 规则见 self-improving-agent SKILL.md。
 
 ## 必读文档（按 `docs/README.md` 导航）
 
@@ -27,6 +29,7 @@
 - **共享层**：`packages/*`（domain/sim-utils/clearance-core/storage/http）。契约先动 `domain`，纯算法无 DOM。
 - **性能红线**：clearance-core **200 件 `runFull <200ms`** 不得突破。
 - **前端红线**：业务只经 SimEngine 门面，禁止直引 `@babylonjs/core`。
+- **学习记录**：`.learnings/`（LEARNINGS/ERRORS/FEATURE_REQUESTS）**团队共享、随提交入库**；格式遵循 self-improving-agent。
 - **提交**：Conventional Commits，一个逻辑单元一次提交；merge 前全仓 typecheck+test 绿。
 
 ## 常用命令
