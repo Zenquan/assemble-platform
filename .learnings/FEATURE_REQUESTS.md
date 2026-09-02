@@ -85,3 +85,31 @@ small
 ### Metadata
 - Frequency: first_time
 - Related Features: sim-platform, interference-svc, assembly-svc
+
+## [FEAT-20260903-002] babylon_minimal_render
+
+**Logged**: 2026-09-03T00:20:00+08:00
+**Priority**: high
+**Status**: in_progress
+**Area**: sim-platform / engine
+
+### Requested Capability
+以真 Babylon 渲染后端（engine/babylon.ts）替换 Noop，达成 0.2.0 出口门禁「浏览器渲染装配」：工作台视口挂真 WebGL Engine+Scene，`loadLine` 真加载产线并把零件按确定性布局渲成 OBB 盒体占位，配网格/坐标轴 + ArcRotateCamera + HUD(STEP/引擎实时)。
+
+### User Context
+用户经 grill-me 确认走法选「最小真渲染：先关门禁」——不在此轮做三模式真装配/实时干涉拖拽（归 0.3.x），先把 0.2.0 出口核销、可发版 tag v0.2.0。
+
+### Complexity Estimate
+large
+
+### Suggested Implementation
+- apps/sim-platform 加 `@babylonjs/core` 依赖。
+- engine/babylon.ts：BabylonScene/BabylonAssets/BabylonSimEngine，复用 NoopAssembler + NoopClearance（非视觉逻辑不重写）。
+- 布局与 interference-svc `synthesizePartsForLine` 对齐（同 kind 同确定性命中口径），保证渲染装配体与离线预检视觉一致。
+- createSimEngine()：WebGL 可用返 Babylon，否则回落 Noop（vitest/CI 单测不启 WebGL）。
+- WorkbenchView 经门面工厂取引擎，视口渲染装配体 + HUD。
+- 验收：浏览器打开装配工作台能看到 3D 盒体装配 + 轨道相机可转；截图归档。
+
+### Metadata
+- Frequency: first_time
+- Related Features: sim-platform, WorkbenchView, SimEngine facade

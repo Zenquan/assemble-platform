@@ -89,4 +89,11 @@ M1 收尾 · 单条产线 Demo —— **后端服务层跑通 + 前端 SimEngine
 
 - **git(0.1.0 保留分支)**：按「每个版本/里程碑分支合回 main 后保留不删」约定，为 v0.1.0（M1 技术验证基线）补建保留分支 `feat/0.1.0-baseline`，指向 `2da0421`（引入 Vue 前端代码前的最后提交，`apps/` 内仅存深色科技 design mockup）。此前 0.1.0 内容系一次性线性合进 main、并无独立版本分支；建此分支使 v0.1.0 也可按版本归因与回溯 diff。已保留分支汇总见 `AGENTS.md`。
 
+### Added
+
+- **feat(sim-platform · 0.2.0 出口：Babylon 最小真渲染)**：`engine/babylon.ts` 真渲染后端（替 noop），达成 0.2.0 出口门禁「浏览器渲染装配」。
+  - 范围（用户经 grill-me 确认「最小真渲染：先关门禁」）：工作台视口挂真 Babylon Engine+Scene；`loadLine` 真加载产线，把零件按确定性布局渲成 **OBB 盒体占位** + 网格/坐标轴 + ArcRotateCamera；HUD 显示 STEP/引擎实时。
+  - 明确**不做**（归 0.3.x）：自动/手动/回放三模式真装配、实时干涉拖拽联动、BOM 树/节拍面板、真 glTF 资产管线 —— 仍走 Noop 状态机与 clearance 纯算法占位。
+  - 架构红线保持：业务组件仍只经 `SimEngine` 门面，不直引 `@babylonjs/core`；`createSimEngine()` 在无 WebGL（vitest/CI）时回落 Noop，单测不启真渲染。
+
 <!-- 后续改动按 Conventional Commits 归类追加，勿手填版本号（由发布流程决定） -->
