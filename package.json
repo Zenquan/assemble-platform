@@ -1,0 +1,27 @@
+{
+  "name": "assemble-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "产线 3D 装配仿真平台 · 工业级 Web3D 工程（Monorepo）",
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "pnpm -r --filter \"./packages/**\" run build",
+    "typecheck": "pnpm -r --filter \"./packages/**\" run typecheck",
+    "test": "pnpm -r --filter \"./packages/**\" run test",
+    "test:services": "pnpm -r --filter \"./services/**\" run test",
+    "dev:platform": "pnpm --filter @assemble/sim-platform dev",
+    "dev:gateway": "pnpm --filter @assemble/gateway dev",
+    "dev:assembly": "pnpm --filter @assemble/assembly-svc dev",
+    "dev:interference": "pnpm --filter @assemble/interference-svc dev",
+    "dev:model": "pnpm --filter @assemble/model-svc dev",
+    "dev:takt": "pnpm --filter @assemble/takt-svc dev",
+    "dev:auth": "pnpm --filter @assemble/auth-svc dev",
+    "services:compose:up": "docker compose -f deploy/compose/docker-compose.yml up -d",
+    "services:compose:down": "docker compose -f deploy/compose/docker-compose.yml down"
+  }
+}

@@ -1,0 +1,41 @@
+import type { OBB } from '@assemble/domain';
+import { obbFromCenterHalfExtents } from '@assemble/clearance-core';
+
+/**
+ * 演示用几何目录：为给定产线类型合成一组零件的 OBB（世界系）。
+ * 真实系统中 OBB 由模型管线的装配约束表/实例化结果生成后入库，
+ * 这里以确定性伪随机产出，用于验证「服务端离线批量干涉预检」整条链路。
+ *
+ * 布局策略与单测一致：分段密集、段间稀疏，让 BVH broad phase 体现剔除价值。
+ */
+export interface SyntheticPart {
+  partId: string;
+  obb: OBB;
+}
+
+export function synthesizePartsForLine(
+  lineKind: string,
+  totalParts: number,
+  clusterSize = 12,
+): SyntheticPart[] {
+  const parts: SyntheticPart[] = [];
+  for (let i = 0; i < totalParts; i++) {
+    const seg = Math.floor(i / clusterSize);
+    const inSeg = i % clusterSize;
+    // 每段占 12×2=24 单位宽，段间隔留 6 单位 -> 段间包围体不重叠
+    const base = seg * (clusterSize * 2 + 6);
+    // 引入少量确定性随机偏移制造真实干涉对
+    const jitter = ((i * 7919) % 1000) / 1000; // 0..1
+    const cx = base + inSeg * 2 + (inSeg % 3 === 0 ? jitter * 0.4 : 0);
+    const cy = inSeg * 1.5;
+    const cz = 0;
+    const half = [1, 1, 1] as const;
+    // 同段内相距 2 单位、半长 1 -> 紧邻但不重叠；仅 jitter 时部分重叠制造 hit
+    const hx = inSeg % 4 === 0 ? 1.0 + jitter * 0.8 : 1.0;
+    parts.push({
+      partId: `${lineKind}-${String(i).padStart(3, '0')}`,
+      obb: obbFromCenterHalfExtents([cx, cy, cz], [hx, half[1], half[2]]),
+    });
+  }
+  return parts;
+}

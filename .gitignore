@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+coverage/
+*.tsbuildinfo
+*.log
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Babylon / assets cache
+apps/sim-platform/public/gltf/
+*.glb.draco.json
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Vitest 临时产物
+vitest.config.ts.timestamp-*.mjs
+*.timestamp-*.mjs
+
+# Middleware local data (degraded mode)
+.assemble-data/
+*.sqlite

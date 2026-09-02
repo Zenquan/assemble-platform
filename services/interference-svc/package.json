@@ -1,0 +1,25 @@
+{
+  "name": "@assemble/interference-svc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/server.js",
+    "dev": "node --watch dist/server.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@assemble/clearance-core": "workspace:*",
+    "@assemble/domain": "workspace:*",
+    "@assemble/http": "workspace:*",
+    "@assemble/storage": "workspace:*",
+    "fastify": "^5.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
