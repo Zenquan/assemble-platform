@@ -425,9 +425,17 @@ class BabylonScene implements SceneManager {
     const ok: string[] = [];
     for (const item of layout) {
       try {
+        // 关键：LoadAssetContainerAsync 只把 mesh 装到「容器」，**不会**自动入 scene 渲染队列。
+        // 必须显式 container.addAllToScene()，mesh 才会被加进 scene.meshes / scene.materials，
+        // 进而进入 GPU draw call 管线。否则视口里这些 mesh 永远不可见。
         const container = await SceneLoader.LoadAssetContainerAsync('', item.assetUrl, this.scene);
-        const result = { meshes: container.meshes, particleSystems: container.particleSystems,
-          skeletons: container.skeletons, animationGroups: container.animationGroups };
+        await container.addAllToScene();
+        const result = {
+          meshes: container.meshes,
+          particleSystems: container.particleSystems,
+          skeletons: container.skeletons,
+          animationGroups: container.animationGroups,
+        };
         // 包到一个子根节点，统一变换
         const child = new TransformNode(`device-${item.deviceId}`, this.scene);
         child.parent = this._devicesRoot;
@@ -448,11 +456,11 @@ class BabylonScene implements SceneManager {
         }
         // 0.4.x · PBR 金属（metal_dark/metal_mid/aluminum）无 IBL 时接近全黑，
         // 用 StandardMaterial 覆写 albedo + ambient，确保任意光照下可见且保留色彩。
-        // 解析原始材质颜色（取 PBR.albedoColor 或 material 名称），落到设备 id 配色。
         const shellMat = this._shellMaterialForDevice(item.deviceId);
         for (const mesh of result.meshes) {
           if (mesh.getTotalVertices() === 0) continue; // __root__ 等空节点跳过
           mesh.material = shellMat;
+          mesh.alwaysSelectAsActiveMesh = true; // 绕开 frustum culling（包围盒滞后可能误剔）
           mesh.refreshBoundingInfo(); // 父级变换变更后强制刷新本地包围盒
         }
         // 包围盒居中：让 glb 原点已经在底面，但仍应用 transform
@@ -471,6 +479,8 @@ class BabylonScene implements SceneManager {
           mesh.computeWorldMatrix(true);
         }
         this.scene?.render(); // 立即渲一帧（不阻塞 await）
+        ok.push(item.deviceId);
+        this._loadedDeviceIds.push(item.deviceId);
       } catch (e) {
         // 单件失败不阻断其它（网络/URL/格式）
         // eslint-disable-next-line no-console
