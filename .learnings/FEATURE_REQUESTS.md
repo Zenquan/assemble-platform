@@ -121,9 +121,12 @@ large
 
 **Logged**: 2026-09-03T11:58:00+08:00
 **Priority**: high
-**Status**: planned
+**Status**: done
 **Area**: sim-platform / engine (babylon) + WorkbenchView + domain
 **Milestone**: 0.3.0
+**Closed At**: 2026-09-03
+**Closed By**: feat/0.3.0-s1-distinct-render → s2-assembly-anim → s3-manual-drag → s4-bom-takt → main 顺序 FF-merge
+**Branch**: feat/0.3.0-s1-distinct-render / feat/0.3.0-s2-assembly-anim / feat/0.3.0-s3-manual-drag / feat/0.3.0-s4-bom-takt（全部保留）
 
 ### Requested Capability
 在 Babylon 真渲染后端上把「装配过程」可视化 —— 让渲染**跟随 `AssemblyController` 的 step/已装配集合**做分态表现，把 0.2.0 已就位的三模式状态机（NoopAssembler 真实逻辑）接到真网格/动画上。产线装配不再是一次性把零件摆到最终位，而是 auto/replay 按 BOM `steps` 逐个把零件从「散落起点」动画到「贴合位」，manual 下可拾取拖拽单件实时过干涉。这是 0.3.0 出口「交互式装配仿真」的门禁。

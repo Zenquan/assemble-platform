@@ -109,17 +109,21 @@ M1 收尾 · 单条产线 Demo —— **后端服务层跑通 + 前端 SimEngine
 
 <!-- 后续改动按 Conventional Commits 归类追加进 Unreleased，勿手填版本号（由发布流程决定） -->
 
-## [Unreleased]
+## [0.3.0] - 2026-09-03
+
+M2 MVP · 首条产线闭环 —— **浏览器装配视口分态渲染 + 自动/手动/回放装配动画与拖拽 + BOM 树与节拍 HUD**（0.3.x 全半程，S1–S4 切片全部落地）。入口门禁由「产线工程师试用通过（验收 = M2）」承接，本轮在单条产线上完成了可演示的交互式装配仿真闭环。
+
+> 说明：本版同时收编了 0.2.0 发布后、在 main 上渐进合入的两项 0.2.x 尾项（未单独发 0.2.1 tag）：`scripts/dev.mjs` 一键起脚本 与 vite IPv6 修复。它们未产生任何新后端能力、仅工程/脚本改善，随 0.3.0 一并发布（详见下文对应小节）。
 
 ### Added
 
-- **一键起 dev 脚本 `scripts/dev.mjs`（根 `pnpm dev`）**：解决「vite 代理 `/lines → 7101` ECONNREFUSED」—— 此前 `pnpm dev:platform` 只起 vite 不起后端。自包含 Node 编排（不依赖 pnpm/concurrently），一键拉起 assembly-svc(7101) + interference-svc(7102) + vite(5173)：端口占用自动复用、探活就绪横幅、Ctrl+C/SIGTERM 统一清理子进程；后端产物缺失时报错并引导 build。
+- **一键起 dev 脚本 `scripts/dev.mjs`（根 `pnpm dev`，0.2.x 尾项收编）**：解决「vite 代理 `/lines → 7101` ECONNREFUSED」—— 此前 `pnpm dev:platform` 只起 vite 不起后端。自包含 Node 编排（不依赖 pnpm/concurrently），一键拉起 assembly-svc(7101) + interference-svc(7102) + takt-svc(7104，S4 起纳入精简 CORE) + vite(5173)：端口占用自动复用、探活就绪横幅、Ctrl+C/SIGTERM 统一清理子进程；后端产物缺失时报错并引导 build。`pnpm dev:all` 额外拉起 model/auth（后端自治）。
 
 ### Fixed
 
 - **vite dev 仅绑 IPv6 `[::1]:5173`**（macOS + Node 22 下 `host:'localhost'` 默认行为）导致 Node fetch 走 `127.0.0.1:5173` 失败 → `vite.config.ts` `server.host` 显式设 `'127.0.0.1'`，浏览器与脚本统一访问 IPv4 loopback。验证：`pnpm dev` 后 vite 绑 `127.0.0.1:5173`，`/lines` 经代理返回 200（原 ECONNREFUSED 路径闭合）。
 
-### Added（0.3.0 切片推进）
+### Added（0.3.0 切片 S1–S4）
 
 - **S1 分态渲染（FEAT-20260903-003 第一切片）**：
   - `apps/sim-platform/src/engine/placement.ts`（新）：纯布局数学，按 `SeatInput[]` 推出每件的贴合位 seat（=`AssemblyPart.localPosition`）与确定性散落待料位 scatter（绕装配体质心的 Golden-angle 错峰环 + 抬离顶面）。无 Babylon / DOM 依赖，可被 vitest 无 WebGL 单测锁定。
@@ -220,4 +224,4 @@ M1 收尾 · 单条产线 Demo —— **后端服务层跑通 + 前端 SimEngine
 - 验收对照：BOM层级 = 工位→零件（按 round-robin 归组到 stations）；当前 step 在所属工位下高亮、已装 ✓、pending ·、基座徽；选件→视口 frameToPart；节拍数据真接 takt-svc，瓶颈/分级与产线工位一致。
 - 分支保留：`feat/0.3.0-s4-bom-takt`（从 `feat/0.3.0-s3-manual-drag` 派生）；提交 `5c37b78`(S4a) `e3cad64`(S4b) `6e7920f`(S4c)。
 
-<!-- 占位：本版已完成 0.2.0 出口闭合与文档归档；后续 0.2.x 增量（一键起脚本等）将由此段起。 -->
+<!-- 本版 = 0.3.0（含 0.2.x 尾项收编）。0.3.x 剩余能力（产线模板抽象/第2-3产线复用/资产库等，见 docs/VERSIONING.md 0.4.x）将在此段之后以 Unreleased 继续累积。 -->
