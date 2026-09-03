@@ -137,4 +137,24 @@ M1 收尾 · 单条产线 Demo —— **后端服务层跑通 + 前端 SimEngine
   - 初始整机贴合 `已贴合 12 / 12`（截图 `docs/s1-render-all-seated.png`）—— 全部青盒、装配下一件禁用、撤销装配可用。
   - 连续撤销 3 次 `已贴合 9 / 12`（截图 `docs/s1-render-split.png`）—— 9 件停 seat（青）、3 件停 scatter 环（琥珀、悬空绕装配体），取景按 seat ∪ scatter 并集重中。验收：渲染集合与 `assembly.assembledPartIds` 严格一致（dom `.s1count` 同步按钮禁用态），两态视觉区分明显。
 
+### Added（0.3.0 S2 切片推进）
+
+- **S2 装配过程动画（FEAT-20260903-003 第二切片）**：auto/replay 散落→贴合逐件平滑，seek/undo 仍走跳变。架构红线延续 S1：状态机瞬时 + 动画器纯逻辑 + 渲染只消费每帧目标位姿。
+  - `engine/ease.ts`（新）：缓动/插值纯函数（`easeInOutCubic` / `lerpVec3` / `progressAt`），无 Babylon/DOM。
+  - `engine/animator.ts`（新）：`AssemblyAnimator` 引擎无关纯逻辑驱动器 —— 持有 placements（seat/scatter 双目标），按 BOM 步骤序 + `AssemblyStep.durationSeconds` 逐件自动贴合；动画**完成**那一刻回调 `onAssemble(partId)` 让宿主把它正式落进 assembled 集合（视觉先滑、到位才落，杜绝跳变）；`seekTo` / `undoStep` 走跳变（清飞行、不插帧）；可注入时钟，单测用假时钟锁定推进节奏。
+  - `engine/babylon.ts`：BabylonScene 增 `onFrame` 每帧驱动 hook + 缓存 `_placements` + `applyFlightPose(partId, pos|null)`（飞行中件覆盖为插值位、退 null 回落 S1 seat/scatter）+ `_assembledIds` 飞行覆盖退出回落判定。BabylonSimEngine init 装载 BOM 后 `_wireAnimator` 绑定每帧推进 + 落集合回调（onAssemble→`assembly.assemble` + `syncAssemblyState` 落 seat/tint）；`scene.onFrame` 每帧 tick + 对飞行件应用插值位；`syncAssemblyState` 非播放时同步动画游标对齐（手动步进后可续播），播放中跳过避免打断飞行动画。门面暴露 `playAssembly/pauseAssembly/resetForPlay` + `animState` 聚合 getter。
+  - `engine/types.ts`：SimEngine 门面加 S2 播放契约。
+  - `engine/noop.ts`：NoopSimEngine 镜像（manual 拒播、reset 全散落、animState 读状态机如实；逐件推进由 `animator.test.ts` 假时钟覆盖）。
+  - `views/WorkbenchView.vue`：S2 播放控制 HUD —— 从头演示 / 播放 / 暂停 + 动画进度计数；120ms 轮询 `animState` 仅读 `assembly.assembledPartIds.length`（不调 `syncAssemblyState` 避免每 120ms 重摆场景打断飞行插值）。
+  - `engine/test/animator.test.ts`（新，5 例）：逐件自动贴合到全贴合 / 单件飞行 pose 插值 / 飞行完成才落集合 / seekTo 跳变 / undoStep / 越界 seek。
+
+### Verified（0.3.0 S2）
+
+- vue-tsc 0 错；sim-platform vitest **30/30 全绿**（含 S2 新增 5 + 2 = 7 例）。
+- 浏览器 E2E（playwright chromium 加 `--disable-background-timer-throttling` 等反节流参数，**headless 必须开否则 rAF 节流导致飞行动画不推进**）：
+  - 复位到全散落 `已贴合 0 / 12`（截图 `docs/s2-reset-all-pending.png`）—— 全部琥珀盒绕装配体环形悬空、播放进度 0/12。
+  - 播放中途 `已贴合 1 / 12`（截图 `docs/s2-mid-flight.png`）—— 1 件已落 seat（青，居中）、11 件仍处 scatter 环（琥珀）；动画进度 2/12 · 播放中，验证散落→贴合逐件平滑。
+  - 播完全部 `已贴合 12 / 12`（截图 `docs/s2-all-seated.png`）—— 全部青盒严丝合缝停 seat，验证 auto 推进到全贴合。
+- 验收对照：散落→贴合逐件平滑插值（easeInOutCubic + `durationSeconds` 节奏）；seek/undo 走跳变（无插帧）；纯逻辑驱动器 5/5 单测锁定；Babylon 真渲染经 3 截图证明集合与渲染位置一致。
+
 <!-- 占位：本版已完成 0.2.0 出口闭合与文档归档；后续 0.2.x 增量（一键起脚本等）将由此段起。 -->

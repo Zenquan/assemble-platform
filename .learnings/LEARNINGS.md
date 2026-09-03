@@ -300,3 +300,61 @@ S1 初版 scatter 用低饱和灰蓝 `(0.34,0.42,0.55)` 在深色背景下几乎
 - Source: insight
 - Related Files: apps/sim-platform/src/engine/babylon.ts, docs/s1-render-{all-seated,split}.png
 - Tags: s1, distinct-render, visibility, framing, babylon-vect3-clone
+- Pattern-Key: s1.distinct_render_visibility
+
+---
+
+## [LRN-20260903-009] best_practice
+
+**Logged**: 2026-09-03T13:20:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: sim-platform / engine
+
+### Summary
+S2 装配过程动画延续 S1 的「纯逻辑 +门面 sync」红线：状态机瞬时 + 动画器引擎无关 + 渲染只消费每帧目标位姿。架构关键 = **动画进度是纯数据，渲染是被动摆位执行者**；Noop/Babylon 共享同一驱动器，单测用假时钟锁定节奏。
+
+### Details
+- `ease.ts`：缓动/插值纯函数（`easeInOutCubic` / `lerpVec3` / `progressAt`）。
+- `animator.ts`：`AssemblyAnimator` 引擎无关纯类 —— 持有 `PartPlacement[]`（seat/scatter 双目标），`play()` 按 BOM 步骤序 + `AssemblyStep.durationSeconds` 逐件自动贴合，**动画完成那一刻**才回调 `onAssemble(partId)`（视觉先滑、到位才落集合，杜绝跳变）；`seekTo` / `undoStep` 走跳变（清飞行、不插帧）；`pose(partId)` 供渲染层每帧查"飞行中件"插值位；可注入 `Clock`，单测用假时钟。
+- `BabylonScene`：增 `onFrame` 每帧驱动 hook + `applyFlightPose(partId, pos|null)`（传 Vec3 覆盖飞行中件、传 null 回落 S1 seat/scatter）+ `_assembledIds` 飞行覆盖退出回落判定。
+- `BabylonSimEngine`：BOM 装载后 `_wireAnimator` 绑每帧推进 + 落集合回调；`scene.onFrame` 每帧 `tick` + 对飞行件应用 `animator.pose()`。`syncAssemblyState()` 非播放时同步动画游标（手动步进后 play 续播）；**播放中跳过游标同步避免打断飞行动画**。
+- 门面新增 `playAssembly/pauseAssembly/resetForPlay` + `animState` 聚合 getter；Noop 镜像实现（无帧循环如实反映状态、播放逐件推进由 `animator.test` 假时钟覆盖）。
+- 验证：vitest **30/30**（placement 7 + animator 5 + engine 14 + useLineCatalog 4），vue-tsc 0 错；E2E 三截图（复位/中途/全贴合）证明集合与渲染位置一致。
+
+### Suggested Action
+S3-S5 切片继续沿用本红线：交互拖拽做实时姿态度假与真拖拽时也要走「输入→纯逻辑校验→渲染只消费 pose」，禁止在 render loop 内做业务分支。S2 onAssemble 时机「动画完成才落集合」是防跳变核心，复用这条原则做 S3 实时拖拽防干涉跳变。
+
+### Metadata
+- Source: insight
+- Related Files: apps/sim-platform/src/engine/{ease,animator,babylon,noop,types}.ts, apps/sim-platform/src/views/WorkbenchView.vue, apps/sim-platform/src/engine/test/animator.test.ts
+- Tags: s2, assembly-anim, pure-driver, clock-inject, no-jump
+
+---
+
+## [LRN-20260903-010] correction
+
+**Logged**: 2026-09-03T13:35:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: sim-platform / e2e (headless)
+
+### Summary
+S2 E2E 视觉冒烟在 headless chromium 下首跑「飞行到中途 / 全贴合」都失败（仅首帧完成，cursor 卡在 1/12），根因 = (a) headless rAF 被节流几乎不推进动画；(b) WorkbenchView 120ms 轮询调 `engine.syncAssemblyState()` 与飞行动画互斥——每 120ms 重摆场景把飞行中件 snap 回 scatter。
+
+### Details
+- (a) headless chromium 默认开启后台节流：`runRenderLoop` 内的 `requestAnimationFrame` 只在截图等强制帧时触发，**tick 不推进 → 飞行动画卡死在首件**。
+  - 修复（launch args 全部叠加）：`--disable-background-timer-throttling`、`--disable-renderer-backgrounding`、`--disable-backgrounding-occluded-windows`、`--disable-frame-rate-limit`，外加 `page.bringToFront()`。14s 后可推进到 12/12。
+- (b) UI 轮询调 `engine.syncAssemblyState()`：每个 mesh position 被重写到 seat/scatter，**覆盖了 `applyFlightPose` 设的插值位**——动画被每 120ms 重置。修复：轮询只读 `eng.assembly.assembledPartIds.length`（事实集合），**不调 scene-write 方法**。计数显示从 `assembly` 唯一事实源读，避免渲染与计数分歧。
+- 「飞行完成才落集合」（LRN-009 onAssemble 时机）与「轮询不写场景」是 S2 双保险，缺一就跳变。
+
+### Suggested Action
+- 任何「动画 / 帧推进 / rAF」类 E2E 一律加反节流四件套 + bringToFront。
+- UI 轮询只读门面状态（`engine.assembly` / `engine.animState`），**禁止在轮询里调任何 scene-write / setAssemblyState / syncAssemblyState**。
+- 排查「E2E 截图状态卡住」：先看 rAF 调度（launch args），再看 polling 是否会写场景。
+
+### Metadata
+- Source: error
+- Related Files: apps/sim-platform/src/views/WorkbenchView.vue, /tmp/shot-s2-anim.mjs
+- Tags: e2e, headless, rAF, polling, scene-write
+- Pattern-Key: e2e.headless_raf_throttle
