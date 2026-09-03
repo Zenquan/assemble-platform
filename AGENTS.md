@@ -40,6 +40,11 @@ pnpm test              # packages 单测全量
 pnpm typecheck         # 全量类型检查
 pnpm --filter @assemble/clearance-core test
 
+# 一键起 dev（精简：assembly-svc:7101 + interference-svc:7102 + vite:5173）
+pnpm dev               # = node scripts/dev.mjs（自包含 Node 编排，不依赖 pnpm）
+#  Ctrl+C 会统一清理三个子进程；已占用的端口自动复用不重复起。
+# 先决条件：两个后端 dist 已构建（node scripts/dev.mjs 会在缺产物时报错引导 build）。
+
 # 装依赖/构建务必 unset NODE_OPTIONS（否则 node-language-shim broker 会误拒 pnpm 的 *_tmp_* mkdir，见 .learnings LRN-20260902-004）
 env -u NODE_OPTIONS node /Users/zenquan/.workbuddy/binaries/corepack/v1/pnpm/9.15.4/bin/pnpm.cjs install --store-dir node_modules/.assemble-pnpm-store
 env -u NODE_OPTIONS node ./node_modules/.bin/tsc -p services/<svc>/tsconfig.json

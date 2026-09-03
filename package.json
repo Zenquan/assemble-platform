@@ -10,6 +10,7 @@
   },
   "scripts": {
     "clean": "node scripts/clean.mjs",
+    "dev": "node scripts/dev.mjs",
     "build": "pnpm -r --filter \"./packages/**\" run build",
     "typecheck": "pnpm -r --filter \"./packages/**\" run typecheck",
     "test": "pnpm -r --filter \"./packages/**\" run test",

@@ -220,3 +220,29 @@ SimEngine 门面双后端（Babylon 真渲染 + Noop 替身）的"特征探测�
 - Source: insight
 - Related Files: apps/sim-platform/src/engine/babylon.ts, apps/sim-platform/src/engine/test/engine.test.ts
 - Tags: babylon, facade, webgl, e2e-visual
+
+---
+
+## [LRN-20260903-006] correction
+
+**Logged**: 2026-09-03T11:30:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: sim-platform / vite
+
+### Summary
+vite dev 在 macOS + Node 22 下，`server.host` 不显式设时默认绑 **IPv6 `[::1]:5173`**，导致同机 Node 进程用 `fetch('http://127.0.0.1:5173/')` 探活必失败（127.0.0.1 无监听），而浏览器/curl 走 `localhost`(解析到 ::1) 却正常 —— 造成"浏览器能开、脚本探活失败"的假象。
+
+### Details
+- 现象：dev.mjs 里 `httpOk('http://127.0.0.1:5173/')` 一直 false，但 `curl http://localhost:5173/` 200。
+- 用 lsof 定位：vite 仅监听 `[::1]:5173 (LISTEN)`（IPv6），未绑 IPv4。
+- 根因：vite `host` 未设时对 'localhost' 的解析在该环境主选 ::1；Node fetch 对显式 `127.0.0.1` 不回落 ::1。
+- 修复：`apps/sim-platform/vite.config.ts` `server.host: '127.0.0.1'`，vite 改绑 IPv4 loopback，浏览器与 Node 脚本统一访问 127.0.0.1 一致可达。
+
+### Suggested Action
+凡本仓 vite dev 探活/联调，URL 统一用 `http://127.0.0.1:5173/`（host 已固定 IPv4）。新增 vite 服务时同步设 `server.host`。诊断"某端点 curl 通但 fetch 不通"优先 `lsof -nP -iTCP:<port> -sTCP:LISTEN` 看 IPv4/IPv6 绑定。
+
+### Metadata
+- Source: error
+- Related Files: apps/sim-platform/vite.config.ts
+- Tags: vite, ipv6, fetch, macos, node22

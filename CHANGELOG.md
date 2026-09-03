@@ -103,12 +103,20 @@ M1 收尾 · 单条产线 Demo —— **后端服务层跑通 + 前端 SimEngine
 - **浏览器 E2E 截图**（dev 模式 + playwright chromium + WebGL）：`line-sorting-01` 工作台真渲染盒体装配体居中，HUD「STEP · 3D 装配视口」+「引擎实时」绿点，顶部 header「产线 · 三号分拣线 · 装配工作台」与 SIMULATION WORKBENCH 副标题均正确显示
 - 根 vitest 23 例回归绿（clearance-core 7 + sim-utils 3 × hoisted 3 + sim-platform 15 独立运行）
 
-> 0.2.0 出口「**本地一键起前端+服务**」脚本本轮**未完成**（用户明确选择"最小真渲染：先关门禁"，一键起脚本不在本轮 scope，留待 0.2.x 增量或 0.3.0 首发前合入）。
+> 注：0.2.0 出口「本地一键起前端+服务」脚本原标"未完成"，已作为 0.2.x 增量在下方 Unreleased 段补齐。
 
 ---
 
 <!-- 后续改动按 Conventional Commits 归类追加进 Unreleased，勿手填版本号（由发布流程决定） -->
 
 ## [Unreleased]
+
+### Added
+
+- **一键起 dev 脚本 `scripts/dev.mjs`（根 `pnpm dev`）**：解决「vite 代理 `/lines → 7101` ECONNREFUSED」—— 此前 `pnpm dev:platform` 只起 vite 不起后端。自包含 Node 编排（不依赖 pnpm/concurrently），一键拉起 assembly-svc(7101) + interference-svc(7102) + vite(5173)：端口占用自动复用、探活就绪横幅、Ctrl+C/SIGTERM 统一清理子进程；后端产物缺失时报错并引导 build。
+
+### Fixed
+
+- **vite dev 仅绑 IPv6 `[::1]:5173`**（macOS + Node 22 下 `host:'localhost'` 默认行为）导致 Node fetch 走 `127.0.0.1:5173` 失败 → `vite.config.ts` `server.host` 显式设 `'127.0.0.1'`，浏览器与脚本统一访问 IPv4 loopback。验证：`pnpm dev` 后 vite 绑 `127.0.0.1:5173`，`/lines` 经代理返回 200（原 ECONNREFUSED 路径闭合）。
 
 <!-- 占位：本版已完成 0.2.0 出口闭合与文档归档；后续 0.2.x 增量（一键起脚本等）将由此段起。 -->
