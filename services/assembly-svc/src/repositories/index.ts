@@ -24,6 +24,7 @@ export function buildSeedLines(): ProductionLine[] {
       id: 'line-sorting-01',
       name: '三号分拣线',
       kind: 'sorting',
+      baseAssetId: 'conveyor',
       modelVersion: 'sha3-v1.2.0',
       enabled: true,
       createdAt: now,
@@ -45,24 +46,40 @@ export function buildSeedLines(): ProductionLine[] {
     },
     {
       id: 'line-freshcut-01',
-      name: '净菜预处理线',
+      name: '果蔬净菜加工线',
       kind: 'fresh-cut',
-      modelVersion: 'sha3-v0.9.1',
+      modelVersion: 'freshcut-v1.0.0',
       enabled: true,
       createdAt: now,
       updatedAt: now,
       stations: [
         {
-          id: 'st-f1', lineId: 'line-freshcut-01', seq: 1, name: '清洗', taktSeconds: 5.0,
-          deviceKind: 'feeder', position: [-3, 0, 0], facingDeg: 90,
+          id: 'st-f1', lineId: 'line-freshcut-01', seq: 1, name: '提升上料', taktSeconds: 5.2,
+          deviceKind: 'infeed-elevator', position: [-12, 0, 0], facingDeg: 0,
         },
         {
-          id: 'st-f2', lineId: 'line-freshcut-01', seq: 2, name: '切配', taktSeconds: 4.2,
-          deviceKind: 'gantry-arm', position: [0, 0, 0], facingDeg: 90,
+          id: 'st-f2', lineId: 'line-freshcut-01', seq: 2, name: '气泡清洗', taktSeconds: 6.8,
+          deviceKind: 'bubble-washer', position: [-8, 0, 0], facingDeg: 0,
         },
         {
-          id: 'st-f3', lineId: 'line-freshcut-01', seq: 3, name: '称重包装', taktSeconds: 6.1,
-          deviceKind: 'box-pack', position: [3, 0, 0], facingDeg: 90,
+          id: 'st-f3', lineId: 'line-freshcut-01', seq: 3, name: '人工挑选', taktSeconds: 5.6,
+          deviceKind: 'inspection-conveyor', position: [-3.8, 0, 0], facingDeg: 0,
+        },
+        {
+          id: 'st-f4', lineId: 'line-freshcut-01', seq: 4, name: '连续切配', taktSeconds: 4.4,
+          deviceKind: 'vegetable-cutter', position: [0, 0, 0], facingDeg: 0,
+        },
+        {
+          id: 'st-f5', lineId: 'line-freshcut-01', seq: 5, name: '振动沥水', taktSeconds: 5.0,
+          deviceKind: 'vibratory-dewaterer', position: [3.2, 0, 0], facingDeg: 0,
+        },
+        {
+          id: 'st-f6', lineId: 'line-freshcut-01', seq: 6, name: '组合称重包装', taktSeconds: 6.2,
+          deviceKind: 'weigh-packer', position: [7, 0, 0], facingDeg: 0,
+        },
+        {
+          id: 'st-f7', lineId: 'line-freshcut-01', seq: 7, name: '金属检测', taktSeconds: 4.8,
+          deviceKind: 'metal-detector', position: [10.8, 0, 0], facingDeg: 0,
         },
       ],
     },
@@ -70,6 +87,7 @@ export function buildSeedLines(): ProductionLine[] {
       id: 'line-cold-01',
       name: '冷链预包装线',
       kind: 'cold-chain',
+      baseAssetId: 'conveyor',
       modelVersion: 'sha3-v2.0.0',
       enabled: true,
       createdAt: now,
@@ -119,35 +137,35 @@ export function buildBomForLine(line: ProductionLine): AssemblyBom {
   }
 
   const positions = stations.map((station, index) => positionOf(station, index, stations.length));
-  const conveyorPosition: Vec3 = [
+  const basePosition: Vec3 = [
     positions.reduce((sum, position) => sum + position[0], 0) / positions.length,
     0,
     positions.reduce((sum, position) => sum + position[2], 0) / positions.length,
   ];
-  const conveyorPartId = `${line.id}-conveyor`;
-  const parts: AssemblyBom['parts'] = [
-    {
-      id: conveyorPartId,
+  const basePartId = line.baseAssetId ? `${line.id}-${line.baseAssetId}` : undefined;
+  const parts: AssemblyBom['parts'] = [];
+  const steps: AssemblyBom['steps'] = [];
+  if (line.baseAssetId && basePartId) {
+    parts.push({
+      id: basePartId,
       name: `${line.name}输送基座`,
-      assetId: 'conveyor',
-      localPosition: conveyorPosition,
+      assetId: line.baseAssetId,
+      localPosition: basePosition,
       localRotation: IDENTITY_ROTATION,
       isMovable: false,
-    },
-  ];
-  const steps: AssemblyBom['steps'] = [
-    {
+    });
+    steps.push({
       seq: 0,
-      partId: conveyorPartId,
+      partId: basePartId,
       stationId: firstStation.id,
       constraintIds: [],
       durationSeconds: MIN_ASSEMBLY_DURATION_SECONDS,
       description: '确认输送基座',
-    },
-  ];
+    });
+  }
 
   for (const [index, station] of stations.entries()) {
-    if (!station.deviceKind || station.deviceKind === 'conveyor') continue;
+    if (!station.deviceKind) continue;
     const partId = `${line.id}-${station.id}-${station.deviceKind}`;
     parts.push({
       id: partId,
@@ -156,7 +174,7 @@ export function buildBomForLine(line: ProductionLine): AssemblyBom {
       localPosition: positions[index] ?? [0, 0, 0],
       localRotation: rotationAroundY(station.facingDeg),
       isMovable: true,
-      parentId: conveyorPartId,
+      ...(basePartId ? { parentId: basePartId } : {}),
     });
     steps.push({
       seq: steps.length,
@@ -189,9 +207,9 @@ export function createAssemblyRepos(): AssemblyRepos {
       const cur = byId.get(seed.id);
       if (!cur) {
         await lines.upsert(seed);
-      } else if (cur.enabled !== seed.enabled) {
-        // 种子字段（如 enabled）变化时同步到仓储，便于 demo 状态演进无需清盘
-        await lines.upsert({ ...cur, enabled: seed.enabled, updatedAt: seed.updatedAt });
+      } else if (cur.enabled !== seed.enabled || cur.modelVersion !== seed.modelVersion) {
+        // modelVersion 变化代表演示产线结构/资产升级；保留原创建时间并同步完整 seed。
+        await lines.upsert({ ...seed, createdAt: cur.createdAt, updatedAt: seed.updatedAt });
       }
     }
   })();

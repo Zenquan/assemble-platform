@@ -9,6 +9,8 @@ export interface ProductionLine {
   /** 对外名称，如「三号分拣线」 */
   name: string;
   kind: ProductionLineKind;
+  /** 可选整线基座资产；设备自带输送段的工艺线可省略 */
+  baseAssetId?: ModelAssetId;
   /** 该产线下的工位（节拍仿真的最小单元） */
   stations: Station[];
   /** 是否启用；停用线不可在平台打开仿真 */
@@ -30,19 +32,18 @@ export interface Station {
   /** 是否瓶颈（由节拍服务计算后回写） */
   isBottleneck?: boolean;
   /**
-   * 0.4.x · 工位所对应的设备资产 kind（与 model-svc 资产 id 对齐，如
-   * 'feeder' / 'vision-module' / 'gantry-arm' / 'box-pack'）。
-   * 由产线 fixture / 业务方填实；缺省视为"该工位不放独立设备"（仍会被 conveyor 贯穿）。
+   * 工位所对应的设备资产 id，与 model-svc 白名单对齐。
+   * 由产线配置填实；缺省视为该工位没有独立可见设备。
    * assembly-svc 依此生成该工位的 BOM 零件，不再由前端按 seq 猜测。
    */
   deviceKind?: ModelAssetId;
   /**
-   * 0.4.x · 工位物理锚点位置（米，Y up）。后端 BOM 把设备 GLB 落在此坐标上。
-   * 缺省时由 seq 自动等距推出（相邻工位 3m，conveyor 贯穿整条产线）。
+   * 工位物理锚点位置（米，Y up）。后端 BOM 把设备 GLB 落在此坐标上。
+   * 缺省时由 seq 按默认工位间距推出。
    */
   position?: Vec3;
   /**
-   * 0.4.x · 设备朝向（绕 Y 轴旋转，度）。缺省 90（沿产品流向 +X，工位设备"侧脸"朝产线）。
+   * 设备朝向（绕 Y 轴旋转，度）。缺省 90。
    */
   facingDeg?: number;
 }

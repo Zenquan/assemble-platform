@@ -12,6 +12,13 @@ export const MODEL_ASSET_IDS = [
   'vision-module',
   'gantry-arm',
   'box-pack',
+  'infeed-elevator',
+  'bubble-washer',
+  'inspection-conveyor',
+  'vegetable-cutter',
+  'vibratory-dewaterer',
+  'weigh-packer',
+  'metal-detector',
 ] as const;
 
 export type ModelAssetId = (typeof MODEL_ASSET_IDS)[number];
