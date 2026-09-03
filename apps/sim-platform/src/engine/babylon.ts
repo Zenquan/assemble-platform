@@ -49,6 +49,7 @@ import { NoopAssembler, NoopClearance, NoopSimEngine } from './noop.js';
 import { AssemblyAnimator } from './animator.js';
 import { computeTwoStatePlacement, type PartPlacement } from './placement.js';
 import { ManualDragSession, boxObbAt, rayPlaneYIntersect, type DragGeometry } from './drag.js';
+import { fitSphereCameraRadius } from './framing.js';
 import type {
   AssetManager,
   AssemblyController,
@@ -98,6 +99,8 @@ const CAMERA_PRESETS: Record<CameraViewId, CameraPose> = {
   free: { viewId: 'free', position: [150, 140, 150], target: [0, 10, 0], orthographic: false },
 };
 const NO_IBL_MIN_ROUGHNESS = 0.7;
+const PART_FRAME_MIN_RADIUS = 8;
+const PART_FRAME_PADDING = 1.15;
 
 /**
  * 单一事实：一个待渲染零件的几何（含贴合基准 seat + 半轴长），供 `computeTwoStatePlacement`
@@ -347,25 +350,41 @@ class BabylonScene implements SceneManager {
   }
 
   frameToPart(partIds: readonly string[]): void {
-    // 聚焦到所给零件的平均中心并拉近
     if (!this.camera || partIds.length === 0) return;
     let cx = 0;
     let cy = 0;
     let cz = 0;
-    let hit = 0;
+    const selectedParts: Array<{ center: Vector3; half: Vec3 }> = [];
     for (const id of partIds) {
-      const m = this.meshes.get(id);
-      if (m) {
-        cx += m.position.x;
-        cy += m.position.y;
-        cz += m.position.z;
-        hit += 1;
-      }
+      const mesh = this.meshes.get(id);
+      const half = this.halfSize.get(id);
+      if (!mesh || !half) continue;
+      selectedParts.push({ center: mesh.position, half });
+      cx += mesh.position.x;
+      cy += mesh.position.y;
+      cz += mesh.position.z;
     }
-    if (hit === 0) return;
-    const target = new Vector3(cx / hit, cy / hit, cz / hit);
+    if (selectedParts.length === 0) return;
+    const target = new Vector3(
+      cx / selectedParts.length,
+      cy / selectedParts.length,
+      cz / selectedParts.length,
+    );
+    let boundingRadius = 0;
+    for (const part of selectedParts) {
+      boundingRadius = Math.max(
+        boundingRadius,
+        Vector3.Distance(part.center, target) + Math.max(...part.half),
+      );
+    }
     this.camera.setTarget(target);
-    if (this.camera.radius > 40) this.camera.radius = 40;
+    this.camera.radius = fitSphereCameraRadius({
+      boundingRadius,
+      verticalFovRadians: this.camera.fov,
+      aspectRatio: this.engine?.getAspectRatio(this.camera) ?? 1,
+      minRadius: PART_FRAME_MIN_RADIUS,
+      padding: PART_FRAME_PADDING,
+    });
   }
 
   requestRender(): boolean {
@@ -568,7 +587,11 @@ class BabylonScene implements SceneManager {
       if (r > maxR) maxR = r;
     }
     this.camera.setTarget(new Vector3(cx, cy, cz));
-    this.camera.radius = Math.max(14, maxR * 2.6);
+    this.camera.radius = fitSphereCameraRadius({
+      boundingRadius: maxR,
+      verticalFovRadians: this.camera.fov,
+      aspectRatio: this.engine?.getAspectRatio(this.camera) ?? 1,
+    });
   }
 
   /** S1 · 状态变化后取景：把 seat ∪ scatter 的并集质心与包围半径算进相机半径，
@@ -595,7 +618,11 @@ class BabylonScene implements SceneManager {
       if (r > maxR) maxR = r;
     }
     this.camera.setTarget(new Vector3(cx, cy, cz));
-    this.camera.radius = Math.max(14, maxR * 2.4);
+    this.camera.radius = fitSphereCameraRadius({
+      boundingRadius: maxR,
+      verticalFovRadians: this.camera.fov,
+      aspectRatio: this.engine?.getAspectRatio(this.camera) ?? 1,
+    });
   }
 
   /**
