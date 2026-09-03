@@ -103,6 +103,18 @@ export interface SceneManager {
   requestRender(): boolean;
   /** 开始/停止渲染循环 */
   setRendering(on: boolean): void;
+  /**
+   * 0.4.x · 加载工位设备布景层（外观 shell，不参与装配/干涉算法）。
+   *  异步加载每个 .glb 到场景，position/rotation/scale 应用到根 TransformNode。
+   *  返回成功加载的设备 id 列表（Babylon 真实现；Noop 恒 []）。
+   */
+  loadDevices(layout: ReadonlyArray<{
+    deviceId: string;
+    assetUrl: string;
+    position: readonly [number, number, number];
+    rotationYDeg?: number;
+    scale?: number;
+  }>): Promise<readonly string[]>;
 }
 
 /** 模型资产加载（对应 ModelSvc 的前端消费侧；0.2 无真 glTF，按 line 合成 OBB 占位盒） */

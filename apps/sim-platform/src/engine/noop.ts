@@ -215,6 +215,18 @@ class NoopScene implements SceneManager {
   setRendering(on: boolean): void {
     this.rendering = on;
   }
+  async loadDevices(
+    _layout: ReadonlyArray<{
+      deviceId: string;
+      assetUrl: string;
+      position: readonly [number, number, number];
+      rotationYDeg?: number;
+      scale?: number;
+    }>,
+  ): Promise<readonly string[]> {
+    // noop：设备布景不参与仿真语义，仅返空让接口契约完整
+    return [];
+  }
 }
 
 class NoopAssets implements AssetManager {
