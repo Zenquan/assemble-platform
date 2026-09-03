@@ -28,6 +28,8 @@ const engineState = ref('初始化…');
 const backend = ref<'babylon' | 'noop'>('noop');
 const stepText = ref('');
 const loadError = ref('');
+const assembledCount = ref(0);
+const totalParts = ref(0);
 
 let unmounted = false;
 
@@ -50,10 +52,39 @@ onMounted(async () => {
   if (eng.backend === 'babylon') {
     // 真 WebGL：引擎内 loadLine 已把零件盒体建入场景
     stepText.value = `已加载 ${health.totalParts} 个零件 · STEP 视角（滚轮缩放 / 左键旋转）`;
+    // S1：等引擎完成 BOM 装载与首帧后刷新分态计数
+    window.setTimeout(() => {
+      const s = eng.syncAssemblyState();
+      assembledCount.value = s.seated;
+      totalParts.value = s.seated + s.scattered;
+    }, 120);
   } else {
     stepText.value = '当前环境无 WebGL，已回落 Noop 占位；请在浏览器中打开以启用 3D 渲染';
   }
 });
+
+/** S1 · 装配下一件（严格按工艺步骤序），并同步分态渲染 */
+function assembleNext() {
+  const eng = engine.value;
+  if (!eng) return;
+  const step = eng.assembly.currentStepSeq;
+  const next = eng.assembly.bom?.steps[step];
+  if (!next) return;
+  if (eng.assembly.assemble(next.partId)) {
+    const s = eng.syncAssemblyState();
+    assembledCount.value = s.seated;
+  }
+}
+
+/** S1 · 撤销最近一次装配，把该件放回散落待料位 */
+function undoLast() {
+  const eng = engine.value;
+  if (!eng) return;
+  if (eng.assembly.undo()) {
+    const s = eng.syncAssemblyState();
+    assembledCount.value = s.seated;
+  }
+}
 
 onBeforeUnmount(() => {
   unmounted = true;
@@ -68,22 +99,27 @@ onBeforeUnmount(() => {
       <header class="wb-head">
         <div>
           <div class="wb-name">产线 {{ line?.name ?? lineId }} · 装配工作台</div>
-          <div class="wb-sub">SIMULATION WORKBENCH</div>
+          <div class="wb-sub">SIMULATION WORKBENCH · 0.3 分态渲染(S1)</div>
         </div>
         <span class="engline" :class="backend"><i class="dot"></i>{{ engineState }}</span>
       </header>
 
       <div class="wb-body">
-        <aside class="left">零件 / BOM · 3D 视口（0.2 真渲染）<br><span class="muted">三模式装配与 BOM 树归 0.3.x</span></aside>
+        <aside class="left">零件 / BOM · 3D 视口（分态渲染）<br><span class="muted">S1：已贴合(青)/待装配(灰蓝散落)</span></aside>
         <div ref="canvasHost" class="viewport">
           <div v-if="loadError" class="vhint err">{{ loadError }}</div>
           <div v-else-if="backend === 'noop'" class="vhint">{{ stepText }}</div>
           <template v-else>
-            <div class="hud-top">STEP&nbsp;·&nbsp;3D 装配视口</div>
+            <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（S1 分态）</div>
             <div class="hud-bottom">{{ stepText }}</div>
+            <div class="s1bar">
+              <span class="s1count">已贴合 <b>{{ assembledCount }}</b> / {{ totalParts }}</span>
+              <button class="s1btn" :disabled="assembledCount >= totalParts" @click="assembleNext">装配下一件</button>
+              <button class="s1btn" :disabled="assembledCount <= 0" @click="undoLast">撤销装配</button>
+            </div>
           </template>
         </div>
-        <aside class="right">实时干涉 · 步骤 · 节拍<br><span class="muted">实时联动归 0.3.x</span></aside>
+        <aside class="right">S1 · 分态渲染<br><span class="muted">装配下一件→零件从散落待料环移入贴合位；撤销→放回待料环。S2 起在此接动画</span></aside>
       </div>
     </div>
   </div>
@@ -207,6 +243,46 @@ onBeforeUnmount(() => {
   right: 12px;
   font-size: 11px;
   color: var(--mute);
+}
+.s1bar {
+  position: absolute;
+  top: 46px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 3;
+  font-size: 11px;
+}
+.s1count {
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 5px 10px;
+  background: rgba(10, 20, 32, 0.6);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-radius: 6px;
+}
+.s1count b {
+  color: #5eead4;
+}
+.s1btn {
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--line-3);
+  background: rgba(13, 22, 38, 0.75);
+  color: var(--ink);
+  font-size: 11px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+.s1btn:hover:not(:disabled) {
+  border-color: #22d3ee;
+  color: #22d3ee;
+}
+.s1btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .vhint {
   color: var(--ghost);
