@@ -188,4 +188,36 @@ M1 收尾 · 单条产线 Demo —— **后端服务层跑通 + 前端 SimEngine
   - begin 起始态（截图 `docs/s3-drag-begin.png`）：HUD "拖拽 line-sorting-01-001 · 可贴合"
 - 验收对照：干涉→变红拦截、贴近 seat 无干涉可贴合、严格步骤序（手动 assemble 仅接受下一步序件）、clearance 静态集与渲染两态集合一致（syncAssemblyState 单点维护）
 
+### Added（0.3.0 S4 切片推进）
+
+- **S4 BOM 树 + 节拍面板（HUD · FEAT-20260903-003 第四切片）**：工作台左栏展示「工位 → 零件」两层 BOM 树（round-robin 归组 + 每件 done/current/pending/基座 状态标注 + 点选联动视口 frameToPart），右栏展示 takt-svc 实时计算结果（瓶颈工位/理论CT/产能/各工位负荷分级 ok·busy·overload）；数据全经 @assemble/domain，只读门面态消费。
+  - `engine/bomtree.ts`（新）：纯逻辑
+    - `groupStepsByStation(bom, stations)`：步骤 seq i → stations[i % n] 归组，组内/组间稳定顺序（纯函数、可快照）。
+    - `deriveBomTreeState(bom, stations, {assembledIds, currentStepSeq, selectedPartId?})`：装配态→树视图模型，每行 BomPartRow 带 done/current/isBase/isMovable，工位累计 doneCount。
+    - `stationsOf(line)`：便捷别名。
+  - `engine/taktpanel.ts`（新）：纯逻辑
+    - `recommendTargetPerHour(stations)`：取瓶颈工位小时速率向上取整，让演示面板落在「瓶颈接近/超负荷」可读区间。
+    - `deriveTaktPanel(reqInfo, result, stations)`：TaktBottleneckResult→HUD 视图（中文 summary、瓶颈名、工位负荷 ok/busy/overload 分级）。
+  - `api/takt.ts`（新）：`fetchTaktSimulation({lineId, stations, targetUnitsPerHour, availability?})` POST /takt/simulate。
+  - `vite.config.ts`：dev 代理新增 `/takt` → 127.0.0.1:7104。
+  - `scripts/dev.mjs`：精简模式 CORE 加入 `takt-svc`（7104），本地 `pnpm dev` 即可拉齐 assembly/interference/takt 三个前端实连服务。
+  - `components/BomTreePanel.vue`（新）：左栏两层树渲染（顶位分级 takt 显示），行点击 emit `select(partId)`。
+  - `components/TaktPanel.vue`（新）：右栏渲染（summary / CT / 产能 / 目标 / 瓶颈 / 工位负荷条 + loading/error 兜底）。
+  - `views/WorkbenchView.vue`：S4 接线
+    - 120ms 轮询新增 `refreshBomTree()`（仅读门面 `engine.assembly` + `line.stations` + `selectedPartId`，不写场景）。
+    - `loadTakt()`：产线就绪后一次拉 `takt-simulate`（target 取 `recommendTargetPerHour`、availability 0.85），结果存 `taktModel`。
+    - `selectPart(partId)`：调 `eng.scene.frameToPart([partId])` + 写入 `selectedPartId` → BOM 树当前选中行高亮。
+    - 左右栏 aside 改为 `<BomTreePanel>`/`<TaktPanel>`，副标/hud-top 文案切 S4「BOM 树联动 · 当前步骤高亮」。
+  - `engine/test/bomtree.test.ts`（新，10 例）：归组确定性、done/current 标注边界（assembledIds vs step<cur 互独立）、基座识别、空步骤兜底、选中透传。
+  - `engine/test/taktpanel.test.ts`（新，7 例）：recommendTargetPerHour 边界、loadClass 分级（0.9 busy/>1 overload）、达产 summary、缺工位名兜退。
+
+### Verified（0.3.0 S4）
+
+- vue-tsc 0 错；sim-platform vitest **63/63 全绿**（placement 7 + animator 5 + drag 13 + engine 17 + **bomtree 10 + taktpanel 7** + useLineCatalog 4）。
+- 浏览器 E2E（playwright chromium headless + swiftshader + 反节流四件套 + pinned headless_shell-1194）：
+  - 复位（`resetForPlay`）→ `已贴合 0/12`，BOM 树三工位（3.2s/2.6s/3.8s）展开，工位下 round-robin 归组的部件列出，**部件 1（基座）标 current 高亮（青描边 + ▸）**；其余 pending；takt 面板 summary = "理论产能 805.3 件/时 < 目标 948 · 未达产（瓶颈 装箱工位 3.8s）"，瓶颈 = 装箱工位 3.8s，负荷分级：上料工位 0.99(busy/黄) / 视觉分拣 0.81(ok/绿) / 装箱工位 1.18(overload/红+瓶颈徽)（截图 `docs/s4-bom-takt.png`）。
+  - `seekTo(4)` → `已贴合 4/12`，BOM 树：部件 1基座 ✓、部件 4 ✓、部件 2 ✓、部件 3 ✓；**部件 5（seq4）current 高亮**（分拣工位下），其余 pending（截图 `docs/s4-bom-takt-assembled.png`）。takt 数据不变（takt 是一次仿真）。
+- 验收对照：BOM层级 = 工位→零件（按 round-robin 归组到 stations）；当前 step 在所属工位下高亮、已装 ✓、pending ·、基座徽；选件→视口 frameToPart；节拍数据真接 takt-svc，瓶颈/分级与产线工位一致。
+- 分支保留：`feat/0.3.0-s4-bom-takt`（从 `feat/0.3.0-s3-manual-drag` 派生）；提交 `5c37b78`(S4a) `e3cad64`(S4b) `6e7920f`(S4c)。
+
 <!-- 占位：本版已完成 0.2.0 出口闭合与文档归档；后续 0.2.x 增量（一键起脚本等）将由此段起。 -->

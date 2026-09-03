@@ -418,3 +418,64 @@ S3 踩到三处 Babylon 9.23 与工具链的具体 API 差异，以及一条 E2E
 - Related Files: apps/sim-platform/src/engine/babylon.ts, apps/sim-platform/src/engine/noop.ts, apps/sim-platform/src/engine/test/drag.test.ts, /tmp/probe_seats.mjs, /tmp/shot-s3-drag.mjs
 - Tags: babylon-api, detachControl, picking-ray, firstPartId, probe-geometry
 - Pattern-Key: s3.babylon_api_and_probe
+
+---
+
+## [LRN-20260903-013] best_practice
+
+**Logged**: 2026-09-03T16:10:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: sim-platform / engine / ui
+
+### Summary
+S4 BOM 树 + 节拍面板延续「纯逻辑 + 渲染/UI 被动」红线：BOM 归组 + 状态标注 (`bomtree.ts`) 与 takt 视图模型 (`taktpanel.ts`) 都是引擎无关纯函数，可被 vitest 锁定；UI 组件只收 props + 发 select 事件，轮询不写门面以外的场景。takt 数据真接 takt-svc(7104) 走 vite 代理 `/takt`，S4b 把 takt-svc 加入 dev.mjs 精简 CORE 让 `pnpm dev` 自洽。
+
+### Details
+- `engine/bomtree.ts`：`groupStepsByStation` round-robin (step seq i → stations[i % n])，纯函数、可快照；`deriveBomTreeState` 接受 `(bom, stations, {assembledIds, currentStepSeq, selectedPartId})`，输出 BomTreeModel（group/parts/doneCount/totalSteps/allDone/selectedPartId）。done 判定以 `step.seq < currentStepSeq || assembledIds.has(partId)` 兼容 `seekTo` 后两类来源失耦。
+- `engine/taktpanel.ts`：`recommendTargetPerHour(stations) = ceil(3600 / maxTakt)` 让演示目标恰好逼近瓶颈，让面板落在「瓶颈接近/超负荷」可读区间；`deriveTaktPanel(reqInfo, result, stations)` → HUD 中文 summary、瓶颈名、每工位 loadClass(`>1 overload / ≥0.9 busy / else ok`)。
+- `api/takt.ts`：`fetchTaktSimulation({lineId, stations, targetUnitsPerHour, availability?})` POST `/takt/simulate`，过 vite 代理 → 127.0.0.1:7104 takt-svc；domain 严格类型，无 any。
+- `components/BomTreePanel.vue` / `TaktPanel.vue`：纯展示组件（props + emit），不 import Babylon、不写场景；BomTreePanel 行点击 emit `select(partId)` → 父级 `frameToPart([partId])` 联动视口。
+- `views/WorkbenchView.vue`：120ms 轮询只读 `engine.assembly.bom + line.stations + selectedPartId` 推导 BomTreeModel（**绝不写场景**——继承 S2 LRN-010 教训）；`loadTakt()` 产线就绪后一次 fetch，结果缓存为 taktModel。
+- `scripts/dev.mjs` + `vite.config.ts`：CORE 加入 `takt-svc`(7104)，精简模式 `pnpm dev` = assembly(7101) + interference(7102) + takt(7104) + vite(5173)；vite proxy `/takt → 7104`。
+- 验证：vitest **63/63**（+bomtree 10 +taktpanel 7），vue-tsc 0 错，E2E 2 截图（reset → base current 高亮 + takt 面板 loading 后的 full panel；seekTo(4) → 4 件 ✓ + 1 件 current）。
+
+### Suggested Action
+- 后续 UI 切片（回放面板、统计页等）继续走「纯逻辑视图模型 + 组件只读 props + 门面发事件」三段式；禁止 UI 轮询写场景。
+- 接新后端服务一律 (a) `scripts/dev.mjs` CORE 加服务 + 健康探活；(b) `vite.config.ts` 加 proxy；(c) `api/<svc>.ts` + 纯逻辑映射模块 + 单测；三件齐备再写 UI。
+- round-robin 归组是 BOM 树分组的「公平落位」语义替代品，注释里要显式说明「合成 BOM 无 stationId 链接，所以用 round-robin 兜底」；未来真 BOM 接入后改用 part.stationId 即可，bomtree 接口不变。
+
+### Metadata
+- Source: insight
+- Related Files: apps/sim-platform/src/engine/{bomtree,taktpanel}.ts, apps/sim-platform/src/api/takt.ts, apps/sim-platform/src/components/{BomTreePanel,TaktPanel}.vue, apps/sim-platform/src/views/WorkbenchView.vue, apps/sim-platform/vite.config.ts, scripts/dev.mjs
+- Tags: s4, bom-tree, takt-panel, round-robin, read-only-poll, dev-orchestration
+- Pattern-Key: s4.bom_takt_pure_view
+
+---
+
+## [LRN-20260903-014] correction
+
+**Logged**: 2026-09-03T16:15:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: sim-platform / e2e
+
+### Summary
+S4 E2E 启动 `chromium.launch({headless:true})` 直接报「Executable doesn't exist at chrome-headless-shell-1228」—— workspace playwright-core 已升级到 revision 1228，但本地 `~/Library/Caches/ms-playwright` 只有 chromium-1194 / chromium_headless_shell-1194 等旧版；直接调用 headless 走默认期望路径会失败。修复：显式 `executablePath` 指到已装的 `chromium_headless_shell-1194/chrome-mac/headless_shell`，并在脚本注释中标注「pinned headless_shell-1194」，避免 CI 升级/降级 playwright 时再次踩坑。另：Babylon 引擎默认 `seekTo(steps.length)`（整机贴合，0.2 观感延续）会让 E2E「初始态」截图看似 all-done，必须先 `resetForPlay()` 才能演示 done/current/pending 三态。
+
+### Details
+- 现象：`chromium.launch` 不传 executablePath，playwright 走 `browsers.json` 期望 revision；workspace playwright-core 1228 vs 本地缓存 1194 → 缺 chrome-headless-shell-1228 → 启动失败。
+- 修复：`executablePath: '/Users/zenquan/Library/Caches/ms-playwright/chromium_headless_shell-1194/chrome-mac/headless_shell'`（已装的 headless shell，自带 swiftshader，无需重装）。
+- 附加：BabylonSimEngine.init() 默认 `seekTo(bom.steps.length)`（延续 0.2「整机完整贴合」观感），新页面初始 `assembledPartIds.length === totalSteps`，E2E 截「初始态」会拍到 ALL DONE；演示 BOM 树 done/current/pending 三态语义时，E2E 需先 `sim.resetForPlay()` → 全部散落 → seq0(current) 高亮 → 再 `seekTo(N)` 演示中间态。
+- 与 LRN-008（Babylon 几何隐含观感）同理：引擎的「开箱观感」选择会影响 HUD/E2E 默认期望；HUD 切片 E2E 必须显式 reset 到目标状态再截图。
+
+### Suggested Action
+- Playwright E2E 一律 `executablePath` 显式指到已装的 chromium/headless_shell（pin revision），并在脚本头部注释 revision 与原因。
+- 引擎 init 选默认观感前，HUD 演示型 E2E 先 `resetForPlay()`（或对应 reset）保证拍到目标态。
+- dev.mjs 默认起 takt-svc(7104) 后，所有依赖节拍数据的前端 E2E 才有真值；验证前先 `curl /takt/simulate` 探活确认 7104 已起。
+
+### Metadata
+- Source: error
+- Related Files: /tmp/shot-s4-bomtakt.mjs, apps/sim-platform/vite.config.ts, scripts/dev.mjs, apps/sim-platform/src/engine/babylon.ts
+- Tags: e2e, playwright, executablePath, default-state, resetForPlay
+- Pattern-Key: s4.e2e_pin_browser
