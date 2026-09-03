@@ -11,6 +11,7 @@ import {
   createSimEngine,
   NoopAssembler,
   NoopClearance,
+  BabylonSimEngine,
   type AssemblyController,
   type ClearanceController,
 } from '@/engine';
@@ -50,7 +51,9 @@ function makeBom(): AssemblyBom {
 }
 
 describe('createSimEngine 门面工厂', () => {
-  it('本轮返回 noop 后端，init 后可读取健康快照', () => {
+  it('无 WebGL（jsdom/CI）回落 noop 后端，init 后可读取健康快照', () => {
+    // 注：浏览器 E2E 下 WebGL 可用时工厂会返回 BabylonSimEngine（backend='babylon'），
+    //     本单元测试在 jsdom 下运行，无 WebGL，自动回落 Noop。
     const engine = createSimEngine();
     expect(engine.backend).toBe('noop');
 
@@ -65,6 +68,13 @@ describe('createSimEngine 门面工厂', () => {
     expect(after.ok).toBe(true);
     expect(after.backend).toBe('noop');
     expect(after.activeLineId).toBe('L1');
+  });
+
+  it('门面正确暴露 BabylonSimEngine 类（仅引用，不实例化以免启 WebGL）', () => {
+    // 不在此处 new —— BabylonSimEngine 一旦构造会尝试建临时 canvas，jsdom 环境不安全；
+    // 仅验证门面根出口能拿到类形态，符合 0.2.0「真渲染后端已挂门面」出口。
+    expect(typeof BabylonSimEngine).toBe('function');
+    expect(BabylonSimEngine.name).toBe('BabylonSimEngine');
   });
 
   it('dispose 后健康态回到未初始化', () => {
