@@ -27,6 +27,7 @@ export default defineConfig({
       '/lines': { target: 'http://127.0.0.1:7101', changeOrigin: true },
       '/interference': { target: 'http://127.0.0.1:7102', changeOrigin: true },
       '/takt': { target: 'http://127.0.0.1:7104', changeOrigin: true },
+      '/model': { target: 'http://127.0.0.1:7103', changeOrigin: true },
     },
   },
   test: {

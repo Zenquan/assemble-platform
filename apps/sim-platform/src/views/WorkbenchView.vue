@@ -21,6 +21,7 @@ import type { ProductionLine } from '@assemble/domain';
 import { createSimEngine, type SimEngine } from '@/engine';
 import { deriveBomTreeState, stationsOf, type BomTreeModel } from '@/engine/bomtree';
 import { deriveTaktPanel, recommendTargetPerHour, type TaktPanelModel } from '@/engine/taktpanel';
+import { layoutForLine } from '@/engine/devices';
 import BomTreePanel from '@/components/BomTreePanel.vue';
 import TaktPanel from '@/components/TaktPanel.vue';
 
@@ -40,6 +41,10 @@ const isAnimPlaying = ref(false);
 const animTotal = ref(0);
 // S3 · 手动拖拽实时状态（拖拽中零件 / 干涉拦截 / 可落位提示）
 const dragText = ref('');
+// 0.4.x · 工位设备布景层（视觉真实感；不参与装配/干涉）
+const deviceLoadedIds = ref<readonly string[]>([]);
+// 0.4.x · 预期设备数（=layoutForLine 实际计算长度，用于 HUD 显示与 E2E 等待）
+const expectedDeviceCount = ref(0);
 // S4 · BOM 树 + 节拍面板
 const bomTree = ref<BomTreeModel | null>(null);
 const selectedPartId = ref('');
@@ -69,6 +74,8 @@ onMounted(async () => {
     : '引擎离线';
   // S4 · 节拍面板：与渲染后端无关，产线就绪即可拉节拍仿真
   void loadTakt();
+  // 0.4.x · 加载工位设备布景层（外观真实感设备；不阻塞 init/装配）
+  void loadDevices();
   if (eng.backend === 'babylon') {
     // 真 WebGL：引擎内 loadLine 已把零件盒体建入场景
     stepText.value = `已加载 ${health.totalParts} 个零件 · 手动拖拽下一件装配（滚轮缩放 / 左键旋转 / 按住琥珀件拖拽）`;
@@ -210,6 +217,23 @@ function selectPart(partId: string) {
   refreshBomTree();
 }
 
+/** 0.4.x · 加载工位设备布景层：按 line 推导布局 → SceneManager.loadDevices → 渲染就绪 */
+async function loadDevices() {
+  const eng = engine.value;
+  const ln = line.value;
+  if (!eng || !ln) return;
+  const layout = layoutForLine(ln);
+  // 立即把预期数写到 HUD（避免 deviceLoadedIds 为 0 时 UI 长时间显示 0/N）
+  expectedDeviceCount.value = layout.length;
+  try {
+    const ids = await eng.scene.loadDevices(layout);
+    deviceLoadedIds.value = ids;
+  } catch (e) {
+    // 单件失败已被引擎内部吞掉，此处仅记录 UI 状态
+    deviceLoadedIds.value = [];
+  }
+}
+
 /** S4 · 拉取节拍仿真（一次）：目标产能取瓶颈工位小时速率，开动率 0.85 供演示可读 */
 async function loadTakt() {
   const ln = line.value;
@@ -260,6 +284,8 @@ async function loadTakt() {
           <template v-else>
             <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（BOM 树联动 · 当前步骤高亮）</div>
             <div class="hud-bottom">{{ stepText }}</div>
+            <!-- 0.4.x · 设备布景层加载计数（供 E2E/截图等待 deviceLoadedIds.length>0） -->
+            <div class="device-badge" data-test="device-loaded-count">{{ deviceLoadedIds.length }}/{{ expectedDeviceCount }}</div>
             <div class="s1bar">
               <span class="s1count">已贴合 <b>{{ assembledCount }}</b> / {{ totalParts }}</span>
               <span v-if="animTotal > 0" class="s1prog">动画 {{ animProgress }}/{{ animTotal }}{{ isAnimPlaying ? ' · 播放中' : '' }}</span>
@@ -480,6 +506,20 @@ async function loadTakt() {
 .s1btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+.device-badge {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #fbbf24;
+  padding: 4px 10px;
+  background: rgba(10, 20, 32, 0.6);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 6px;
+  pointer-events: none;
 }
 .vhint {
   color: var(--ghost);
