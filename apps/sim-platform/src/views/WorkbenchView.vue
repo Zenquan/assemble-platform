@@ -33,6 +33,8 @@ const totalParts = ref(0);
 const animProgress = ref(0); // 动画进度 seq（S2 播放态）
 const isAnimPlaying = ref(false);
 const animTotal = ref(0);
+// S3 · 手动拖拽实时状态（拖拽中零件 / 干涉拦截 / 可落位提示）
+const dragText = ref('');
 
 let unmounted = false;
 
@@ -54,7 +56,7 @@ onMounted(async () => {
     : '引擎离线';
   if (eng.backend === 'babylon') {
     // 真 WebGL：引擎内 loadLine 已把零件盒体建入场景
-    stepText.value = `已加载 ${health.totalParts} 个零件 · STEP 视角（滚轮缩放 / 左键旋转）`;
+    stepText.value = `已加载 ${health.totalParts} 个零件 · 手动拖拽下一件装配（滚轮缩放 / 左键旋转 / 按住琥珀件拖拽）`;
     // S1：等引擎完成 BOM 装载与首帧后刷新分态计数
     window.setTimeout(() => {
       const s = eng.syncAssemblyState();
@@ -142,8 +144,27 @@ onMounted(() => {
   // 轮询刷新动画进度（播放由引擎 render loop 驱动，Vue 无帧 hook）
   pollTimer = window.setInterval(() => {
     if (!unmounted) refreshAnimState();
+    if (!unmounted) refreshDragState();
   }, 120);
 });
+
+/** S3 · 读取手动拖拽会话状态并映射为 HUD 文案（引擎内部 pointer 拖拽驱动） */
+function refreshDragState() {
+  const eng = engine.value;
+  if (!eng) return;
+  const d = eng.interaction.dragState;
+  if (!d.dragging) {
+    dragText.value = '';
+    return;
+  }
+  if (d.blocked) {
+    dragText.value = `干涉拦截 · 无法贴合（命中 ${d.hitPartId || '已装配件'}）`;
+  } else if (d.nearSeat) {
+    dragText.value = `拖拽 ${d.partId} · 可贴合`;
+  } else {
+    dragText.value = `拖拽 ${d.partId} · 移至目标位`;
+  }
+}
 </script>
 
 <template>
@@ -152,18 +173,18 @@ onMounted(() => {
       <header class="wb-head">
         <div>
           <div class="wb-name">产线 {{ line?.name ?? lineId }} · 装配工作台</div>
-          <div class="wb-sub">SIMULATION WORKBENCH · 0.3 过程动画(S2)</div>
+          <div class="wb-sub">SIMULATION WORKBENCH · 0.3 手动拖拽装配(S3)</div>
         </div>
         <span class="engline" :class="backend"><i class="dot"></i>{{ engineState }}</span>
       </header>
 
       <div class="wb-body">
-        <aside class="left">零件 / BOM · 3D 视口（S2 过程动画）<br><span class="muted">已贴合(青)/待装配(琥珀散落)；播放时散落件平滑滑入贴合位</span></aside>
+        <aside class="left">零件 / BOM · 3D 视口（S3 手动装配）<br><span class="muted">manual：散落待装(琥珀)的"下一件"可在视口内拖拽；贴合位已装配件相叠时干涉→变红拦截、无法落位</span></aside>
         <div ref="canvasHost" class="viewport">
           <div v-if="loadError" class="vhint err">{{ loadError }}</div>
           <div v-else-if="backend === 'noop'" class="vhint">{{ stepText }}</div>
           <template v-else>
-            <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（S2 过程动画）</div>
+            <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（S3 手动拖拽）</div>
             <div class="hud-bottom">{{ stepText }}</div>
             <div class="s1bar">
               <span class="s1count">已贴合 <b>{{ assembledCount }}</b> / {{ totalParts }}</span>
@@ -174,10 +195,11 @@ onMounted(() => {
               <button class="s1btn act" @click="resetForPlay" :disabled="assembledCount <= 0">从头演示</button>
               <button class="s1btn act" :disabled="isAnimPlaying || assembledCount >= totalParts" @click="playAuto">▶ 播放</button>
               <button class="s1btn" :disabled="!isAnimPlaying" @click="pauseAuto">⏸ 暂停</button>
+              <span v-if="dragText" class="s3drag" :class="{ bad: dragText.includes('干涉') }">S3 · {{ dragText }}</span>
             </div>
           </template>
         </div>
-        <aside class="right">S2 · 装配过程动画<br><span class="muted">从头演示→播放：零件沿步骤序从散落位平滑滑入贴合位；暂停停当前件；撤销/复位仍瞬时跳变</span></aside>
+        <aside class="right">S3 · 手动装配拖拽<br><span class="muted">先"撤销/从头"让零件散落 → 按住琥珀色下一件在视口拖向贴合位：贴近且无干涉可贴合（青色）；与已装配件相叠变红、拦截不落位</span></aside>
       </div>
     </div>
   </div>
@@ -332,6 +354,19 @@ onMounted(() => {
   background: rgba(10, 20, 32, 0.6);
   border: 1px solid rgba(251, 191, 36, 0.3);
   border-radius: 6px;
+}
+.s3drag {
+  color: #34d399;
+  font-size: 11px;
+  padding: 5px 10px;
+  background: rgba(10, 20, 32, 0.7);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.s3drag.bad {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.45);
 }
 .s1sep {
   width: 1px;
