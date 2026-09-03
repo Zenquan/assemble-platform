@@ -22,6 +22,9 @@ importers:
       '@babylonjs/core':
         specifier: ^9.23.0
         version: 9.23.0
+      '@babylonjs/loaders':
+        specifier: ^9.24.0
+        version: 9.24.0(@babylonjs/core@9.23.0)(babylonjs-gltf2interface@9.23.0)
       vue:
         specifier: ^3.5.13
         version: 3.5.42(typescript@5.9.3)
@@ -254,6 +257,12 @@ packages:
 
   '@babylonjs/core@9.23.0':
     resolution: {integrity: sha512-FpDaTPx485J1H0AEJpoJ785Z1CwCkEPNnZFu7WzHTy0ByGCy75bkZZILh4QFU4LLnzK1iuHwUfecCguATIeKSA==}
+
+  '@babylonjs/loaders@9.24.0':
+    resolution: {integrity: sha512-B+lg7CtNdDcmONPnU0gYV1tAsn2GV39+Zd4Zki1VrCI2aEelDDYvO9V1q0wEWPMRaW+9OJbXwenqiuAXENVCwQ==}
+    peerDependencies:
+      '@babylonjs/core': ^9.0.0
+      babylonjs-gltf2interface: ^9.0.0
 
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
@@ -682,6 +691,9 @@ packages:
   avvio@9.3.0:
     resolution: {integrity: sha512-g2tQ7LE7oOSqDfwEm3M+ZCMTJc7KiZCdJ4UwyZJb5ckTKyYu50OYmvv0mCFXPuYXoM4zkSt8zM9XQ9KCvxA74A==}
 
+  babylonjs-gltf2interface@9.23.0:
+    resolution: {integrity: sha512-oD9rkfCafvGACikVWhVVl1Iy9bDuBVlI7zmeiDXI8y5gw7UOmQMffpvrl/ujoiw5agcsEAaQuF6Dbjfb+Cpaiw==}
+
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
 
@@ -1065,6 +1077,11 @@ snapshots:
 
   '@babylonjs/core@9.23.0': {}
 
+  '@babylonjs/loaders@9.24.0(@babylonjs/core@9.23.0)(babylonjs-gltf2interface@9.23.0)':
+    dependencies:
+      '@babylonjs/core': 9.23.0
+      babylonjs-gltf2interface: 9.23.0
+
   '@esbuild/aix-ppc64@0.21.5':
     optional: true
 
@@ -1399,6 +1416,8 @@ snapshots:
     dependencies:
       '@fastify/error': 4.2.0
       fastq: 1.20.3
+
+  babylonjs-gltf2interface@9.23.0: {}
 
   balanced-match@1.0.2: {}
 
