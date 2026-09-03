@@ -1,33 +1,62 @@
 <script setup lang="ts">
 /**
- * 装配工作台（design 稿页面 B）—— 本轮占位。
+ * 装配工作台（design 稿页面 B）—— 0.2.0 出口：Babylon 最小真渲染。
  *
- * 范围说明：0.2.x 前端分两拍 —— 本拍（SimEngine 门面 + 产线选择页）只出
- * 工作台的**框架与视口占位**；下一拍接入 Babylon 真渲染经 SimEngine 门面替换占位。
+ * 0.2.0 范围（FEAT-20260903-002，grill-me 确认「最小真渲染」）：
+ *   - 视口由真 Babylon（经 SimEngine 门面工厂取到）挂 WebGL canvas；
+ *   - 真拉取所选产线(/lines/:id)，引擎把其零件按确定性布局渲成 OBB 盒体占位
+ *     + 网格/坐标轴 + ArcRotateCamera（可旋转缩放），HUD 显示产线名与引擎实时。
+ *   - 不做（归 0.3.x）：三模式真装配 / 实时干涉拖拽 / BOM 树 / 节拍面板。
  *
- * 此处已演示「业务经门面工厂获取引擎、init 挂载容器」的注入方式，
- * 保证红线成立：业务不 import '@babylonjs/core'，只碰 createSimEngine 返回的窄接口。
+ * 红线保持：本组件**不 import '@babylonjs/core'**，只经 createSimEngine() 返回的
+ * 窄接口（SimEngine/EngineHealth）。WebGL 不可用（无头/预览降级）时工厂回落
+ * Noop，视口显示占位说明，不报错。
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 
+import { fetchLine } from '@/api/lines';
+import type { ProductionLine } from '@assemble/domain';
 import { createSimEngine, type SimEngine } from '@/engine';
 
 const route = useRoute();
 const lineId = String(route.params.lineId ?? '');
 const canvasHost = ref<HTMLDivElement | null>(null);
 const engine = ref<SimEngine | null>(null);
-const healthText = ref('');
+const line = ref<ProductionLine | null>(null);
+const engineState = ref('初始化…');
+const backend = ref<'babylon' | 'noop'>('noop');
+const stepText = ref('');
+const loadError = ref('');
 
-onMounted(() => {
+let unmounted = false;
+
+onMounted(async () => {
+  if (!canvasHost.value || unmounted) return;
+  try {
+    line.value = await fetchLine(lineId);
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '产线加载失败';
+    return;
+  }
+  if (unmounted) return;
   const eng = createSimEngine();
   engine.value = eng;
-  // 视口占位：Noop 渲染 backend 在 host 上落地（本轮不做 WebGL，仅挂容器占位）
-  eng.init({ container: canvasHost.value ?? undefined, line: undefined });
-  healthText.value = `渲染后端 ${eng.backend} · 装配工作台视口将在 Babylon 接入后激活`;
+  backend.value = eng.backend;
+  const health = eng.init({ container: canvasHost.value, line: line.value ?? undefined });
+  engineState.value = health.ok
+    ? (eng.backend === 'babylon' ? '引擎实时' : '引擎占位(Noop)')
+    : '引擎离线';
+  if (eng.backend === 'babylon') {
+    // 真 WebGL：引擎内 loadLine 已把零件盒体建入场景
+    stepText.value = `已加载 ${health.totalParts} 个零件 · STEP 视角（滚轮缩放 / 左键旋转）`;
+  } else {
+    stepText.value = '当前环境无 WebGL，已回落 Noop 占位；请在浏览器中打开以启用 3D 渲染';
+  }
 });
 
 onBeforeUnmount(() => {
+  unmounted = true;
   engine.value?.dispose();
   engine.value = null;
 });
@@ -38,18 +67,23 @@ onBeforeUnmount(() => {
     <div class="wb-panel">
       <header class="wb-head">
         <div>
-          <div class="wb-name">产线 {{ lineId }} · 装配工作台</div>
+          <div class="wb-name">产线 {{ line?.name ?? lineId }} · 装配工作台</div>
           <div class="wb-sub">SIMULATION WORKBENCH</div>
         </div>
-        <span class="engline"><i class="dot"></i>引擎 {{ healthText.includes('babylon') ? '实时' : '占位' }}</span>
+        <span class="engline" :class="backend"><i class="dot"></i>{{ engineState }}</span>
       </header>
 
       <div class="wb-body">
-        <aside class="left">零件 / BOM（装配工作台待 Babylon 接入后激活）</aside>
+        <aside class="left">零件 / BOM · 3D 视口（0.2 真渲染）<br><span class="muted">三模式装配与 BOM 树归 0.3.x</span></aside>
         <div ref="canvasHost" class="viewport">
-          <div class="vhint">{{ healthText }}</div>
+          <div v-if="loadError" class="vhint err">{{ loadError }}</div>
+          <div v-else-if="backend === 'noop'" class="vhint">{{ stepText }}</div>
+          <template v-else>
+            <div class="hud-top">STEP&nbsp;·&nbsp;3D 装配视口</div>
+            <div class="hud-bottom">{{ stepText }}</div>
+          </template>
         </div>
-        <aside class="right">实时干涉 · 步骤 · 节拍（待接入）</aside>
+        <aside class="right">实时干涉 · 步骤 · 节拍<br><span class="muted">实时联动归 0.3.x</span></aside>
       </div>
     </div>
   </div>
@@ -103,8 +137,14 @@ onBeforeUnmount(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+}
+.engline.babylon .dot {
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.18);
+}
+.engline.noop .dot {
   background: var(--amber);
-  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.15);
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.16);
 }
 .wb-body {
   display: grid;
@@ -118,6 +158,12 @@ onBeforeUnmount(() => {
   color: var(--faint);
   padding: 14px;
   letter-spacing: 0.04em;
+  line-height: 1.8;
+}
+.left .muted,
+.right .muted {
+  color: var(--ghost);
+  font-size: 10px;
 }
 .left {
   border-right: 1px solid var(--line-3);
@@ -128,9 +174,39 @@ onBeforeUnmount(() => {
 .viewport {
   position: relative;
   background: #0a1420;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  min-height: 560px;
+}
+.viewport canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+.hud-top,
+.hud-bottom {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.hud-top {
+  top: 10px;
+  left: 12px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #22d3ee;
+  padding: 4px 10px;
+  background: rgba(10, 20, 32, 0.55);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  border-radius: 6px;
+}
+.hud-bottom {
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  font-size: 11px;
+  color: var(--mute);
 }
 .vhint {
   color: var(--ghost);
@@ -138,5 +214,12 @@ onBeforeUnmount(() => {
   text-align: center;
   padding: 0 20px;
   line-height: 1.7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 560px;
+}
+.vhint.err {
+  color: var(--red);
 }
 </style>

@@ -8,3 +8,8 @@ import { http } from './http.js';
 export async function fetchLines(): Promise<ProductionLine[]> {
   return http.get<ProductionLine[]>('/lines');
 }
+
+/** 拉取单条产线详情（工作台进入时取所选产线，供引擎真渲染用） */
+export async function fetchLine(id: string): Promise<ProductionLine> {
+  return http.get<ProductionLine>(`/lines/${encodeURIComponent(id)}`);
+}
