@@ -170,3 +170,24 @@ describe('NoopAssembler 三模式装配状态机', () => {
     expect(a.switchMode('replay').ok).toBe(true);
   });
 });
+
+describe('门面 syncAssemblyState（S1 分态同步口径）', () => {
+  it('Noop 后端：seated/scattered 与装配状态机 assembledPartIds 一致', () => {
+    const engine = createSimEngine(); // node 环境回落 noop
+    engine.init({
+      line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' },
+    });
+    engine.assembly.load(makeBom());
+    // 起始全待装配 → 0 seated
+    expect(engine.syncAssemblyState()).toEqual({ seated: 0, scattered: 3 });
+    // 依次装配 base、shaft_1 → seated 递增
+    engine.assembly.assemble('base');
+    expect(engine.syncAssemblyState()).toEqual({ seated: 1, scattered: 2 });
+    engine.assembly.assemble('shaft_1');
+    expect(engine.syncAssemblyState()).toEqual({ seated: 2, scattered: 1 });
+    // undo 回退 → 一件回到待装配
+    engine.assembly.undo();
+    expect(engine.syncAssemblyState()).toEqual({ seated: 1, scattered: 2 });
+    engine.dispose();
+  });
+});
