@@ -5,7 +5,8 @@
  *   1. 持有每个零件在 `placement.ts` 里算好的 seat/scatter 两目标位；
  *   2. 维护"飞行表"——正从 scatter 平滑滑向 seat 的零件（过渡中）；
  *   3. `play()` 按 BOM 步骤序 + `AssemblyStep.durationSeconds` 逐件**自动推进**，
- *      每播完一件回调 onAssemble(partId) 让宿主把它正式落进 assembled 集合；
+ *      每件从散落位平滑滑到贴合位、动画完成那一刻回调 onAssemble(partId)
+ *      让宿主把它正式落进 assembled 集合（视觉先滑、到位才落集合，杜绝跳变）；
  *   4. `seekTo(seq)` / `undo()` 走**跳变**（清飞行表，不插帧）——与 S1 瞬时一致；
  *   5. `pose(partId, fallback)` 供渲染层每帧消费：飞行中的件返回插值位，否则 null
  *      （渲染层回落到 S1 的 seat/scatter 判定）。
@@ -35,6 +36,8 @@ export interface Flight {
   /** 过渡起止（ms，驱动时钟域） */
   t0: number;
   t1: number;
+  /** 该件是否已在动画完成时回调 onAssemble 落集合（防重复回调） */
+  seated: boolean;
 }
 
 /** pose() 的回落输入：渲染层应据 assembledIds 判定 seat/scatter（S1 语义由宿主传给 fallback） */
@@ -167,8 +170,9 @@ export class AssemblyAnimator {
 
   /**
    * 每帧推进（渲染循环 / 测试假时钟驱动）。
-   * - 若正在播放：到点则贴合下一件（回调 onAssemble），并把它登记进飞行表让渲染播过渡；
-   * - 推进飞行表里在途件的进度（按 now 自然推移）。
+   * - 若正在播放：到点则把下一件登记进飞行表（散落→贴合走缓动）；
+   * - 推进飞行表：某件过渡结束（视觉已到 seat）→ 回调 onAssemble 把它正式落集合；
+   * - 返回本帧真正落集合的零件（若无则 null）。
    * @param nowMs 可选推进时刻；缺省用注入时钟 now()
    */
   tick(nowMs?: number): AnimTick {
@@ -176,7 +180,7 @@ export class AssemblyAnimator {
     let seatedPartId: string | null = null;
     let done = this.cursor >= this.stepsTotal;
 
-    // 播放推进：到点贴合下一件（登记飞行，让散落→贴合走缓动）
+    // 播放推进：到点把下一件登记进飞行表（起点 scatter，过渡走缓动）
     if (this._playing && !done) {
       const steps = this.getSteps();
       const step = steps[this.cursor];
@@ -185,7 +189,7 @@ export class AssemblyAnimator {
         const start = this.now();
         const dur = this.durationMs(step);
         if (pl) {
-          // 起点 = scatter（待料位），终点 = seat（贴合位）；若已在贴合位则秒到位
+          // 起点 = scatter（待料位），终点 = seat（贴合位）；动画完成时才落集合（onAssemble）
           this.flights.set(step.partId, {
             partId: step.partId,
             seq: step.seq,
@@ -193,9 +197,8 @@ export class AssemblyAnimator {
             to: pl.seat as Vec3,
             t0: start,
             t1: start + dur,
+            seated: false,
           });
-          this.onAssemble(step.partId); // 宿主把它正式落进 assembled 集合
-          seatedPartId = step.partId;
         }
         this.cursor += 1;
         // 下一件贴合时刻 = 本件过渡完成后再留一帧间隙
@@ -203,9 +206,15 @@ export class AssemblyAnimator {
       }
     }
 
-    // 推进/清理飞行表：过渡已结束的件从飞行表移除（此后由 S1 seat/scatter 判定接管）
+    // 推进/清理飞行表：过渡已结束的件 → 此刻回调 onAssemble 落集合（视觉已到位，无跳变），
+    // 然后从飞行表移除（此后由 S1 seat/scatter 判定接管停驻 seat）。
     for (const [partId, f] of [...this.flights]) {
       if (now >= f.t1) {
+        if (!f.seated) {
+          f.seated = true;
+          this.onAssemble(partId);
+          seatedPartId = partId;
+        }
         this.flights.delete(partId);
       }
     }
