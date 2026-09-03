@@ -292,6 +292,13 @@ export class NoopSimEngine implements SimEngine {
     this._initialized = false;
   }
 
+  /** S1 分态同步的 Noop 镜像：无真实网格，按状态机返回集合计数（视觉归属见 Babylon 后端） */
+  syncAssemblyState(): { seated: number; scattered: number } {
+    const seated = this.assembly.assembledPartIds.length;
+    const total = this.assembly.bom?.parts.length ?? 0;
+    return { seated, scattered: Math.max(0, total - seated) };
+  }
+
   health(): EngineHealth {
     return {
       ok: this._initialized,

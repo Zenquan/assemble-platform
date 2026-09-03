@@ -1,11 +1,13 @@
 /**
  * SimEngine 的 Babylon 真渲染实现（0.2.0 出口「浏览器渲染装配」）
  *
- * 职责范围（经 grill-me 确认，FEAT-20260903-002「最小真渲染：先关门禁」）：
+ * 职责范围（经 grill-me 确认，FEAT-20260903-002「最小真渲染：先关门禁」+ S1 分态渲染）：
  *   ✅ 本模块 = 真 WebGL 渲染后端：工作台视口挂 Babylon Engine+Scene；
  *      `loadLine` 真加载产线，把零件按确定性布局渲成 **OBB 盒体占位**，
  *      配网格 + 坐标轴 + ArcRotateCamera + 环境/平行光 + HUD(STEP/引擎实时)。
- *   ❌ 不做（归 0.3.x）：自动/手动/回放三模式真装配、实时干涉拖拽联动、
+ *   ✅ S1 · 分态渲染：零件被分为「已贴合 / 待装配」两态。已贴合停 seat（贴合位），
+ *      待装配停确定性散落待料位；由 `assembledPartIds` 驱动归属切换（`setAssemblyState`）。
+ *   ❌ 不做（归 0.3.x S2+）：自动/手动/回放动画过渡、实时干涉拖拽联动、
  *      BOM 树/节拍面板、真 glTF 资产管线。装配状态机与实时干涉仍复用
  *      noop.ts 里委托 clearance-core 纯算法的 NoopAssembler/NoopClearance。
  *
@@ -29,9 +31,10 @@ import {
   Vector3,
 } from '@babylonjs/core';
 
-import type { AssemblyMode, AssemblyPart, OBB, ProductionLine, Vec3 } from '@assemble/domain';
+import type { AssemblyBom, OBB, ProductionLine, Vec3 } from '@assemble/domain';
 
 import { NoopAssembler, NoopClearance, NoopSimEngine } from './noop.js';
+import { computeTwoStatePlacement } from './placement.js';
 import type {
   AssetManager,
   AssemblyController,
@@ -80,11 +83,20 @@ const CAMERA_PRESETS: Record<CameraViewId, CameraPose> = {
   free: { viewId: 'free', position: [150, 140, 150], target: [0, 10, 0], orthographic: false },
 };
 
-/** 单一事实：OBB 中心 + 半轴长 → Babylon 盒体（axis-aligned 布局内可直接用） */
-type RenderBox = { partId: string; center: Vec3; half: Vec3 };
+/**
+ * 单一事实：一个待渲染零件的几何（含贴合基准 seat + 半轴长），供 `computeTwoStatePlacement`
+ * 推导每个零件的「贴合位 / 散落待料位」。seat 即 `AssemblyPart.localPosition` 的合成等价。
+ */
+export interface RenderPart {
+  partId: string;
+  /** 贴合基准中心（已装配时停此位） */
+  center: Vec3;
+  /** 该件 OBB 半轴长（用于 CreateBox 尺寸与散落包围估计） */
+  half: Vec3;
+}
 
-/** 从一条 OBB 提取用于 CreateBox 的半轴（对齐世界系时 axes 为恒等轴，直接取 halfExtents） */
-function boxFromObb(partId: string, obb: OBB): RenderBox {
+/** 从一条 OBB 提取一个 RenderPart（对齐世界系时 axes 恒等轴，直接取 center/halfExtents） */
+function partFromObb(partId: string, obb: OBB): RenderPart {
   return { partId, center: obb.center, half: obb.halfExtents };
 }
 
@@ -119,9 +131,28 @@ class BabylonScene implements SceneManager {
   private _rendering = false;
   /** partId -> 盒体网格（按需隐藏/高亮预留） */
   private meshes = new Map<string, ReturnType<typeof MeshBuilder.CreateBox>>();
+  /** partId -> 已装配停驻位（seat / 贴合位，由 placement 推导） */
+  private seatPos = new Map<string, Vector3>();
+  /** partId -> 待装配散落待料位 */
+  private scatterPos = new Map<string, Vector3>();
+  /** 稳定零件序（决定散落环相位与 palette 着色） */
+  private _partOrder: string[] = [];
 
   get isMounted(): boolean {
     return this.engine !== null && this.scene !== null;
+  }
+
+  /** 当前已贴合/散落集合快照（供 HUD 与门面同步断言；纯读取） */
+  get stateSnapshot(): { seated: number; scattered: number } {
+    let seated = 0;
+    let scattered = 0;
+    const base = this.scatterPos.size;
+    for (const [id, mesh] of this.meshes) {
+      const seat = this.seatPos.get(id);
+      if (seat && mesh.position.equalsWithEpsilon(seat, 1e-4)) seated += 1;
+    }
+    scattered = Math.max(0, base - seated);
+    return { seated, scattered };
   }
 
   mount(container: HTMLElement): boolean {
@@ -294,10 +325,16 @@ class BabylonScene implements SceneManager {
     }
   }
 
-  /** 由 AssetManager.loadLine 注入网格（内部协作，不对外暴露 Babylon） */
-  renderBoxes(boxes: RenderBox[]): void {
+  /**
+   * 由 AssetManager.loadLine 注入一批零件（内部协作，不对外暴露 Babylon）。
+   * S1 分态：把零件按 `computeTwoStatePlacement` 推得 seat/scatter 两态，
+   * 建盒体默认全部停 seat（完整装配体视效，延续 0.2 观感），待 `setAssemblyState`
+   * 按 `assembledPartIds` 把"未贴合件"移到散落待料位。
+   */
+  renderParts(parts: RenderPart[]): void {
     const scene = this.scene;
     if (!scene) return;
+    const placements = computeTwoStatePlacement(parts);
     // 深色科技扁平调色：主用青/蓝系，个别强调件用琥珀/绿（对齐 tokens.css）
     const palette = [
       new Color3(0.20, 0.44, 0.92), // blue #1f6feb
@@ -306,16 +343,24 @@ class BabylonScene implements SceneManager {
       new Color3(0.42, 0.55, 0.70),
     ];
     this.meshes.clear();
-    boxes.forEach((b, i) => {
-      const [cx, cy, cz] = b.center;
-      const [hx, hy, hz] = b.half;
-      const name = `part-${b.partId}`;
+    this.seatPos.clear();
+    this.scatterPos.clear();
+    this._partOrder = parts.map((p) => p.partId);
+
+    placements.forEach((pl, i) => {
+      const part = parts[i] as RenderPart;
+      const [hx, hy, hz] = part.half;
+      const name = `part-${part.partId}`;
       const mesh = MeshBuilder.CreateBox(
         name,
         { width: hx * 2, height: hy * 2, depth: hz * 2 },
         scene,
       );
-      mesh.position = new Vector3(cx, cy, cz);
+      const seat = new Vector3(pl.seat[0], pl.seat[1], pl.seat[2]);
+      mesh.position = seat.clone(); // 默认贴合位（完整装配体）
+      this.seatPos.set(part.partId, seat);
+      this.scatterPos.set(part.partId, new Vector3(pl.scatter[0], pl.scatter[1], pl.scatter[2]));
+
       // 边框描边用 wireframe 叠加层提"工程件"观感
       const paletteColor = palette[i % palette.length] as Color3;
       const m = new StandardMaterial(`mat-${name}`, scene);
@@ -330,7 +375,7 @@ class BabylonScene implements SceneManager {
           height: hy * 2 + 0.06,
           depth: hz * 2 + 0.06,
         }, scene);
-        edge.position = new Vector3(cx, cy, cz);
+        edge.position = seat.clone();
         edge.visibility = 0;
         const em = new StandardMaterial(`emat-${name}`, scene);
         em.wireframe = true;
@@ -338,32 +383,89 @@ class BabylonScene implements SceneManager {
         em.emissiveColor = new Color3(0.05, 0.4, 0.45);
         edge.material = em;
       }
-      this.meshes.set(b.partId, mesh);
+      this.meshes.set(part.partId, mesh);
     });
-    // 计算零件群质心 + 包围半径 → 拉近相机把装配体居中
-    if (this.camera && boxes.length > 0) {
-      let cx = 0;
-      let cy = 0;
-      let cz = 0;
-      let maxR = 0;
-      for (const b of boxes) {
-        cx += b.center[0];
-        cy += b.center[1];
-        cz += b.center[2];
-      }
-      cx /= boxes.length;
-      cy /= boxes.length;
-      cz /= boxes.length;
-      for (const b of boxes) {
-        const dx = b.center[0] - cx;
-        const dy = b.center[1] - cy;
-        const dz = b.center[2] - cz;
-        const r = Math.hypot(dx, dy, dz) + Math.max(b.half[0], b.half[1], b.half[2]);
-        if (r > maxR) maxR = r;
-      }
-      this.camera.setTarget(new Vector3(cx, cy, cz));
-      this.camera.radius = Math.max(14, maxR * 2.6);
+    this._frameWholeAssembly(parts);
+  }
+
+  /** 把相机取景到装配体（质心 + 包围半径 → 半径取景公式，见 LRN-005） */
+  private _frameWholeAssembly(parts: RenderPart[]): void {
+    if (!this.camera || parts.length === 0) return;
+    let cx = 0;
+    let cy = 0;
+    let cz = 0;
+    for (const b of parts) {
+      cx += b.center[0];
+      cy += b.center[1];
+      cz += b.center[2];
     }
+    cx /= parts.length;
+    cy /= parts.length;
+    cz /= parts.length;
+    let maxR = 0;
+    for (const b of parts) {
+      const r =
+        Math.hypot(b.center[0] - cx, b.center[1] - cy, b.center[2] - cz) +
+        Math.max(b.half[0], b.half[1], b.half[2]);
+      if (r > maxR) maxR = r;
+    }
+    this.camera.setTarget(new Vector3(cx, cy, cz));
+    this.camera.radius = Math.max(14, maxR * 2.6);
+  }
+
+  /** S1 · 状态变化后取景：把 seat ∪ scatter 的并集质心与包围半径算进相机半径，
+   *  让"已贴合 + 散落并存"也能完整入框（不论状态如何切都自适配）。 */
+  private _frameForCurrentState(): void {
+    if (!this.camera) return;
+    let cx = 0, cy = 0, cz = 0, n = 0, maxR = 0;
+    // 并集采样：每个 mesh 当前实际位置即其应取景点
+    for (const [, mesh] of this.meshes) {
+      cx += mesh.position.x;
+      cy += mesh.position.y;
+      cz += mesh.position.z;
+      n += 1;
+    }
+    if (n === 0) return;
+    cx /= n; cy /= n; cz /= n;
+    for (const [id, mesh] of this.meshes) {
+      const seat = this.seatPos.get(id);
+      const half = Math.max(0.8, ...(seat ? [0.8] : []));
+      const dx = Math.abs(mesh.position.x - cx) + half;
+      const dy = Math.abs(mesh.position.y - cy) + half;
+      const dz = Math.abs(mesh.position.z - cz) + half;
+      const r = Math.hypot(dx, dy, dz);
+      if (r > maxR) maxR = r;
+    }
+    this.camera.setTarget(new Vector3(cx, cy, cz));
+    this.camera.radius = Math.max(14, maxR * 2.4);
+  }
+
+  /**
+   * S1 · 分态渲染核心：把零件按「已贴合 / 待装配」两态摆位。
+   * - `assembledIds` 中的零件 → 停 seat（贴合位）；
+   * - 其余零件 → 停 scatter（确定性散落待料位）。
+   * 归属由外部单一事实 `assembly.assembledPartIds` 驱动（本方法不私有持有集合）。
+   * 返回本次应用后的 {seated, scattered} 供调用方/门面断言与 HUD 展示。
+   */
+  setAssemblyState(assembledIds: ReadonlySet<string>): { seated: number; scattered: number } {
+    const scene = this.scene;
+    if (!scene) return this.stateSnapshot;
+    // 两态着色：已贴合亮青（确认），待装配琥珀（待料、显眼）。
+    const seatedTint = new Color3(0.18, 0.85, 0.9); // 青
+    const pendingTint = new Color3(0.95, 0.62, 0.18); // 琥珀（与青形成强对比）
+    for (const [id, mesh] of this.meshes) {
+      const seat = this.seatPos.get(id);
+      const scatter = this.scatterPos.get(id);
+      if (!seat || !scatter) continue;
+      const assembled = assembledIds.has(id);
+      mesh.position = assembled ? seat.clone() : scatter.clone();
+      const mat = mesh.material as StandardMaterial | null;
+      if (mat) mat.diffuseColor = assembled ? seatedTint.clone() : pendingTint.clone();
+    }
+    // 散落待料环比贴合位范围更大 —— 状态变化后重取景，让 seat+scatter 并存也完整入框
+    this._frameForCurrentState();
+    if (this.scene) this.scene.render();
+    return this.stateSnapshot;
   }
 
   get loadedPartCount(): number {
@@ -379,6 +481,8 @@ class BabylonAssets implements AssetManager {
   private sceneMgr: BabylonScene;
   private _loaded = 0;
   private _partIds: string[] = [];
+  /** 与合成盒体同源的装配 BOM（供门面把状态机 universe 对齐渲染），0.3.x 换真 BOM 端点后替换 */
+  private _syntheticBom: AssemblyBom | null = null;
 
   constructor(sceneMgr: BabylonScene) {
     this.sceneMgr = sceneMgr;
@@ -388,12 +492,18 @@ class BabylonAssets implements AssetManager {
     return this._loaded;
   }
 
+  /** 合成 BOM（S1：盒体与装配状态机共享同一零件集/步骤序） */
+  get synthesizedBom(): AssemblyBom | null {
+    return this._syntheticBom;
+  }
+
   async loadLine(line: ProductionLine, _bom?: unknown): Promise<readonly string[]> {
-    // 0.2.x：无真 glTF 资产；按产线类型与工位规模确定性合成一组零件 OBB，
-    // 与 interference-svc synthesizePartsForLine 同口径，渲成盒体占位。
-    const boxes = buildSyntheticBoxes(line);
-    this.sceneMgr.renderBoxes(boxes);
-    this._partIds = boxes.map((b) => b.partId);
+    // 0.2.x + S1：无真 glTF 资产；按产线类型与工位规模确定性合成一组零件 OBB，
+    // 与 interference-svc synthesizePartsForLine 同口径，渲成盒体占位（分态渲染的 seat 源）。
+    const parts = buildSyntheticBoxes(line);
+    this.sceneMgr.renderParts(parts);
+    this._partIds = parts.map((p) => p.partId);
+    this._syntheticBom = buildSyntheticBom(parts, line.id);
     this._loaded = this._partIds.length;
     return this._partIds;
   }
@@ -402,16 +512,17 @@ class BabylonAssets implements AssetManager {
     // 场景卸载由 SceneManager.unmount 统一清理网格；这里仅清登记
     this._loaded = 0;
     this._partIds = [];
+    this._syntheticBom = null;
   }
 }
 
 /** 依产线类型确定性合成零件盒体（OBB 占位渲染，口径对齐服务端几何目录） */
-function buildSyntheticBoxes(line: ProductionLine): RenderBox[] {
+function buildSyntheticBoxes(line: ProductionLine): RenderPart[] {
   // 用工位数驱动零件规模：默认约 3×工位数 件，最少 12 件、最多 60 件
   const stationCount = Math.max(1, line.stations.length);
   const total = Math.min(60, Math.max(12, stationCount * 3));
   const kind = line.kind;
-  const parts: RenderBox[] = [];
+  const parts: RenderPart[] = [];
   for (let i = 0; i < total; i++) {
     const col = i % 8;
     const row = Math.floor(i / 8);
@@ -438,6 +549,33 @@ function buildSyntheticBoxes(line: ProductionLine): RenderBox[] {
     });
   }
   return parts;
+}
+
+/**
+ * 从合成盒体零件派生一个与之**同源**的装配 BOM（S1 用）：
+ * 让装配状态机（`NoopAssembler`）与渲染网格共享同一零件集与步骤序，
+ * 使 `assembledPartIds` 能真正驱动分态摆位。每个合成盒 = 一个可动 `AssemblyPart`
+ * （seat = 盒体中心），工艺 = 按零件序一步一件（0.3.x 接入真 BOM 端点后替换本合成）。
+ */
+function buildSyntheticBom(parts: readonly RenderPart[], lineId: string): AssemblyBom {
+  const assemblyParts = parts.map((p, i) => ({
+    id: p.partId,
+    name: `部件 ${i + 1}`,
+    assetId: p.partId,
+    localPosition: p.center,
+    localRotation: { x: 0, y: 0, z: 0, w: 1 } as const,
+    isMovable: true,
+    // 首个零件当"基座"（非可动锚点，贴合后不再散落），其余可动待装
+    ...(i === 0 ? { isMovable: false } : {}),
+  }));
+  const steps = parts.map((p, i) => ({
+    seq: i,
+    partId: p.partId,
+    constraintIds: [],
+    durationSeconds: 1,
+    description: `装配第 ${i + 1} 件`,
+  }));
+  return { lineId, parts: assemblyParts, constraints: [], steps };
 }
 
 /* ------------------------------------------------------------------ */
@@ -469,7 +607,7 @@ class BabylonInteraction implements InteractionManager {
 export class BabylonSimEngine implements SimEngine {
   readonly backend = 'babylon' as const;
   readonly scene: BabylonScene;
-  readonly assets: AssetManager;
+  readonly assets: BabylonAssets;
   readonly interaction: InteractionManager;
   readonly assembly: AssemblyController;
   readonly clearance: ClearanceController;
@@ -496,6 +634,14 @@ export class BabylonSimEngine implements SimEngine {
       // 视口渲染循环由 Scene 管理；fps 通过帧计数近似（取整数）
       if (mounted && opts.line) {
         void this.assets.loadLine(opts.line).then(() => {
+          // S1：把与盒体同源的合成 BOM 装进状态机，让 assembledPartIds 可驱动分态；
+          // 默认保持"整机完整贴合"（0.2 观感延续），装配/撤销由 UI 经 syncAssemblyState 驱动。
+          const bom = this.assets.synthesizedBom;
+          if (bom) {
+            this.assembly.load(bom);
+            this.assembly.seekTo(bom.steps.length); // 全贴合起始
+            this.syncAssemblyState();
+          }
           if (this.scene.isMounted) this.scene.requestRender();
         });
       }
@@ -509,6 +655,17 @@ export class BabylonSimEngine implements SimEngine {
     this._activeLineId = null;
     this._initialized = false;
     this._line = null;
+  }
+
+  /**
+   * S1 · 门面驱动口：读取装配状态机的单一事实 `assembly.assembledPartIds`，
+   * 同步到 BabylonScene 的「已贴合/散落」两态摆位。
+   * 由 UI / S2-S3 动画驱动器在每次 `assembly.assemble/undo/seekTo` 后调用。
+   * 返回应用后的 {seated, scattered}，供 HUD/断言读取。
+   */
+  syncAssemblyState(): { seated: number; scattered: number } {
+    if (!this.scene.isMounted) return this.scene.stateSnapshot;
+    return this.scene.setAssemblyState(new Set(this.assembly.assembledPartIds));
   }
 
   health(): EngineHealth {

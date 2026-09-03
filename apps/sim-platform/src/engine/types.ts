@@ -195,6 +195,13 @@ export interface SimEngine {
   readonly interaction: InteractionManager;
   readonly assembly: AssemblyController;
   readonly clearance: ClearanceController;
+
+  /**
+   * S1 · 把渲染同步到装配状态机的 `assembledPartIds`：
+   * 已贴合件停 seat、其余停散落待料位。业务在每次 `assembly` 状态变更后调用。
+   * 返回 {seated, scattered}（Noop 无网格，返回当前占位计数语义的镜像）。
+   */
+  syncAssemblyState(): { seated: number; scattered: number };
 }
 
 /* 供外部引用的领域形状再导出（组件薄、只在门面口统一 type） */
