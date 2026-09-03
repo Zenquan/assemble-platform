@@ -119,4 +119,22 @@ M1 收尾 · 单条产线 Demo —— **后端服务层跑通 + 前端 SimEngine
 
 - **vite dev 仅绑 IPv6 `[::1]:5173`**（macOS + Node 22 下 `host:'localhost'` 默认行为）导致 Node fetch 走 `127.0.0.1:5173` 失败 → `vite.config.ts` `server.host` 显式设 `'127.0.0.1'`，浏览器与脚本统一访问 IPv4 loopback。验证：`pnpm dev` 后 vite 绑 `127.0.0.1:5173`，`/lines` 经代理返回 200（原 ECONNREFUSED 路径闭合）。
 
+### Added（0.3.0 切片推进）
+
+- **S1 分态渲染（FEAT-20260903-003 第一切片）**：
+  - `apps/sim-platform/src/engine/placement.ts`（新）：纯布局数学，按 `SeatInput[]` 推出每件的贴合位 seat（=`AssemblyPart.localPosition`）与确定性散落待料位 scatter（绕装配体质心的 Golden-angle 错峰环 + 抬离顶面）。无 Babylon / DOM 依赖，可被 vitest 无 WebGL 单测锁定。
+  - `engine/babylon.ts`：新增 `BabylonScene.setAssemblyState(assembledIds)` 与门面 `BabylonSimEngine.syncAssemblyState()`；`renderParts` 同时保留 seat/scatter 两态位置；状态切换时按 `assembledPartIds` 把已贴合件停 seat、待装配件移到 scatter，并按 seat ∪ scatter 并集重新取景；两态着色：已贴合青、待装配琥珀，强对比避免暗背景下被吞色。
+  - `engine/noop.ts`：Noop 端补 `syncAssemblyState()`，按 `assembledPartIds` 镜像返回 `{seated, scattered}`（视觉归属走 Babylon 后端）。
+  - `engine/types.ts`：门面接口加 `syncAssemblyState()`（业务在每次装配状态变更后驱动调用）。
+  - `views/WorkbenchView.vue`：Babylon 模式加最小 S1 驱动 HUD（已贴合/总数计数 + 装配下一件/撤销装配 按钮，禁用态联动），验证门面 `syncAssemblyState` 通路。
+  - `engine/test/placement.test.ts`（新，7 例）：placement 确定性 / seat 一致 / scatter 分离 / 空输入 / 待料环悬空 / `selectActivePoses` 与 `assembledPartIds` 一致 / 撤销回到 scatter。
+  - `engine/test/engine.test.ts`：新增 1 例「门面 syncAssemblyState 与装配状态机一致」。
+
+### Verified（0.3.0 S1）
+
+- vue-tsc 0 错；sim-platform vitest **23/23 全绿**（含新增 8 例）；其余 packages（clearance-core 7、sim-utils 3）回归绿。
+- 浏览器 E2E 视觉冒烟（一次性编排：起 assembly-svc + interference-svc + vite dev → playwright chromium `--use-gl=swiftshader` → 操作 → 截图归档）：
+  - 初始整机贴合 `已贴合 12 / 12`（截图 `docs/s1-render-all-seated.png`）—— 全部青盒、装配下一件禁用、撤销装配可用。
+  - 连续撤销 3 次 `已贴合 9 / 12`（截图 `docs/s1-render-split.png`）—— 9 件停 seat（青）、3 件停 scatter 环（琥珀、悬空绕装配体），取景按 seat ∪ scatter 并集重中。验收：渲染集合与 `assembly.assembledPartIds` 严格一致（dom `.s1count` 同步按钮禁用态），两态视觉区分明显。
+
 <!-- 占位：本版已完成 0.2.0 出口闭合与文档归档；后续 0.2.x 增量（一键起脚本等）将由此段起。 -->

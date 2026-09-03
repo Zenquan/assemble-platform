@@ -246,3 +246,57 @@ vite dev 在 macOS + Node 22 下，`server.host` 不显式设时默认绑 **IPv6
 - Source: error
 - Related Files: apps/sim-platform/vite.config.ts
 - Tags: vite, ipv6, fetch, macos, node22
+
+---
+
+## [LRN-20260903-007] best_practice
+
+**Logged**: 2026-09-03T12:20:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: sim-platform / engine
+
+### Summary
+S1 分态渲染的关键解耦：**纯布局数学（`placement.ts`）与渲染层（`babylon.ts`）分离**，并把"已贴合/待装配"的归属切换收敛到门面单一方法 `SimEngine.syncAssemblyState()`，业务只在状态机变更后调一次即可。
+
+### Details
+- `placement.computeTwoStatePlacement(seatInputs)` 纯函数：seat = 输入 center（恒等），scatter = 装配体质心 + Golden-angle 错峰环（半径 = r + max(4, r*0.5)；抬升 = top + max(3, r*0.35)）。确定性、同输入恒同输出 → 可被 vitest 无 WebGL 单测锁定。
+- `selectActivePoses(placements, assembledIds)`：纯选择映射（`assembled? seat:scatter`），独立可测，正是 S1 验收"渲染集合与 assembledPartIds 一致"的逻辑判据。
+- 渲染层 `BabylonScene.setAssemblyState(assled)`：读 `assembledPartIds` 一遍 → 每件 mesh.position = (assembled?seat:scatter) + diffuseColor 切两态色。返回 `{seated, scattered}` 让 HUD / 测试断言。
+- 门面 `SimEngine.syncAssemblyState()`：Babylon 真后端走 `scene.setAssemblyState(new Set(assembly.assembledPartIds))`；Noop 后端镜像返回 `{seated: assembledPartIds.length, scattered: total - seated}`。业务（S1 驱动 HUD、S2-S3 动画）只在每次 `assembly.assemble/undo/seekTo` 后调一次。
+- 装配状态机 universe 与渲染零件 universe 对齐：`BabylonAssets.loadLine` 同步生成 `buildSyntheticBom(parts, lineId)`（一零件一步、工艺序对齐盒体序），`init` 中 `assembly.load(bom)` + `seekTo(steps.length)` 让默认开机呈"整机完整贴合"（0.2 观感延续），装配/撤销揭示散落态。
+
+### Suggested Action
+后续 0.3.x 切片（S2-S4）直接消费本套设施：`assembly.*` 后调 `engine.syncAssemblyState()`；动画过渡在 `setAssemblyState` 内部插值即可（不外溢到业务）。颜色策略沿用"已贴合青、待装配琥珀"双态强对比，避免暗背景下低饱和色被吞色（见 LRN-008）。
+
+### Metadata
+- Source: insight
+- Related Files: apps/sim-platform/src/engine/placement.ts, apps/sim-platform/src/engine/babylon.ts, apps/sim-platform/src/engine/noop.ts, apps/sim-platform/src/engine/types.ts, apps/sim-platform/src/engine/test/placement.test.ts
+- Tags: s1, distinct-render, babylon, placement, facade, sync
+
+---
+
+## [LRN-20260903-008] correction
+
+**Logged**: 2026-09-03T12:25:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: sim-platform / engine (babylon)
+
+### Summary
+S1 初版 scatter 用低饱和灰蓝 `(0.34,0.42,0.55)` 在深色背景下几乎不可见（截图里只剩 9 件已贴合，3 件散落视觉缺失）→ 改为与"已贴合青"高对比的琥珀 `(0.95,0.62,0.18)` 后两态视觉立刻分明。另：状态变化时若相机只按"贴合簇"取景，散落环会跑出画面，需重取景按 `seat ∪ scatter` 并集包围半径做相机半径。
+
+### Details
+- 现象 1：首版 pendingTint = `(0.34,0.42,0.55)`，比背景 `#0a1420` 略亮但对比不足，散落件 3 件全部在 E2E 截图里"消失"，而 dom `.s1count` 显示 `已贴合 9 / 12` 表明机制是对的、视觉丢了。修复：pendingTint 改琥珀 `(0.95,0.62,0.18)` 与 seatedTint `(0.18,0.85,0.9)` 形成强冷暖对比，截图 `docs/s1-render-split.png` 两态立刻分明。
+- 现象 2：初版 `setAssemblyState` 不重取景（注释"保持现取景避免每帧回中"），结果散落待料环在装配体半径之外，原相机半径装不下，截图里散落件全在画面外。修复：新增 `_frameForCurrentState()`，按每件 mesh.position（已 seat 或 scatter）取并集质心与最大 `hypot(Δx+h, Δy+h, Δz+h)`，半径 = `max(14, maxR*2.4)`。`renderParts` 初次也用同公式（合并到 `_frameWholeAssembly`）。
+- 现象 3：Babylon `Vector3.copy()` 不存在（类型定义里没有），编辑器补全会把 `.copy()` 当成可点方法，但 `vue-tsc` 会报 `Property 'copy' does not exist on type 'Vector3'`。Babylon 真实可调方法为 `.clone()`，统一替换后类型检查通过。**规则**：Babylon 向量/颜色克隆一律 `.clone()`，不要 `.copy()`（不像 Three.js）。
+
+### Suggested Action
+- 任何"待料 / 散落 / 暂存"类视觉元素：在深色背景（`#0a1420` / `clearColor(0.035,0.06,0.1,1)`）下必须用高饱和对比色（琥珀 / 暖橙 / 紫红），不要低饱和灰蓝。
+- 任何"状态切换会改布局半径"的可视化：状态变化后必须按"当前所有元素位置"的并集重取景，不要假定"保持现取景"还装得下。
+- Babylon 链式 clone 用 `.clone()`，不是 `.copy()`；`Color3` 同理。
+
+### Metadata
+- Source: insight
+- Related Files: apps/sim-platform/src/engine/babylon.ts, docs/s1-render-{all-seated,split}.png
+- Tags: s1, distinct-render, visibility, framing, babylon-vect3-clone

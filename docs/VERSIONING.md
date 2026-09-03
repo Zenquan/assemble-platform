@@ -30,7 +30,7 @@
 
 > 当前仓库版本基线：根 `package.json` 记为 `0.2.0`，对应上方 `0.2.x` 行（`v0.2.0` tag 已发）。版本号统一由**根包**号代表「平台整体版本」，各 workspace 包随发布同步主版本（早期用同一主版号更易管理）。
 >
-> 进度注记：**0.2.0 出口两门禁均已闭合** —— 「浏览器渲染装配」由 `engine/babylon.ts`（FEAT-20260903-002）达成；「本地一键起前端+服务」由 `scripts/dev.mjs`（`pnpm dev`）达成（见 CHANGELOG Unreleased）。剩余 0.3.x 的自动/手动/回放真装配、实时干涉协同等见表格下「0.2.x → 0.3.x」指引。
+> 进度注记：**0.2.0 出口两门禁均已闭合** —— 「浏览器渲染装配」由 `engine/babylon.ts`（FEAT-20260903-002）达成；「本地一键起前端+服务」由 `scripts/dev.mjs`（`pnpm dev`）达成（见 CHANGELOG Unreleased）。**0.3.0 已开切**（FEAT-20260903-003，4 切片）：S1 分态渲染 ✅；S2 装配过程动画、S3 交互拾取与实时干涉拖拽、S4 BOM 树 + 节拍面板 待推进。详见「0.2.x → 0.3.x」切片表。
 
 ## 2. 各阶段（0.x）的工程内落地指引
 
@@ -42,6 +42,17 @@
 ### 0.2.x → 0.3.x —— 功能期
 - 前端只经 `SimEngine` 门面访问 Babylon，**业务代码禁止直引 `@babylonjs/core`**（架构红线，见 `ARCHITECTURE.md`）。
 - 后端服务之间不直接 `import`，走网关 HTTP / 消息；跨服务数据结构用 `@assemble/domain` 校验。
+
+#### 0.3.0 切片（Slicing，FEAT-20260903-003）
+
+| 切片 | 主题 | 状态 | 落点 | 验收 |
+|------|------|------|------|------|
+| **S1** | 分态渲染：已贴合/待装配两态摆位，由 `assembledPartIds` 驱动 | ✅ done（v0.3.0 S1） | `engine/placement.ts`（纯布局）+ `engine/babylon.ts` `setAssemblyState` + 门面 `syncAssemblyState()` | 切换后渲染集合与 `assembledPartIds` 一致；`docs/s1-render-{all-seated,split}.png` 归档 |
+| S2 | 装配过程动画（auto/replay 散落→贴合，seek/undo 跳变） | pending | 任务 #36 | 截图 + 无 WebGL 单测走 Noop 状态断言 |
+| S3 | 交互拾取与实时干涉拖拽（manual） | pending | 任务 #37 | E2E 拖拽与已装配件干涉时变色/无法贴合 |
+| S4 | BOM 树 + 节拍面板（HUD） | pending | 任务 #38 | UI 展示 + 与装配态联动 |
+
+> Non-Goals（0.3.0 不做，留 0.4+）：真 glTF 资产管线、装配约束几何解算/贴合吸附、多用户协同装配会话。
 
 ### 0.5.x → 1.0.0 —— 冻结期
 - 评审任何「破坏性变更」：需在版本计划里显式登记，通常积压到下一主版本。
