@@ -36,12 +36,14 @@ Blender -b --python scripts/gltf-gen/gen_device.py
 
 ## 3. 量包围盒验证尺寸（导入前必做）
 
-用纯 node 解析 GLB 的 accessor `min/max`（不依赖渲染引擎，最快）：
+已合并的旧 GLB 可用纯 node 解析 accessor `min/max`（不依赖渲染引擎，最快）：
 
 ```js
 // 读 GLB header → JSON chunk → 遍历 mesh.primitives 的 POSITION accessor 的 min/max
 // 见 scripts/gltf-gen/measure_glb_pure.mjs
 ```
+
+分层设备包含父子节点变换，不能直接合并 accessor 局部范围；统一运行 `scripts/gltf-gen/measure_glb.mjs`，由纯 Node 解析 GLB 场景树并应用节点世界矩阵后量测。
 
 **为什么重要**：glTF 单位是米，但不同设备的实际物理尺寸差异大（本工程 conveyor 8m 长、vision-module 2.5m 高、box-pack 仅 1.04m）。**导入后布局时，必须知道每个 glb 的真实尺寸和"原点在底面还是几何中心"**，否则设备会半埋地下或悬空。
 
@@ -101,6 +103,8 @@ for (const mesh of container.meshes) {
 ## 7. 相关文件索引
 
 - `scripts/gltf-gen/gen_device.py` —— Blender 资产生成器（支持 feeder/gantry-arm/conveyor/box-pack/vision-module 批量）
+- `scripts/gltf-gen/gen_freshcut.py` —— 净菜加工线七设备的分层 hard-surface 生成器
+- `docs/FRESHCUT_ASSET_SPEC.md` —— 净菜资产尺寸、节点、材质与性能验收标准
 - `scripts/gltf-gen/measure_glb_pure.mjs` —— 纯 node 解析 GLB accessor 算包围盒
 - `services/assembly-svc/src/repositories/index.ts` —— 由流水线工位生成 BOM
 - `services/model-svc/src/app.ts` —— 真实 GLB 下载接口与资产白名单
