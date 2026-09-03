@@ -30,6 +30,9 @@ const stepText = ref('');
 const loadError = ref('');
 const assembledCount = ref(0);
 const totalParts = ref(0);
+const animProgress = ref(0); // 动画进度 seq（S2 播放态）
+const isAnimPlaying = ref(false);
+const animTotal = ref(0);
 
 let unmounted = false;
 
@@ -86,10 +89,55 @@ function undoLast() {
   }
 }
 
+/** S2 · 复位到全散落（从头演示） */
+function resetForPlay() {
+  const eng = engine.value;
+  if (!eng) return;
+  const s = eng.resetForPlay();
+  assembledCount.value = s.seated;
+  refreshAnimState();
+}
+
+/** S2 · 播放装配动画（auto/replay 散落→贴合逐件平滑滑入） */
+function playAuto() {
+  const eng = engine.value;
+  if (!eng) return;
+  if (eng.assembly.mode === 'manual') eng.assembly.switchMode('auto');
+  eng.playAssembly();
+  refreshAnimState();
+}
+
+/** S2 · 暂停播放 */
+function pauseAuto() {
+  const eng = engine.value;
+  if (!eng) return;
+  eng.pauseAssembly();
+  refreshAnimState();
+}
+
+/** 刷新动画播放态（巴比仑后端由 render loop 内部推进，UI 轮询展示进度） */
+function refreshAnimState() {
+  const eng = engine.value;
+  if (!eng) return;
+  const s = eng.animState;
+  animProgress.value = s.cursorSeq;
+  animTotal.value = s.totalSteps;
+  isAnimPlaying.value = s.playing;
+}
+
 onBeforeUnmount(() => {
   unmounted = true;
+  window.clearInterval(pollTimer);
   engine.value?.dispose();
   engine.value = null;
+});
+
+let pollTimer = 0;
+onMounted(() => {
+  // 轮询刷新动画进度（播放由引擎 render loop 驱动，Vue 无帧 hook）
+  pollTimer = window.setInterval(() => {
+    if (!unmounted) refreshAnimState();
+  }, 120);
 });
 </script>
 
@@ -99,27 +147,32 @@ onBeforeUnmount(() => {
       <header class="wb-head">
         <div>
           <div class="wb-name">产线 {{ line?.name ?? lineId }} · 装配工作台</div>
-          <div class="wb-sub">SIMULATION WORKBENCH · 0.3 分态渲染(S1)</div>
+          <div class="wb-sub">SIMULATION WORKBENCH · 0.3 过程动画(S2)</div>
         </div>
         <span class="engline" :class="backend"><i class="dot"></i>{{ engineState }}</span>
       </header>
 
       <div class="wb-body">
-        <aside class="left">零件 / BOM · 3D 视口（分态渲染）<br><span class="muted">S1：已贴合(青)/待装配(灰蓝散落)</span></aside>
+        <aside class="left">零件 / BOM · 3D 视口（S2 过程动画）<br><span class="muted">已贴合(青)/待装配(琥珀散落)；播放时散落件平滑滑入贴合位</span></aside>
         <div ref="canvasHost" class="viewport">
           <div v-if="loadError" class="vhint err">{{ loadError }}</div>
           <div v-else-if="backend === 'noop'" class="vhint">{{ stepText }}</div>
           <template v-else>
-            <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（S1 分态）</div>
+            <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（S2 过程动画）</div>
             <div class="hud-bottom">{{ stepText }}</div>
             <div class="s1bar">
               <span class="s1count">已贴合 <b>{{ assembledCount }}</b> / {{ totalParts }}</span>
+              <span v-if="animTotal > 0" class="s1prog">动画 {{ animProgress }}/{{ animTotal }}{{ isAnimPlaying ? ' · 播放中' : '' }}</span>
               <button class="s1btn" :disabled="assembledCount >= totalParts" @click="assembleNext">装配下一件</button>
               <button class="s1btn" :disabled="assembledCount <= 0" @click="undoLast">撤销装配</button>
+              <span class="s1sep"></span>
+              <button class="s1btn act" @click="resetForPlay" :disabled="assembledCount <= 0">从头演示</button>
+              <button class="s1btn act" :disabled="isAnimPlaying || assembledCount >= totalParts" @click="playAuto">▶ 播放</button>
+              <button class="s1btn" :disabled="!isAnimPlaying" @click="pauseAuto">⏸ 暂停</button>
             </div>
           </template>
         </div>
-        <aside class="right">S1 · 分态渲染<br><span class="muted">装配下一件→零件从散落待料环移入贴合位；撤销→放回待料环。S2 起在此接动画</span></aside>
+        <aside class="right">S2 · 装配过程动画<br><span class="muted">从头演示→播放：零件沿步骤序从散落位平滑滑入贴合位；暂停停当前件；撤销/复位仍瞬时跳变</span></aside>
       </div>
     </div>
   </div>
@@ -249,8 +302,10 @@ onBeforeUnmount(() => {
   top: 46px;
   left: 12px;
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  max-width: 96%;
   z-index: 3;
   font-size: 11px;
 }
@@ -264,6 +319,30 @@ onBeforeUnmount(() => {
 }
 .s1count b {
   color: #5eead4;
+}
+.s1prog {
+  color: #fbbf24;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 5px 10px;
+  background: rgba(10, 20, 32, 0.6);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 6px;
+}
+.s1sep {
+  width: 1px;
+  height: 20px;
+  background: var(--line-3);
+  margin: 0 2px;
+}
+.s1btn.act {
+  border-color: rgba(34, 211, 238, 0.45);
+}
+.s1btn.act:hover:not(:disabled) {
+  background: rgba(34, 211, 238, 0.12);
+}
+.s1btn.act:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .s1btn {
   appearance: none;
