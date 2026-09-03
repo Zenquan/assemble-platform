@@ -1,9 +1,19 @@
 import type { ModelAssetVersion, CompressionStrategy } from '@assemble/domain';
 import { err, ok } from '@assemble/http';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createModelRepos, type ModelRepos } from './repositories/index.js';
 
 const CDN_BASE = process.env['ASSEMBLE_CDN_BASE'] ?? 'https://cdn.assemble.example/gltf';
+
+/** 设备 glb 资产目录（后端单一事实源；前端经 /model/assets/:id/glb 下载，不落 public） */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const GLB_DIR = process.env['ASSEMBLE_GLB_DIR'] ?? path.resolve(__dirname, '../assets/glb');
+
+/** 本服务可下发的设备资产 id（与前端 DEVICE_IDS 一致） */
+const DEVICE_GLB_IDS = ['conveyor', 'feeder', 'vision-module', 'gantry-arm', 'box-pack'] as const;
 
 interface PresignBody {
   assetId: string;
@@ -38,7 +48,36 @@ export function buildApp(deps?: { repos?: ModelRepos }): FastifyInstance {
     if (!asset) {
       return reply.status(404).send(err('NOT_FOUND', `资产 ${req.params.assetId} 不存在`));
     }
-    return ok(asset);
+    return ok({ ...asset, downloadUrl: `/model/glb/${asset.assetId}.glb` });
+  });
+
+  // 设备 glb 二进制直下：前端布景层从后端取真实设备模型，而非 public 静态副本。
+  // 独立前缀 /model/glb/:file（file 形如 `conveyor.glb`）避开与 /model/assets/:assetId 的
+  // 路径参数冲突；保留 `.glb` 后缀使 Babylon SceneLoader 能据 URL 扩展名识别 glTF 加载器。
+  // 返回 application/octet-stream + 附件名。
+  app.get<{ Params: { file: string } }>('/model/glb/:file', async (req, reply) => {
+    const file = req.params.file;
+    // 仅接受 `*.glb`，解析出资产 id 做白名单校验，防路径穿越
+    if (!file.endsWith('.glb')) {
+      return reply.status(404).send(err('NOT_FOUND', `仅支持 .glb 资产下载`));
+    }
+    const assetId = file.slice(0, -'.glb'.length);
+    if (!(DEVICE_GLB_IDS as readonly string[]).includes(assetId)) {
+      return reply.status(404).send(err('NOT_FOUND', `设备资产 ${assetId} 不存在`));
+    }
+    const filePath = path.join(GLB_DIR, file);
+    try {
+      const buf = await fs.readFile(filePath);
+      reply
+        .header('Content-Type', 'application/octet-stream')
+        .header('Content-Length', String(buf.length))
+        .header('Content-Disposition', `attachment; filename="${file}"`)
+        .header('Cache-Control', 'public, max-age=3600')
+        .send(buf);
+      return reply;
+    } catch {
+      return reply.status(404).send(err('NOT_FOUND', `设备资产文件 ${file} 缺失`));
+    }
   });
 
   // 模型下载 CDN 签名直链：重型 glTF 不走网关代理（架构红线）
