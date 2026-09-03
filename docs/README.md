@@ -11,6 +11,7 @@
 | `GIT_GUIDE.md` | Git 分支模型 / Conventional Commits / PR / tag 发版规则 | 每次提交/开分支前对照 |
 | `TESTING.md` | 测试策略：分层/类型/性能基准门禁/提交门禁 | 动手改核心算法前必读 |
 | `sim-platform-design.md` | sim-platform 关键页（产线选择/装配工作台）**深色科技扁平**设计稿说明 + 配色令牌（高保真稿见 `apps/sim-platform/design/sim-platform-tech-mockup.html`） | 0.2.x 落地前端组件前必读 |
+| `FRESHCUT_ASSET_SPEC.md` | 果蔬/净菜加工线设备清单、尺寸、坐标、节点、材质与浏览器预算 | 新增或重做净菜设备 GLB 前必读 |
 
 > 根目录 `CHANGELOG.md` 记录版本变更历史（Keep a Changelog，发布流程详见 `VERSIONING.md`）。
 

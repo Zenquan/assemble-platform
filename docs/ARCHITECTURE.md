@@ -133,6 +133,7 @@ AssemblyBom(parts + steps.stationId)
 3. Babylon 可保留不可见的拾取/碰撞代理，但代理只承载交互和 OBB，不得作为视觉模型显示。
 4. BOM 加载失败或 GLB 缺失必须进入可观察错误态，不得悄悄回退到合成模型。
 5. BOM 树使用 `AssemblyStep.stationId`，不得按步骤序号 round-robin 猜测工位。
+6. `ProductionLine.baseAssetId` 只用于确有贯穿基座的产线；净菜等设备自带输送段的工艺线省略该字段，避免重复可见输送带。
 
 ## 6. 工程约定与目录规约
 
