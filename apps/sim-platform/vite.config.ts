@@ -3,8 +3,8 @@
  *
  * - `@/*` 内部 alias → src
  * - workspace 依赖 alias → packages/<pkg>/src（测试/Dev 免 build，与根 vitest.config 口径一致）
- * - dev 代理：客户端同源调用 `/lines` → assembly-svc(7101)、`/interference` → interference-svc(7102)
- *   （后端走降级内存仓储即可本地跑通产线选择页；生产由网关同源汇聚）
+ * - dev 代理：客户端同源调用 `/lines` → assembly-svc(7101)、`/interference` → interference-svc(7102)、
+ *   `/takt` → takt-svc(7104)（后端走降级内存仓储即可本地跑通产线选择页；生产由网关同源汇聚）
  */
 import { fileURLToPath, URL } from 'node:url';
 import vue from '@vitejs/plugin-vue';
@@ -26,6 +26,7 @@ export default defineConfig({
     proxy: {
       '/lines': { target: 'http://127.0.0.1:7101', changeOrigin: true },
       '/interference': { target: 'http://127.0.0.1:7102', changeOrigin: true },
+      '/takt': { target: 'http://127.0.0.1:7104', changeOrigin: true },
     },
   },
   test: {
