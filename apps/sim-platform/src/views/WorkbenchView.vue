@@ -16,8 +16,13 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 
 import { fetchLine } from '@/api/lines';
+import { fetchTaktSimulation } from '@/api/takt';
 import type { ProductionLine } from '@assemble/domain';
 import { createSimEngine, type SimEngine } from '@/engine';
+import { deriveBomTreeState, stationsOf, type BomTreeModel } from '@/engine/bomtree';
+import { deriveTaktPanel, recommendTargetPerHour, type TaktPanelModel } from '@/engine/taktpanel';
+import BomTreePanel from '@/components/BomTreePanel.vue';
+import TaktPanel from '@/components/TaktPanel.vue';
 
 const route = useRoute();
 const lineId = String(route.params.lineId ?? '');
@@ -35,6 +40,12 @@ const isAnimPlaying = ref(false);
 const animTotal = ref(0);
 // S3 · 手动拖拽实时状态（拖拽中零件 / 干涉拦截 / 可落位提示）
 const dragText = ref('');
+// S4 · BOM 树 + 节拍面板
+const bomTree = ref<BomTreeModel | null>(null);
+const selectedPartId = ref('');
+const taktModel = ref<TaktPanelModel | null>(null);
+const taktState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle');
+const taktError = ref('');
 
 let unmounted = false;
 
@@ -56,14 +67,17 @@ onMounted(async () => {
   engineState.value = health.ok
     ? (eng.backend === 'babylon' ? '引擎实时' : '引擎占位(Noop)')
     : '引擎离线';
+  // S4 · 节拍面板：与渲染后端无关，产线就绪即可拉节拍仿真
+  void loadTakt();
   if (eng.backend === 'babylon') {
     // 真 WebGL：引擎内 loadLine 已把零件盒体建入场景
     stepText.value = `已加载 ${health.totalParts} 个零件 · 手动拖拽下一件装配（滚轮缩放 / 左键旋转 / 按住琥珀件拖拽）`;
-    // S1：等引擎完成 BOM 装载与首帧后刷新分态计数
+    // S1：等引擎完成 BOM 装载与首帧后刷新分态计数 + S4 BOM 树
     window.setTimeout(() => {
       const s = eng.syncAssemblyState();
       assembledCount.value = s.seated;
       totalParts.value = s.seated + s.scattered;
+      refreshBomTree();
     }, 120);
   } else {
     stepText.value = '当前环境无 WebGL，已回落 Noop 占位；请在浏览器中打开以启用 3D 渲染';
@@ -147,6 +161,7 @@ onMounted(() => {
   pollTimer = window.setInterval(() => {
     if (!unmounted) refreshAnimState();
     if (!unmounted) refreshDragState();
+    if (!unmounted) refreshBomTree();
   }, 120);
 });
 
@@ -167,6 +182,61 @@ function refreshDragState() {
     dragText.value = `拖拽 ${d.partId} · 移至目标位`;
   }
 }
+
+/** S4 · 从引擎装配态 + 产线工位推导 BOM 树视图（轮询只读，不写场景） */
+function refreshBomTree() {
+  const eng = engine.value;
+  const ln = line.value;
+  const bom = eng?.assembly.bom;
+  if (!eng || !ln || !bom) {
+    bomTree.value = null;
+    return;
+  }
+  const model = deriveBomTreeState(bom, stationsOf(ln), {
+    assembledIds: eng.assembly.assembledPartIds,
+    currentStepSeq: eng.assembly.currentStepSeq,
+    selectedPartId: selectedPartId.value || undefined,
+  });
+  bomTree.value = model;
+  totalParts.value = bom.parts.length || totalParts.value;
+}
+
+/** S4 · 点选 BOM 树某零件 → 联动视口（frameToPart 聚焦该件包围盒）并记录选中 */
+function selectPart(partId: string) {
+  selectedPartId.value = partId;
+  const eng = engine.value;
+  if (!eng) return;
+  eng.scene.frameToPart([partId]);
+  refreshBomTree();
+}
+
+/** S4 · 拉取节拍仿真（一次）：目标产能取瓶颈工位小时速率，开动率 0.85 供演示可读 */
+async function loadTakt() {
+  const ln = line.value;
+  if (!ln || ln.stations.length === 0) {
+    taktState.value = 'idle';
+    return;
+  }
+  taktState.value = 'loading';
+  try {
+    const target = recommendTargetPerHour(ln.stations);
+    const res = await fetchTaktSimulation({
+      lineId: ln.id,
+      stations: ln.stations,
+      targetUnitsPerHour: target,
+      availability: 0.85,
+    });
+    taktModel.value = deriveTaktPanel(
+      { lineId: ln.id, targetUnitsPerHour: target, availability: 0.85 },
+      res,
+      ln.stations,
+    );
+    taktState.value = 'ready';
+  } catch (e) {
+    taktState.value = 'error';
+    taktError.value = e instanceof Error ? e.message : '节拍服务不可用';
+  }
+}
 </script>
 
 <template>
@@ -175,18 +245,20 @@ function refreshDragState() {
       <header class="wb-head">
         <div>
           <div class="wb-name">产线 {{ line?.name ?? lineId }} · 装配工作台</div>
-          <div class="wb-sub">SIMULATION WORKBENCH · 0.3 手动拖拽装配(S3)</div>
+          <div class="wb-sub">SIMULATION WORKBENCH · 0.3 BOM树+节拍面板(S4)</div>
         </div>
         <span class="engline" :class="backend"><i class="dot"></i>{{ engineState }}</span>
       </header>
 
       <div class="wb-body">
-        <aside class="left">零件 / BOM · 3D 视口（S3 手动装配）<br><span class="muted">manual：散落待装(琥珀)的"下一件"可在视口内拖拽；贴合位已装配件相叠时干涉→变红拦截、无法落位</span></aside>
+        <aside class="left aside-col">
+          <BomTreePanel :model="bomTree" @select="selectPart" />
+        </aside>
         <div ref="canvasHost" class="viewport">
           <div v-if="loadError" class="vhint err">{{ loadError }}</div>
           <div v-else-if="backend === 'noop'" class="vhint">{{ stepText }}</div>
           <template v-else>
-            <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（S3 手动拖拽）</div>
+            <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（BOM 树联动 · 当前步骤高亮）</div>
             <div class="hud-bottom">{{ stepText }}</div>
             <div class="s1bar">
               <span class="s1count">已贴合 <b>{{ assembledCount }}</b> / {{ totalParts }}</span>
@@ -201,7 +273,9 @@ function refreshDragState() {
             </div>
           </template>
         </div>
-        <aside class="right">S3 · 手动装配拖拽<br><span class="muted">先"撤销/从头"让零件散落 → 按住琥珀色下一件在视口拖向贴合位：贴近且无干涉可贴合（青色）；与已装配件相叠变红、拦截不落位</span></aside>
+        <aside class="right aside-col">
+          <TaktPanel :model="taktModel" :state="taktState" :error="taktError" />
+        </aside>
       </div>
     </div>
   </div>
@@ -272,11 +346,13 @@ function refreshDragState() {
 .left,
 .right {
   background: var(--bg-2);
-  font-size: 11px;
   color: var(--faint);
-  padding: 14px;
-  letter-spacing: 0.04em;
-  line-height: 1.8;
+  padding: 12px;
+  min-height: 0;
+}
+.aside-col {
+  overflow-y: auto;
+  align-self: stretch;
 }
 .left .muted,
 .right .muted {
