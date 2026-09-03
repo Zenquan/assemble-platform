@@ -14,7 +14,7 @@
  */
 
 import { ClearanceDetector, type ClearancePart } from '@assemble/clearance-core';
-import type { AssemblyMode, InterferenceHit, OBB } from '@assemble/domain';
+import type { AssemblyBom, AssemblyMode, InterferenceHit, OBB, ProductionLine } from '@assemble/domain';
 
 import type {
   AssemblyController,
@@ -221,9 +221,9 @@ class NoopAssets implements AssetManager {
   get loadedPartCount(): number {
     return this._loaded;
   }
-  async loadLine(_line: unknown, bom: { parts: readonly unknown[] }): Promise<readonly string[]> {
-    // 占位：仅登记数量，不真拉 glTF / 建网格
-    const ids = bom.parts.map((p) => (p as { id: string }).id);
+  async loadLine(_line: ProductionLine, bom?: AssemblyBom): Promise<readonly string[]> {
+    // 占位：仅登记数量，不真拉 glTF / 建网格；无 BOM 时按 0 计（真盒体渲染走 babylon 后端）
+    const ids = (bom?.parts ?? []).map((p) => p.id);
     this._loaded = ids.length;
     return ids;
   }

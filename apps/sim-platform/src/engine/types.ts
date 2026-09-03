@@ -105,10 +105,14 @@ export interface SceneManager {
   setRendering(on: boolean): void;
 }
 
-/** 模型资产加载（对应 ModelSvc 的前端消费侧；本轮 noop 不真拉 glTF） */
+/** 模型资产加载（对应 ModelSvc 的前端消费侧；0.2 无真 glTF，按 line 合成 OBB 占位盒） */
 export interface AssetManager {
-  /** 加载一条产线的装配 BOM（构建零件树/几何占位）；成功返回零件 id 列表 */
-  loadLine(line: ProductionLine, bom: AssemblyBom): Promise<readonly string[]>;
+  /**
+   * 加载一条产线的装配资产（构建零件几何），成功返回零件 id 列表。
+   * bom 可选：0.2.x 无 BOM 端点时仅凭 line 合成确定性 OBB 占位盒；
+   * 0.3.x 接入真 BOM/glTF 管线后传 bom 渲染真实几何。
+   */
+  loadLine(line: ProductionLine, bom?: AssemblyBom): Promise<readonly string[]>;
   /** 卸载当前产线资源，释放内存 */
   dispose(): void;
   /** 当前已加载零件总数 */
