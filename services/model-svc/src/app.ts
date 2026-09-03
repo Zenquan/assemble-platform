@@ -1,4 +1,8 @@
-import type { ModelAssetVersion, CompressionStrategy } from '@assemble/domain';
+import {
+  MODEL_ASSET_IDS,
+  type CompressionStrategy,
+  type ModelAssetVersion,
+} from '@assemble/domain';
 import { err, ok } from '@assemble/http';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { promises as fs } from 'node:fs';
@@ -11,9 +15,6 @@ const CDN_BASE = process.env['ASSEMBLE_CDN_BASE'] ?? 'https://cdn.assemble.examp
 /** 设备 glb 资产目录（后端单一事实源；前端经 /model/assets/:id/glb 下载，不落 public） */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const GLB_DIR = process.env['ASSEMBLE_GLB_DIR'] ?? path.resolve(__dirname, '../assets/glb');
-
-/** 本服务可下发的设备资产 id（与前端 DEVICE_IDS 一致） */
-const DEVICE_GLB_IDS = ['conveyor', 'feeder', 'vision-module', 'gantry-arm', 'box-pack'] as const;
 
 interface PresignBody {
   assetId: string;
@@ -62,7 +63,7 @@ export function buildApp(deps?: { repos?: ModelRepos }): FastifyInstance {
       return reply.status(404).send(err('NOT_FOUND', `仅支持 .glb 资产下载`));
     }
     const assetId = file.slice(0, -'.glb'.length);
-    if (!(DEVICE_GLB_IDS as readonly string[]).includes(assetId)) {
+    if (!(MODEL_ASSET_IDS as readonly string[]).includes(assetId)) {
       return reply.status(404).send(err('NOT_FOUND', `设备资产 ${assetId} 不存在`));
     }
     const filePath = path.join(GLB_DIR, file);

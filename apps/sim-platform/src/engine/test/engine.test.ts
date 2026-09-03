@@ -33,25 +33,25 @@ const part = (partId: string, center: [number, number, number], half = 5) => ({
 
 /** 一个最小可用的装配 BOM（3 步工艺） */
 function makeBom(): AssemblyBom {
-  const parts = [
-    { id: 'base', name: '机座', assetId: 'a1', localPosition: [0, 0, 0] as const, localRotation: { x: 0, y: 0, z: 0, w: 1 }, isMovable: false },
-    { id: 'shaft_1', name: '轴一', assetId: 'a2', localPosition: [0, 20, 0] as const, localRotation: { x: 0, y: 0, z: 0, w: 1 }, isMovable: true, parentId: 'base' },
-    { id: 'shaft_2', name: '轴二', assetId: 'a3', localPosition: [0, 40, 0] as const, localRotation: { x: 0, y: 0, z: 0, w: 1 }, isMovable: true, parentId: 'base' },
+  const parts: AssemblyBom['parts'] = [
+    { id: 'base', name: '机座', assetId: 'conveyor', localPosition: [0, 0, 0] as const, localRotation: { x: 0, y: 0, z: 0, w: 1 }, isMovable: false },
+    { id: 'shaft_1', name: '轴一', assetId: 'feeder', localPosition: [0, 20, 0] as const, localRotation: { x: 0, y: 0, z: 0, w: 1 }, isMovable: true, parentId: 'base' },
+    { id: 'shaft_2', name: '轴二', assetId: 'box-pack', localPosition: [0, 40, 0] as const, localRotation: { x: 0, y: 0, z: 0, w: 1 }, isMovable: true, parentId: 'base' },
   ];
   return {
     lineId: 'L1',
     parts,
     constraints: [],
     steps: [
-      { seq: 0, partId: 'base', constraintIds: [], durationSeconds: 1, description: '固定机座' },
-      { seq: 1, partId: 'shaft_1', constraintIds: [], durationSeconds: 1, description: '装入轴一' },
-      { seq: 2, partId: 'shaft_2', constraintIds: [], durationSeconds: 1, description: '装入轴二' },
+      { seq: 0, partId: 'base', stationId: 'station-1', constraintIds: [], durationSeconds: 1, description: '固定机座' },
+      { seq: 1, partId: 'shaft_1', stationId: 'station-1', constraintIds: [], durationSeconds: 1, description: '装入轴一' },
+      { seq: 2, partId: 'shaft_2', stationId: 'station-1', constraintIds: [], durationSeconds: 1, description: '装入轴二' },
     ],
   };
 }
 
 describe('createSimEngine 门面工厂', () => {
-  it('无 WebGL（jsdom/CI）回落 noop 后端，init 后可读取健康快照', () => {
+  it('无 WebGL（jsdom/CI）回落 noop 后端，init 后可读取健康快照', async () => {
     // 注：浏览器 E2E 下 WebGL 可用时工厂会返回 BabylonSimEngine（backend='babylon'），
     //     本单元测试在 jsdom 下运行，无 WebGL，自动回落 Noop。
     const engine = createSimEngine();
@@ -64,7 +64,7 @@ describe('createSimEngine 门面工厂', () => {
       id: 'L1', name: '一号线', kind: 'sorting', stations: [], enabled: true,
       modelVersion: 'v1', createdAt: '', updatedAt: '',
     };
-    const after = engine.init({ line });
+    const after = await engine.init({ line, bom: makeBom() });
     expect(after.ok).toBe(true);
     expect(after.backend).toBe('noop');
     expect(after.activeLineId).toBe('L1');
@@ -77,9 +77,9 @@ describe('createSimEngine 门面工厂', () => {
     expect(BabylonSimEngine.name).toBe('BabylonSimEngine');
   });
 
-  it('dispose 后健康态回到未初始化', () => {
+  it('dispose 后健康态回到未初始化', async () => {
     const engine = createSimEngine();
-    engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' } });
+    await engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' }, bom: makeBom() });
     engine.dispose();
     expect(engine.health().ok).toBe(false);
     expect(engine.health().activeLineId).toBeNull();
@@ -172,10 +172,11 @@ describe('NoopAssembler 三模式装配状态机', () => {
 });
 
 describe('门面 syncAssemblyState（S1 分态同步口径）', () => {
-  it('Noop 后端：seated/scattered 与装配状态机 assembledPartIds 一致', () => {
+  it('Noop 后端：seated/scattered 与装配状态机 assembledPartIds 一致', async () => {
     const engine = createSimEngine(); // node 环境回落 noop
-    engine.init({
+    await engine.init({
       line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' },
+      bom: makeBom(),
     });
     engine.assembly.load(makeBom());
     // 起始全待装配 → 0 seated
@@ -193,22 +194,22 @@ describe('门面 syncAssemblyState（S1 分态同步口径）', () => {
 });
 
 describe('门面装配动画（S2 auto/replay 播放态契约）', () => {
-  it('resetForPlay 复位到全待装配（seated=0）', () => {
+  it('resetForPlay 保留不可动基座，其余零件回待装配', async () => {
     const engine = createSimEngine(); // noop
-    engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' } });
+    await engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' }, bom: makeBom() });
     engine.assembly.load(makeBom());
     engine.assembly.seekTo(3); // 先到全贴合
     expect(engine.syncAssemblyState()).toEqual({ seated: 3, scattered: 0 });
     const r = engine.resetForPlay();
-    expect(r).toEqual({ seated: 0, scattered: 3 });
-    expect(engine.animState.cursorSeq).toBe(0);
+    expect(r).toEqual({ seated: 1, scattered: 2 });
+    expect(engine.animState.cursorSeq).toBe(1);
     expect(engine.animState.done).toBe(false);
     engine.dispose();
   });
 
-  it('manual 模式 playAssembly 被拒；切 auto 后可播放且播放态如实', () => {
+  it('manual 模式 playAssembly 被拒；切 auto 后可播放且播放态如实', async () => {
     const engine = createSimEngine(); // noop
-    engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' } });
+    await engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' }, bom: makeBom() });
     engine.assembly.load(makeBom());
     // manual 下不可自动播放
     expect(engine.assembly.mode).toBe('manual');
@@ -223,16 +224,16 @@ describe('门面装配动画（S2 auto/replay 播放态契约）', () => {
 });
 
 describe('门面手动拖拽（S3 manual drag · Noop 镜像 contract）', () => {
-  function loadedManual() {
+  async function loadedManual() {
     const engine = createSimEngine(); // noop
-    engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' } });
+    await engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' }, bom: makeBom() });
     engine.assembly.load(makeBom());
     engine.assembly.assemble('base'); // step0 → step1，下一待装 = shaft_1
     return engine;
   }
 
-  it('beginDrag 仅允许"下一步待装"散落件；装配中件/非下一序被拒', () => {
-    const engine = loadedManual();
+  it('beginDrag 仅允许"下一步待装"散落件；装配中件/非下一序被拒', async () => {
+    const engine = await loadedManual();
     expect(engine.assembly.currentStepSeq).toBe(1);
     // 下一步 shaft_1 可拖
     expect(engine.interaction.beginDrag('shaft_1')).toBe(true);
@@ -248,8 +249,8 @@ describe('门面手动拖拽（S3 manual drag · Noop 镜像 contract）', () =>
     engine.dispose();
   });
 
-  it('endDrag 对下一步件返回 ok（镜像贴合）；dragState 收束', () => {
-    const engine = loadedManual();
+  it('endDrag 对下一步件返回 ok（镜像贴合）；dragState 收束', async () => {
+    const engine = await loadedManual();
     engine.interaction.beginDrag('shaft_1');
     expect(engine.interaction.dragState.reason).toBe('dragging');
     const r = engine.interaction.endDrag('shaft_1');
@@ -259,9 +260,9 @@ describe('门面手动拖拽（S3 manual drag · Noop 镜像 contract）', () =>
     engine.dispose();
   });
 
-  it('dragState 缺省为 idle（未拖拽）', () => {
+  it('dragState 缺省为 idle（未拖拽）', async () => {
     const engine = createSimEngine();
-    engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' } });
+    await engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' }, bom: makeBom() });
     expect(engine.interaction.dragState.reason).toBe('idle');
     expect(engine.interaction.dragState.dragging).toBe(false);
     engine.dispose();

@@ -3,6 +3,21 @@
 > 版本策略见 `docs/VERSIONING.md`。变更归类源自 Conventional Commits（`docs/GIT_GUIDE.md`）。本文件放工程根。
 > 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，按 `## [x.y.z] - yyyy-MM-dd` 分组。
 
+## [Unreleased]
+
+### Added
+
+- assembly-svc 按流水线返回真实 BOM，工作台按 BOM 从 model-svc 加载 GLB。
+- 全仓生产代码与工程脚本硬编码审计及治理标准。
+
+### Changed
+
+- BOM 树按后端 `stationId` 分组并随流水线动态切换。
+
+### Removed
+
+- 前端合成 BOM、按产线类型生成的可见盒体装配模型及 GLB 失败盒体降级。
+
 ## [0.1.0] - 2026-09-01
 
 Monorepo 技术验证（M1）基线：领域契约 + 干涉算法 + 数学库 + 降级仓储 + 五服务骨架代码。

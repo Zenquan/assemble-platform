@@ -27,6 +27,7 @@ function mkSteps(partIds: string[], durations: number[]): AssemblyStep[] {
   return partIds.map((partId, i) => ({
     seq: i,
     partId,
+    stationId: `station-${i}`,
     constraintIds: [],
     durationSeconds: durations[i] ?? 1,
     description: `装配第 ${i + 1} 件`,

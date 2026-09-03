@@ -1,13 +1,23 @@
 // 量测每件 glb 的物理包围盒尺寸（不依赖浏览器/WebGL，用 Babylon 空引擎读几何）
 import * as BABYLON from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
+import { readdir } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const files = ['conveyor', 'feeder', 'vision-module', 'gantry-arm', 'box-pack'];
 // 单一事实源：后端 model-svc 资产目录（与 gen-all.sh / app.ts 的 GLB_DIR 对齐）
-const dir = '/Users/zenquan/ZCodeProject/MyResume/assemble-platform/services/model-svc/assets/glb/';
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const dir = process.env['ASSEMBLE_GLB_DIR'] ?? resolve(root, 'services/model-svc/assets/glb');
+const requestedFiles = process.argv.slice(2);
+const files = requestedFiles.length > 0
+  ? requestedFiles
+  : (await readdir(dir))
+      .filter((file) => file.endsWith('.glb'))
+      .map((file) => file.slice(0, -'.glb'.length))
+      .sort();
 
 for (const f of files) {
-  const url = `${dir}${f}.glb`;
+  const url = resolve(dir, `${f}.glb`);
   const engine = new BABYLON.NullEngine();
   const scene = new BABYLON.Scene(engine);
   const container = await BABYLON.SceneLoader.LoadAssetContainerAsync('', url, scene);

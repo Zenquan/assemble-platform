@@ -45,13 +45,13 @@ pnpm test              # packages 单测全量
 pnpm typecheck         # 全量类型检查
 pnpm --filter @assemble/clearance-core test
 
-# 一键起 dev（默认精简：assembly-svc:7101 + interference-svc:7102 + vite:5173）
+# 一键起 dev（默认精简：assembly + interference + model + takt + vite）
 pnpm dev               # = node scripts/dev.mjs（自包含 Node 编排，不依赖 pnpm）
 pnpm dev:all           # = node scripts/dev.mjs --all（全量：5 个后端 + vite）
 #  Ctrl+C 会统一清理所有子进程；已占用的端口自动复用不重复起。
 # 先决条件：后端 dist 已构建（脚本在缺产物时报错引导 build）。
-# 精简模式 vite 代理实际只连 7101+7102；--all 额外起 model:7103/takt:7104/auth:7105
-# 供后端自治/全链路联调（前端暂不直连这三个）。
+# 精简模式包含工作台依赖的 assembly:7101/model:7103，并保留 interference:7102/takt:7104；
+# --all 额外起 auth:7105。主机与端口可通过 ASSEMBLE_DEV_HOST、*_SVC_PORT、VITE_DEV_PORT 覆盖。
 
 # ── 后端服务启动/构建速查 ──────────────────────────────
 # 5 个后端服务，各自独立（cwd 进服务目录）：

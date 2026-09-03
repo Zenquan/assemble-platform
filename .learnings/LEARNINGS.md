@@ -527,3 +527,29 @@ S4 E2E 启动 `chromium.launch({headless:true})` 直接报「Executable doesn't 
 - Related Files: AGENTS.md, docs/README.md, .agent/skills/assemble-platform-workflow/SKILL.md, .agent/skills/senior-fullstack-engineer/SKILL.md
 - Tags: docs, standards, skills, source-of-truth
 - Pattern-Key: workflow.docs_remain_canonical
+
+---
+
+## [LRN-20260904-017] best_practice
+
+**Logged**: 2026-09-04T00:25:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: frontend / backend / docs
+
+### Summary
+多产线 Web3D 的可见模型、装配步骤和 BOM 树必须共享后端 BOM；透明代理只承载交互，不能演化成第二套视觉数据源。
+
+### Details
+旧实现同时维护前端合成盒子、设备布景 layout 与装配状态机 BOM，产线切换后容易出现画面、步骤和树不一致。本轮收敛为 assembly-svc 生成 `AssemblyBom`，model-svc 下发 GLB，Babylon 按真实 bbox 建不可见代理并同步位姿，BOM 树直接消费 `AssemblyStep.stationId`。GLB 失败直接报错，不做可见盒子降级。
+
+### Suggested Action
+后续扩展资产或产线时只修改 domain/assembly-svc/model-svc 事实源；Web3D 侧保持通用加载和交互逻辑，并用至少两条流水线做视觉对照验收。
+
+### Metadata
+- Source: best_practice
+- Related Files: docs/ARCHITECTURE.md, apps/sim-platform/src/engine/babylon.ts, services/assembly-svc/src/repositories/index.ts
+- Tags: glb, bom, station-id, invisible-proxy, single-source
+- Pattern-Key: web3d.backend_bom_single_source
+
+---

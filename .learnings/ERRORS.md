@@ -133,3 +133,290 @@ BVH 干涉检测初版三类 bug：索引复用栈溢出、OBB-SAT 分离轴误�
 - Related Files: AGENTS.md, docs/README.md
 
 ---
+
+## [ERR-20260903-006] git_branch_show_current_unsupported
+
+**Logged**: 2026-09-03T20:10:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: config
+
+### Summary
+当前环境的 Git 版本不支持 `git branch --show-current`，分支检查命令失败。
+
+### Error
+```
+error: unknown option `show-current'
+```
+
+### Context
+- 命令：`git branch --show-current`
+- 当前仓库可用 `git symbolic-ref --short HEAD` 获取同等信息。
+
+### Suggested Fix
+兼容旧版 Git 的脚本与排查命令优先使用 `git symbolic-ref --short HEAD`。
+
+### Metadata
+- Reproducible: yes
+- Related Files: .git
+
+---
+
+## [ERR-20260904-007] node_missing_from_path
+
+**Logged**: 2026-09-04T00:05:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: config
+
+### Summary
+当前 Codex shell 的 `PATH` 中没有 `node`，按文档执行类型检查时报 `env: node: No such file or directory`。
+
+### Error
+```
+env: node: No such file or directory
+```
+
+### Context
+- 命令：`env -u NODE_OPTIONS node ./node_modules/.bin/vue-tsc --noEmit ...`
+- 可用解释器：Workbuddy Node 22 的绝对路径。
+- pnpm 即使由绝对 Node 启动，执行 workspace script 时仍会从 `PATH` 查找 `node`；只替换入口不够。
+
+### Suggested Fix
+环境未暴露 `node` 时，把 Workbuddy Node 的 `bin` 目录前置到 `PATH`，确保 pnpm 派生脚本也能找到解释器；后续可在开发 shell 初始化中补齐 PATH。
+
+### Metadata
+- Reproducible: yes
+- Related Files: AGENTS.md
+- Recurrence-Count: 3
+
+---
+
+## [ERR-20260904-008] parallel_contract_typecheck_stale_dist
+
+**Logged**: 2026-09-04T00:10:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+domain 与依赖它的 services 并行类型检查时，服务读取旧声明产物，误报新增契约字段不存在。
+
+### Error
+```
+Object literal may only specify known properties, and 'stationId' does not exist in type 'AssemblyStep'.
+Module '"@assemble/domain"' has no exported member 'MODEL_ASSET_IDS'.
+```
+
+### Context
+- `packages/domain`、`assembly-svc`、`model-svc` 同时启动类型检查。
+- domain 完成后依赖服务需要重新读取已更新的构建声明。
+
+### Suggested Fix
+跨包契约变更按 `domain -> services/apps` 顺序构建或类型检查；无依赖的同层包再并行。
+
+### Metadata
+- Reproducible: yes
+- Related Files: packages/domain, services/assembly-svc, services/model-svc
+
+---
+
+## [ERR-20260904-009] model_service_missing_tests
+
+**Logged**: 2026-09-04T00:22:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tests
+
+### Summary
+model-svc 定义了 `vitest run`，但仓库没有测试文件，服务测试命令固定以状态码 1 退出。
+
+### Error
+```
+No test files found, exiting with code 1
+```
+
+### Context
+- 本轮新增共享 GLB 白名单后运行 `@assemble/model-svc test` 发现。
+- 已补真实 GLB 下载与未知资产 404 测试。
+
+### Suggested Fix
+新增服务骨架时至少提供健康检查或核心路由 smoke test，避免 test script 处于不可运行状态。
+
+### Metadata
+- Reproducible: yes
+- Related Files: services/model-svc/test/app.test.ts
+
+---
+
+## [ERR-20260904-010] dev_port_probe_false_occupied
+
+**Logged**: 2026-09-04T00:30:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: config
+
+### Summary
+开发编排脚本把任意端口 bind 错误都解释成 `EADDRINUSE`，出现 5173 无服务却提示“端口已占用并复用”。
+
+### Error
+```
+[vite] 端口 5173 已被占用，跳过启动
+curl: Failed to connect to 127.0.0.1 port 5173
+```
+
+### Context
+- `isPortOpen` 的 `error` 监听没有检查 `error.code`。
+- 已改为只在 `EADDRINUSE` 时返回占用，其它 bind 错误直接抛出。
+
+### Suggested Fix
+端口探测必须区分地址占用与权限/网络错误，禁止用任意失败推断已有可复用服务。
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/dev.mjs
+
+---
+
+## [ERR-20260904-011] vite_binary_relative_to_app
+
+**Logged**: 2026-09-04T00:32:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: config
+
+### Summary
+从 `apps/sim-platform` 启动 Vite 时误用 `./node_modules/.bin/vite`，但本仓 hoisted 依赖位于根目录。
+
+### Error
+```
+Cannot find module 'apps/sim-platform/node_modules/.bin/vite'
+```
+
+### Context
+- `.npmrc` 使用 hoisted node linker，Vite 二进制实际在仓库根 `node_modules/.bin/`。
+
+### Suggested Fix
+从应用目录手动启动时使用 `../../node_modules/.bin/vite`，或统一走根 `scripts/dev.mjs`。
+
+### Metadata
+- Reproducible: yes
+- Related Files: .npmrc, scripts/dev.mjs
+
+---
+
+## [ERR-20260904-012] workbench_route_watch_stray_closure
+
+**Logged**: 2026-09-04T00:36:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: frontend
+
+### Summary
+把工作台挂载逻辑提取为可重入加载函数时，旧 `onMounted` 的闭合 `});` 残留，导致 Vue 类型检查语法失败。
+
+### Error
+```
+WorkbenchView.vue: Declaration or statement expected.
+```
+
+### Context
+- 路由动态重载重构后由 vue-tsc 立即发现。
+- 删除残留闭合符后恢复。
+
+### Suggested Fix
+提取较大生命周期回调后立即检查新函数与旧回调的成对括号，再运行局部类型检查。
+
+### Metadata
+- Reproducible: no
+- Related Files: apps/sim-platform/src/views/WorkbenchView.vue
+
+---
+
+## [ERR-20260904-013] tracked_hardcode_scan_globs
+
+**Logged**: 2026-09-04T01:05:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+硬编码审计命令把可能为空的 shell 通配符和不存在的根级配置文件传给 `rg`，连续两次非零退出。
+
+### Error
+```
+zsh: no matches found: *.js
+rg: vite.config.ts: No such file or directory
+```
+
+### Context
+- 首次扫描依赖 zsh 展开根目录 `*.js`，仓库无匹配文件时命令在 `rg` 启动前失败。
+- 第二次把不存在的根级 `vite.config.ts` 作为搜索路径传入。
+
+### Suggested Fix
+审计已跟踪代码时使用 `git grep` 限定 Git 索引文件；使用 `rg` 时只传确定存在的目录并用 `--glob` 排除诊断产物。
+
+### Metadata
+- Reproducible: yes
+- Related Files: docs/HARDCODE_AUDIT.md
+
+---
+
+## [ERR-20260904-014] nested_pnpm_command_missing
+
+**Logged**: 2026-09-04T01:12:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: config
+
+### Summary
+通过绝对 `pnpm.cjs` 启动根脚本后，脚本内部的递归 `pnpm` 命令仍因当前环境没有 pnpm 可执行包装器而失败。
+
+### Error
+```
+sh: pnpm: command not found
+ELIFECYCLE Test failed
+```
+
+### Context
+- 根 `test`、`test:services`、`typecheck` 脚本会再次调用 `pnpm -r`。
+- Workbuddy 只提供可由 Node 运行的 `pnpm.cjs`，当前 shell 没有名为 `pnpm` 的入口。
+
+### Suggested Fix
+本环境直接用绝对 Node + `pnpm.cjs -r --filter ... run <script>` 执行等价递归门禁；普通开发环境继续使用标准 `pnpm`。
+
+### Metadata
+- Reproducible: yes
+- Related Files: package.json, AGENTS.md
+- See Also: ERR-20260904-007
+
+---
+
+## [ERR-20260904-015] recursive_tests_without_files
+
+**Logged**: 2026-09-04T01:18:00+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: tests
+
+### Summary
+根级 packages/services 递归测试会进入没有测试文件的 workspace，`vitest run` 因空测试集返回状态码 1，导致全仓门禁无法跑通。
+
+### Error
+```
+No test files found, exiting with code 1
+ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL
+```
+
+### Context
+- `packages/domain` 与部分 service 目前没有测试文件，但都声明了 `test: vitest run`。
+- 本次相关的 sim-platform、assembly-svc、model-svc 仍可独立运行测试。
+
+### Suggested Fix
+后续统一选择为无测试 workspace 补 smoke test，或明确允许空测试集；在策略确定前不要让根 `pnpm test` 被空 workspace 固定阻断。
+
+### Metadata
+- Reproducible: yes
+- Related Files: package.json, packages/domain/package.json, services/auth-svc/package.json
+
+---

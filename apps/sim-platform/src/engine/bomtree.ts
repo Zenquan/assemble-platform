@@ -5,13 +5,12 @@
  * 值类型，产出 UI 无关的可测模型 —— 让 BOM 树的分组与状态标注可被 vitest 锁定。
  *
  * 语义（对齐 FEAT-20260903-003 S4 / 任务 #38）：
- *   侧栏「BOM 树」= 以产线 stations 为一级节点，把 BOM 零件（经其装配步骤）确定性
- *   归到所属工位下；每行标注该零件在装配工艺序里的状态：
+ *   侧栏「BOM 树」= 以产线 stations 为一级节点，按 AssemblyStep.stationId 把 BOM
+ *   零件归到后端声明的所属工位；每行标注该零件在装配工艺序里的状态：
  *     - done     已完成贴合（stepSeq < currentStepSeq 或已入 assembledPartIds）
  *     - current  当前待装配步骤（stepSeq === currentStepSeq，工艺"下一步"）
  *     - pending  尚未轮到
- *   归组策略默认 round-robin（步骤 seq i → stations[i % 工位数]），均匀把零件摊到
- *   各工位，形成「工位 → 零件」两层树。选中零件供联动视口（frameToPart）。
+ *   不存在的工位或零件视为无效步骤并跳过，不做位置猜测。选中零件供联动视口。
  */
 
 import type { AssemblyBom, ProductionLine, Station } from '@assemble/domain';
@@ -57,29 +56,25 @@ export interface BomTreeModel {
   selectedPartId?: string;
 }
 
-/** 归组策略：round-robin（步骤按工位数轮转摊派） */
-export type BomGroupStrategy = 'round-robin';
-
 /**
  * 把 BOM 的装配步骤确定性归到各工位。
  * 纯函数：同一 (bom, stations) 恒同输出（可快照单测）。
  *
- * 遍历 steps（工艺顺序），step seq i → stations[i % stationCount]；
- * 每个 step 对应的零件从 bom.parts 解析，落到该工位的行。
+ * 遍历 steps（工艺顺序），以 step.stationId 解析明确工位；
+ * 每个 step 对应的零件从 bom.parts 解析，落到后端声明的工位。
  * 返回按工位原始顺序、工位内按 stepSeq 升序的结构。
  */
 export function groupStepsByStation(
   bom: AssemblyBom,
   stations: readonly Station[],
-  _strategy: BomGroupStrategy = 'round-robin',
 ): Array<{ station: Station; step: (typeof bom.steps)[number] }> {
-  const n = Math.max(1, stations.length);
   const byPart = new Map(bom.parts.map((p) => [p.id, p] as const));
+  const byStation = new Map(stations.map((station) => [station.id, station] as const));
   const out: Array<{ station: Station; step: (typeof bom.steps)[number] }> = [];
-  bom.steps.forEach((step, i) => {
-    // 跳过 BOM 里零件缺失的孤儿步骤（防御；合成 BOM 不会发生）
+  bom.steps.forEach((step) => {
     if (!byPart.has(step.partId)) return;
-    const station = stations[i % n]!;
+    const station = byStation.get(step.stationId);
+    if (!station) return;
     out.push({ station, step });
   });
   // 组内按工艺 seq 稳定升序（本就按 seq 遍历，此处显式保证排序语义可测）

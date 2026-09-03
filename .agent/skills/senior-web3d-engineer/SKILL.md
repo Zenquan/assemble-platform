@@ -139,10 +139,10 @@ description: 资深 Web3D 前端工程师技能，融合计算机图形学原理
 ## 9. 本工程（assemble-platform）专用红线
 
 1. **SimEngine 门面**：业务代码只经 `@/engine` 窄接口访问渲染，`engine/babylon.ts` 是唯一 import `@babylonjs/core` 的边界，`engine/noop.ts` 是无 WebGL 替身。**别在业务组件里直引 Babylon。**
-2. **外观 shell 与碰撞 OBB 解耦**：工位设备只做布景层，`isPickable=false`、无 `partId` 标记，不参与装配/干涉。
-3. **取景要包含布景**：设备加载完成后把「零件 ∪ 设备」联合包围盒重新 frame（见 `_frameWithDevices`）。
-4. **PBR 金属兜底**：设备 glb 原始 PBR 金属材质在无 IBL 时全黑 → 用 `StandardMaterial` 降级（`_shellMaterialForDevice`）保证可见。
-5. **改动后必测**：跑 `verify-workbench-devices.mjs`（vite dev + playwright 截图）视觉确认，不是只看 badge 数字。
+2. **BOM 与资产事实源**：assembly-svc 返回 `AssemblyBom`，model-svc 返回 `assetId.glb`；前端不得按 `line.kind` 合成 BOM 或复制 GLB 到 `public/`。
+3. **可见模型与代理解耦**：GLB 是唯一可见模型；拾取/OBB 可用 `visibility=0` 的 box 代理，但代理与 GLB 根节点必须同步位姿。
+4. **PBR 金属兜底**：无 IBL 时保留 GLB 原材质并把 PBR `metallic` 降为 0、`roughness` 提到可见阈值，避免真实模型全黑。
+5. **改动后必测**：启动 assembly/model/vite，用浏览器检查至少两条流水线；确认真实 GLB 非空、BOM 树随 `stationId` 改变、页面不存在可见盒子。
 
 ---
 

@@ -55,46 +55,44 @@ Blender -b --python scripts/gltf-gen/gen_device.py
 | gantry-arm | 1.60 × 1.97 × 0.60 | 0.99 | 桁架机械臂 |
 | box-pack | 1.04 × 0.74 × 0.98 | 0.37 | 末端装箱 |
 
-**底面贴地补偿**：glb 原点≈几何中心时，要让底面落 y=0，需把 `position.y` 设为 `-centerY`。
+**底面锚点**：运行时不依赖写死的 `centerY`。`BabylonScene.renderParts` 读取真实世界包围盒，自动把 GLB 底面中心对齐 `AssemblyPart.localPosition`。
 
 ---
 
-## 4. 复制到 public 目录（vite 静态服务）
+## 4. 后端资产下发
 
-**坑 · glb 必须放进 vite `publicDir`**：vite 默认 `publicDir: 'public'`，静态资源放 `apps/sim-platform/public/assets/glb/`，运行时 URL 是 `/assets/glb/<name>.glb`（从根 serve，**不带** `public/` 前缀）。
+GLB 单一事实源位于 `services/model-svc/assets/glb/`，model-svc 通过 `/model/glb/:assetId.glb` 返回二进制。前端只保存 `assetId`，由 Vite 或生产网关做同源代理。
 
-**本工程踩过的坑**：glb 文件生成在 `scripts/gltf-gen/assets/`，但忘了复制到 `public/assets/glb/`，导致运行时 404、`LoadAssetContainerAsync` 静默失败、设备始终不加载。**生成后记得 `cp scripts/gltf-gen/assets/*.glb apps/sim-platform/public/assets/glb/`。**
+**禁止**把 GLB 复制到 `apps/sim-platform/public/`，也禁止加载失败后生成可见盒子。失败必须由 `SimEngine.init` 拒绝并进入工作台错误态。
 
 ---
 
-## 5. Babylon 接线（loadDevices 模式）
+## 5. Babylon 接线（BOM 模式）
 
 ```ts
 import '@babylonjs/loaders/glTF'; // 必须有，否则 "Unable to find a plugin to load .glb files"
 
 const container = await SceneLoader.LoadAssetContainerAsync('', assetUrl, scene);
-const child = new TransformNode(`device-${id}`, scene);
-child.parent = devicesRoot;
+const visualRoot = new TransformNode(`visual-${part.id}`, scene);
 for (const mesh of container.meshes) {
-  mesh.parent = child;
-  mesh.isPickable = false; // 布景不参与拾取
-  if (mesh.getTotalVertices() === 0) continue; // 跳过空 __root__
-  mesh.material = shellMat; // PBR 金属 → StandardMaterial 降级保证可见
+  mesh.isPickable = false;
+  if (mesh.getTotalVertices() === 0) continue;
 }
-child.position = ...; child.rotation = ...; child.scaling = ...;
+// 用真实 bbox 对齐 BOM 底面锚点，再建 visibility=0 的交互代理。
 ```
 
 **坑 · `SceneLoader` 类型歧义**：`@babylonjs/core` 同时导出顶层函数 `ImportMeshAsync` 和同名 `class SceneLoader` 的 static 方法，TS 优先解析 static 版本。**统一用 `SceneLoader.LoadAssetContainerAsync('', url, scene)`（rootUrl 传空串，完整 URL 给 sceneFilename）避免歧义。**
 
-**坑 · PBR 金属无 IBL 全黑**：设备 glb 原始材质是 `PBRMaterial`（metal_dark/metal_mid/aluminum），无环境贴图时接近全黑。用 `StandardMaterial` 覆写 `diffuseColor` + `ambientColor` + `emissiveColor`（`_shellMaterialForDevice`），保证任意光照下可见。
+**坑 · PBR 金属无 IBL 全黑**：无环境贴图时保留原始 PBR 材质，并在运行时把 `metallic` 降为 0、`roughness` 提到可见阈值。不要用统一 `StandardMaterial` 覆盖资产外观。
 
 ---
 
 ## 6. 验收（视觉确认，不是看数字）
 
-1. 跑 `scripts/gltf-gen/verify-workbench-devices.mjs`：起 vite dev(5180) + playwright 拦截 `/api/lines/**` 注入 fixture + 访问 `/#/workbench/line-sorting-01` + 等 `device-loaded-count` badge 变 `N/N` + 截图。
-2. **看截图确认设备真渲染出来**，不只看 badge 数字——badge 只证明 `loadDevices` 返回了 N 个 id，不证明 mesh 在视野内/材质可见。
-3. 若看不到设备，按主 SKILL §0 诊断顺序排查：404 → 加载日志 → bbox → 相机取景 → 材质/光照。
+1. 用 `pnpm dev` 启动 assembly/model 等核心服务与 Vite，访问 `/#/workbench/<lineId>`。
+2. 用浏览器分别检查至少两条流水线，确认 GLB 数量、资产组合和 BOM 树工位分组随后端 BOM 改变。
+3. 检查画面像素与场景状态：可见模型非空、材质可辨识、相机完整取景、透明 box 代理不可见。
+4. 若看不到模型，按主 SKILL §0 诊断顺序排查：BOM → GLB 404 → bbox → 相机取景 → 材质/光照。
 
 **坑 · hash 路由**：vite dev 下路由是 `createWebHashHistory()`，URL 必须 `/#/workbench/<lineId>`，不是 `/workbench/<lineId>`（后者只会显示产线列表页）。
 
@@ -104,6 +102,6 @@ child.position = ...; child.rotation = ...; child.scaling = ...;
 
 - `scripts/gltf-gen/gen_device.py` —— Blender 资产生成器（支持 feeder/gantry-arm/conveyor/box-pack/vision-module 批量）
 - `scripts/gltf-gen/measure_glb_pure.mjs` —— 纯 node 解析 GLB accessor 算包围盒
-- `scripts/gltf-gen/verify-workbench-devices.mjs` —— 验收截图（vite + playwright）
-- `apps/sim-platform/src/engine/devices.ts` —— 设备布局 `layoutForLine`（坐标/朝向/缩放）
-- `apps/sim-platform/src/engine/babylon.ts` —— `loadDevices` / `_frameWithDevices` / `_shellMaterialForDevice`
+- `services/assembly-svc/src/repositories/index.ts` —— 由流水线工位生成 BOM
+- `services/model-svc/src/app.ts` —— 真实 GLB 下载接口与资产白名单
+- `apps/sim-platform/src/engine/babylon.ts` —— GLB 加载、bbox 对齐、透明交互代理

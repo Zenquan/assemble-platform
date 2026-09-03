@@ -215,18 +215,6 @@ class NoopScene implements SceneManager {
   setRendering(on: boolean): void {
     this.rendering = on;
   }
-  async loadDevices(
-    _layout: ReadonlyArray<{
-      deviceId: string;
-      assetUrl: string;
-      position: readonly [number, number, number];
-      rotationYDeg?: number;
-      scale?: number;
-    }>,
-  ): Promise<readonly string[]> {
-    // noop：设备布景不参与仿真语义，仅返空让接口契约完整
-    return [];
-  }
 }
 
 class NoopAssets implements AssetManager {
@@ -234,9 +222,9 @@ class NoopAssets implements AssetManager {
   get loadedPartCount(): number {
     return this._loaded;
   }
-  async loadLine(_line: ProductionLine, bom?: AssemblyBom): Promise<readonly string[]> {
-    // 占位：仅登记数量，不真拉 glTF / 建网格；无 BOM 时按 0 计（真盒体渲染走 babylon 后端）
-    const ids = (bom?.parts ?? []).map((p) => p.id);
+  async loadLine(_line: ProductionLine, bom: AssemblyBom): Promise<readonly string[]> {
+    // Noop 不创建可见几何，仅镜像后端 BOM 的零件集合。
+    const ids = bom.parts.map((p) => p.id);
     this._loaded = ids.length;
     return ids;
   }
@@ -344,9 +332,17 @@ export class NoopSimEngine implements SimEngine {
     };
   }
 
-  init(opts: { container?: HTMLElement; line?: import('@assemble/domain').ProductionLine }): EngineHealth {
+  async init(opts: {
+    container?: HTMLElement;
+    line: import('@assemble/domain').ProductionLine;
+    bom: AssemblyBom;
+  }): Promise<EngineHealth> {
+    if (opts.line.id !== opts.bom.lineId) throw new Error('产线与 BOM 不匹配');
     if (opts.container) this.scene.mount(opts.container);
-    if (opts.line) this._activeLineId = opts.line.id;
+    this._activeLineId = opts.line.id;
+    await this.assets.loadLine(opts.line, opts.bom);
+    this.assembly.load(opts.bom);
+    this.assembly.seekTo(opts.bom.steps.length);
     this._initialized = true;
     this._fps = 0;
     return this.health();
@@ -380,7 +376,12 @@ export class NoopSimEngine implements SimEngine {
   }
 
   resetForPlay(): { seated: number; scattered: number } {
-    this.assembly.seekTo(0);
+    const bom = this.assembly.bom;
+    if (!bom) return this.syncAssemblyState();
+    const firstMovableStep = bom.steps.findIndex((step) =>
+      bom.parts.find((part) => part.id === step.partId)?.isMovable !== false,
+    );
+    this.assembly.seekTo(firstMovableStep < 0 ? bom.steps.length : firstMovableStep);
     return this.syncAssemblyState();
   }
 

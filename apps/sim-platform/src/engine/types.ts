@@ -103,28 +103,15 @@ export interface SceneManager {
   requestRender(): boolean;
   /** 开始/停止渲染循环 */
   setRendering(on: boolean): void;
-  /**
-   * 0.4.x · 加载工位设备布景层（外观 shell，不参与装配/干涉算法）。
-   *  异步加载每个 .glb 到场景，position/rotation/scale 应用到根 TransformNode。
-   *  返回成功加载的设备 id 列表（Babylon 真实现；Noop 恒 []）。
-   */
-  loadDevices(layout: ReadonlyArray<{
-    deviceId: string;
-    assetUrl: string;
-    position: readonly [number, number, number];
-    rotationYDeg?: number;
-    scale?: number;
-  }>): Promise<readonly string[]>;
 }
 
-/** 模型资产加载（对应 ModelSvc 的前端消费侧；0.2 无真 glTF，按 line 合成 OBB 占位盒） */
+/** 模型资产加载（BOM 给出资产 id，由 ModelSvc 返回真实 GLB） */
 export interface AssetManager {
   /**
-   * 加载一条产线的装配资产（构建零件几何），成功返回零件 id 列表。
-   * bom 可选：0.2.x 无 BOM 端点时仅凭 line 合成确定性 OBB 占位盒；
-   * 0.3.x 接入真 BOM/glTF 管线后传 bom 渲染真实几何。
+   * 加载一条产线的装配资产，成功返回零件 id 列表。
+   * 可见几何只能来自 BOM 指向的后端 GLB；实现不得生成可见占位盒。
    */
-  loadLine(line: ProductionLine, bom?: AssemblyBom): Promise<readonly string[]>;
+  loadLine(line: ProductionLine, bom: AssemblyBom): Promise<readonly string[]>;
   /** 卸载当前产线资源，释放内存 */
   dispose(): void;
   /** 当前已加载零件总数 */
@@ -224,8 +211,8 @@ export interface SimEngine {
   /** 当前渲染后端标识 */
   readonly backend: 'noop' | 'babylon';
 
-  /** 初始化（挂载视口 + 启动渲染循环）。container 缺省时组件渲染占位，不报错。 */
-  init(opts: { container?: HTMLElement; line?: ProductionLine }): EngineHealth;
+  /** 初始化（装载后端 BOM + 挂载视口 + 加载 GLB）；资产失败时拒绝，不做可见盒子降级。 */
+  init(opts: { container?: HTMLElement; line: ProductionLine; bom: AssemblyBom }): Promise<EngineHealth>;
   /** 销毁并释放全部资源（切页/卸载时必调，避免泄漏） */
   dispose(): void;
   /** 读取引擎健康快照（顶栏徽标 / 性能监视） */
