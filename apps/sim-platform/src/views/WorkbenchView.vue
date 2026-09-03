@@ -115,7 +115,7 @@ function pauseAuto() {
   refreshAnimState();
 }
 
-/** 刷新动画播放态（巴比仑后端由 render loop 内部推进，UI 轮询展示进度） */
+/** 刷新动画播放态与已贴合计数（巴比仑后端由 render loop 内部推进，UI 轮询展示） */
 function refreshAnimState() {
   const eng = engine.value;
   if (!eng) return;
@@ -123,6 +123,11 @@ function refreshAnimState() {
   animProgress.value = s.cursorSeq;
   animTotal.value = s.totalSteps;
   isAnimPlaying.value = s.playing;
+  // 只读计数源（assembly 为事实集合），避免每次 syncAssemblyState 重摆场景打断飞行动画
+  const seated = eng.assembly.assembledPartIds.length;
+  const total = eng.assembly.bom?.parts.length ?? s.totalSteps;
+  if (totalParts.value === 0 || total > totalParts.value) totalParts.value = total;
+  assembledCount.value = seated;
 }
 
 onBeforeUnmount(() => {
