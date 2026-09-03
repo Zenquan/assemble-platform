@@ -79,21 +79,36 @@ M1 收尾 · 单条产线 Demo —— **后端服务层跑通 + 前端 SimEngine
 - `assembly-svc` setErrorHandler 显式标注 `error: FastifyError`，消除 fastify v5 `unknown` 类型错
 - 根 `vitest.config.ts` 排除 `apps/**`（apps 自带 vite.config 与 `@/*` alias，根仅负责 packages/services 回归）
 
-> ⚠️ 0.2.0 出口门禁待补：Babylon 接入装配工作台、清洁就绪产线种子（FEAT-20260903-001）、一键起前端+服务脚本；完成后发版 tag v0.2.0。
+### Added（出口闭合：浏览器渲染装配 + 0.1.0 保留分支归档）
+
+- **feat(sim-platform · Babylon 最小真渲染 · 闭合 0.2.0 出口「浏览器渲染装配」)**：
+    - `engine/babylon.ts` 真渲染后端（替 noop）；`detectWebGL()` 同步特征探测工厂，浏览器返回 `BabylonSimEngine`，无 WebGL（vitest/jsdom/CI）回落 `NoopSimEngine`
+    - 工作台视口挂真 Babylon Engine/Scene：`loadLine` 真加载产线，按确定性布局把零件渲成 **OBB 盒体占位** + 暗色地板 + 网格 + ArcRotateCamera（自动质心适配取景）；HUD 显示 `STEP · 3D 装配视口` 与「引擎实时/引擎占位」状态点
+    - 范围（用户 grill-me 锁定「最小真渲染：先关门禁」）：只关门禁，**不做**自动/手动/回放三模式真装配、实时干涉拖拽联动、BOM 树/节拍面板、真 glTF 资产管线 —— 全归 0.3.x
+    - 架构红线：业务组件仍只经 `SimEngine` 门面，不直引 `@babylonjs/core`；`apps/sim-platform/src/engine/index.ts` 出口统一收口
+    - 同步小改：`engine/types.ts` `AssetManager.loadLine(line, bom?)` bom 改可选；`engine/noop.ts` 同步签名
+    - 门面契约测试 +1：「BabylonSimEngine 类可被引用」（不实例化以免触发 WebGL），jsdom 回落 noop 路径仍绿
+- **api/lines.ts · `fetchLine(id)`**：拉单条产线明细（`GET /lines/:id`），WorkbenchView 真渲染前先拿到产线数据
+- **WorkbenchView 真渲染视口**：`onMounted` 异步拉产线 → 工厂注入引擎 → `init({container, line})`；头部徽标 + 引擎状态点；视口内由引擎注入 `<canvas>`；loadError 友好态；右下显式标注「实时干涉/实时联动 归 0.3.x」
+
+### Changed（git 约定归档）
+
+- **git(0.1.0 保留分支)**：按「每个版本/里程碑分支合回 main 后保留不删」约定，为 v0.1.0（M1 技术验证基线）补建保留分支 `feat/0.1.0-baseline`，指向 `2da0421`（引入 Vue 前端代码前的最后提交，`apps/` 内仅存深色科技 design mockup）。此前 0.1.0 内容系一次性线性合进 main、并无独立版本分支；建此分支使 v0.1.0 也可按版本归因与回溯 diff。已保留分支汇总见 `AGENTS.md`。
+- 工程基线新增：`@babylonjs/core ^9.23.0`（hoist 到根 node_modules）；`packages/services/*` 子包依赖链路不变。
+
+### Verified（出口闭合）
+
+- **sim-platform 单测 15/15 全绿**（含新增「BabylonSimEngine 类可被引用」契约）：14 + 1
+- **vue-tsc 0 错**；**vite build 通过**（8m3s，WorkbenchView chunk 6.8MB / gzip 1.5MB，符合预期告警；Babylon 全量图大）
+- **浏览器 E2E 截图**（dev 模式 + playwright chromium + WebGL）：`line-sorting-01` 工作台真渲染盒体装配体居中，HUD「STEP · 3D 装配视口」+「引擎实时」绿点，顶部 header「产线 · 三号分拣线 · 装配工作台」与 SIMULATION WORKBENCH 副标题均正确显示
+- 根 vitest 23 例回归绿（clearance-core 7 + sim-utils 3 × hoisted 3 + sim-platform 15 独立运行）
+
+> 0.2.0 出口「**本地一键起前端+服务**」脚本本轮**未完成**（用户明确选择"最小真渲染：先关门禁"，一键起脚本不在本轮 scope，留待 0.2.x 增量或 0.3.0 首发前合入）。
 
 ---
 
+<!-- 后续改动按 Conventional Commits 归类追加进 Unreleased，勿手填版本号（由发布流程决定） -->
+
 ## [Unreleased]
 
-### Changed
-
-- **git(0.1.0 保留分支)**：按「每个版本/里程碑分支合回 main 后保留不删」约定，为 v0.1.0（M1 技术验证基线）补建保留分支 `feat/0.1.0-baseline`，指向 `2da0421`（引入 Vue 前端代码前的最后提交，`apps/` 内仅存深色科技 design mockup）。此前 0.1.0 内容系一次性线性合进 main、并无独立版本分支；建此分支使 v0.1.0 也可按版本归因与回溯 diff。已保留分支汇总见 `AGENTS.md`。
-
-### Added
-
-- **feat(sim-platform · 0.2.0 出口：Babylon 最小真渲染)**：`engine/babylon.ts` 真渲染后端（替 noop），达成 0.2.0 出口门禁「浏览器渲染装配」。
-  - 范围（用户经 grill-me 确认「最小真渲染：先关门禁」）：工作台视口挂真 Babylon Engine+Scene；`loadLine` 真加载产线，把零件按确定性布局渲成 **OBB 盒体占位** + 网格/坐标轴 + ArcRotateCamera；HUD 显示 STEP/引擎实时。
-  - 明确**不做**（归 0.3.x）：自动/手动/回放三模式真装配、实时干涉拖拽联动、BOM 树/节拍面板、真 glTF 资产管线 —— 仍走 Noop 状态机与 clearance 纯算法占位。
-  - 架构红线保持：业务组件仍只经 `SimEngine` 门面，不直引 `@babylonjs/core`；`createSimEngine()` 在无 WebGL（vitest/CI）时回落 Noop，单测不启真渲染。
-
-<!-- 后续改动按 Conventional Commits 归类追加，勿手填版本号（由发布流程决定） -->
+<!-- 占位：本版已完成 0.2.0 出口闭合与文档归档；后续 0.2.x 增量（一键起脚本等）将由此段起。 -->

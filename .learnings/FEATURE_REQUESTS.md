@@ -90,8 +90,11 @@ small
 
 **Logged**: 2026-09-03T00:20:00+08:00
 **Priority**: high
-**Status**: in_progress
+**Status**: done
 **Area**: sim-platform / engine
+**Closed At**: 2026-09-03
+**Closed By**: feat/0.2.0-babylon-render → main FF-merge
+**Branch**: feat/0.2.0-babylon-render
 
 ### Requested Capability
 以真 Babylon 渲染后端（engine/babylon.ts）替换 Noop，达成 0.2.0 出口门禁「浏览器渲染装配」：工作台视口挂真 WebGL Engine+Scene，`loadLine` 真加载产线并把零件按确定性布局渲成 OBB 盒体占位，配网格/坐标轴 + ArcRotateCamera + HUD(STEP/引擎实时)。

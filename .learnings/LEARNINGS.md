@@ -194,3 +194,29 @@ playwright `goto` + `networkidle` + `screenshot` → finally 逐个 SIGTERM。
 
 **Rule for future**: 任何「前后端联调视觉验收」均走此一次性编排；截图归档到 docs/<name>.png
 入仓，作为里程碑可追溯物证。
+
+---
+
+## [LRN-20260903-005] best_practice
+
+**Logged**: 2026-09-03T11:10:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: sim-platform / engine
+
+### Summary
+SimEngine 门面双后端（Babylon 真渲染 + Noop 替身）的"特征探测工厂 + 单测不启 WebGL + 视效门禁走 E2E 截图"是闭合「浏览器渲染装配」出口的最稳形态。
+
+### Details
+- `createSimEngine()` 同步探测 `canvas.getContext('webgl2')||'webgl'`：可用则返回 `BabylonSimEngine`，否则 `NoopSimEngine`；工厂纯同步无 Promise。
+- 单测（vitest/jsdom）自动走 Noop，vitest 现有「Noop 路径 + 门面契约」套件不变即可；新增的 Babylon 类契约**只 import/typeof 验证**，禁止 new —— 防止临时 canvas 把 jsdom 卡住。
+- 真渲染验收：dev 模式 + playwright chromium + `--use-gl=swiftshader`（沙箱无 GPU），`page.waitForSelector('canvas')` + `waitForTimeout(3500)` 给首帧 + 相机动画缓冲。
+- 相机取景公式（line-sorting-01 工位链实测）：地板 `S = 2 × maxHalf ≈ 28`，`radius = max(maxR * 2.6, 14)`，并把相机 target 设到零件簇质心 `mean(cx,cy,cz)`，避免初始 130 半径离地 14 俯视导致零件像「小点」。
+
+### Suggested Action
+后续 Babylon 接入新功能（剖切、轨迹回放、BOM 高亮）一律在 `engine/babylon.ts` 内加 Manager，不外溢；Noop 路径走同一 Manager 接口纯函数占位，单测仍只测 Noop。视觉验收走一次性 E2E 编排脚本（同 LRN-20260903-004）。
+
+### Metadata
+- Source: insight
+- Related Files: apps/sim-platform/src/engine/babylon.ts, apps/sim-platform/src/engine/test/engine.test.ts
+- Tags: babylon, facade, webgl, e2e-visual
