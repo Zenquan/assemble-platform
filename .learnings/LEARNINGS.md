@@ -553,3 +553,50 @@ S4 E2E 启动 `chromium.launch({headless:true})` 直接报「Executable doesn't 
 - Pattern-Key: web3d.backend_bom_single_source
 
 ---
+
+## [LRN-20260904-018] correction
+
+**Logged**: 2026-09-04T02:12:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: frontend / backend / docs
+
+### Summary
+平台设备视觉语义应聚焦果蔬/净菜供应链，不能继续用通用机械臂和抽象装箱台代表净菜加工。
+
+### Details
+用户确认业务范围以果蔬/净菜为主，允许参考公开资料，并同意先完整制作净菜加工线。资产清单、BOM 工位名、材质与机械细节都应围绕食品加工卫生设计，而不是泛工业设备。
+
+### Suggested Action
+净菜线优先使用不锈钢、食品级输送带、清洗水槽、排水、卫生机架、防水电控和检测设备等行业特征；通用资产只用于其它产线。
+
+### Metadata
+- Source: user_feedback
+- Related Files: docs/FRESHCUT_ASSET_SPEC.md, services/assembly-svc/src/repositories/index.ts
+- Tags: fresh-cut, produce, food-processing, correction
+
+---
+
+## [LRN-20260904-019] best_practice
+
+**Logged**: 2026-09-04T04:05:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: frontend / Web3D / tests
+
+### Summary
+长产线和设备级聚焦必须按视口宽高比选择更小的水平/垂直半视场角计算相机距离。
+
+### Details
+旧实现用固定 `maxR * 2.6` 和聚焦半径 40，在窄而高的工作台 canvas 中会裁掉整线端点，点选单机也无法看到设备细节。现将包围球距离统一为 `radius / sin(min(verticalHalfFov, horizontalHalfFov))`，再施加语义化留白和最小半径；整线可完整入框，BOM 点选可近距离检查清洗槽、喷淋、电控等结构。
+
+### Suggested Action
+任何响应式 Web3D framing 都同时验证横屏与窄屏；整线取景和单体聚焦复用同一纯函数，只用不同的最小距离与留白参数。
+
+### Metadata
+- Source: browser_validation
+- Related Files: apps/sim-platform/src/engine/framing.ts, apps/sim-platform/src/engine/babylon.ts, apps/sim-platform/src/engine/test/framing.test.ts
+- Tags: camera, framing, fov, aspect-ratio, glb
+- Pattern-Key: web3d.aspect_aware_camera_fit
+
+---

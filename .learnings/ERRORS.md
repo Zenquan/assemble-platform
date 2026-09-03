@@ -420,3 +420,373 @@ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL
 - Related Files: package.json, packages/domain/package.json, services/auth-svc/package.json
 
 ---
+
+## [ERR-20260904-016] public_equipment_reference_lookup_unavailable
+
+**Logged**: 2026-09-04T02:15:00+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: docs
+
+### Summary
+公开净菜设备规格检索在当前环境不可用，浏览器导航超时且 curl 外网连接超时。
+
+### Error
+```
+Timed out waiting for tab to navigate
+curl: (28) Connection timed out after 20002 milliseconds
+```
+
+### Context
+- 用户允许参考公开厂商产品图和尺寸。
+- 当前首版改用无品牌行业基准包络，并在资产规范中明确可由后续厂商图纸校准。
+
+### Suggested Fix
+外网访问恢复后，为七类设备各补至少两份公开厂商规格来源，并只校准参数，不改变稳定 assetId 与节点契约。
+
+### Metadata
+- Reproducible: yes
+- Related Files: docs/FRESHCUT_ASSET_SPEC.md
+
+---
+
+## [ERR-20260904-017] freshcut_contract_patch_context_mismatch
+
+**Logged**: 2026-09-04T02:25:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: backend
+
+### Summary
+净菜资产契约的首个多文件补丁使用了错误的 `ProductionLine` 字段上下文，补丁校验失败且未写入任何文件。
+
+### Error
+```
+apply_patch verification failed: Failed to find expected lines in packages/domain/src/assembly.ts
+```
+
+### Context
+- 实际接口在 `kind` 后先声明 `stations/enabled`，不是直接声明 `modelVersion`。
+- 读取精确上下文后改为按文件拆分的小补丁。
+
+### Suggested Fix
+跨多个核心文件的补丁先读取目标接口附近的精确上下文，并把契约、seed、逻辑拆开应用。
+
+### Metadata
+- Reproducible: no
+- Related Files: packages/domain/src/assembly.ts, services/assembly-svc/src/repositories/index.ts
+
+---
+
+## [ERR-20260904-018] gltf_gen_script_not_executable
+
+**Logged**: 2026-09-04T02:45:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+直接执行 `scripts/gltf-gen/gen-all.sh` 时文件没有可执行位，Blender 生成流程未启动。
+
+### Error
+```
+permission denied: scripts/gltf-gen/gen-all.sh
+```
+
+### Context
+- 脚本内容有效，但 Git 文件模式不是 executable。
+- 改用 `/bin/bash scripts/gltf-gen/gen-all.sh freshcut` 运行。
+
+### Suggested Fix
+调用仓库 shell 工具时使用显式 shell，或在后续单独规范脚本可执行位。
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/gltf-gen/gen-all.sh
+
+---
+
+## [ERR-20260904-019] optional_glob_failed_during_asset_probe
+
+**Logged**: 2026-09-04T02:52:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+资产生成期间用可能无匹配项的 zsh glob 探查文件，再次在命令启动前失败。
+
+### Error
+```
+zsh: no matches found: services/model-svc/assets/glb/*fresh*
+```
+
+### Context
+- 仅用于查看生成进度，不影响 Blender 子进程。
+- 后续改用 `find` 或 `rg --files`，不依赖 shell 空通配符。
+
+### Suggested Fix
+所有可选文件集合查询统一用 `find`/`rg --files`；避免在 zsh 中直接传可能为空的 glob。
+
+### Metadata
+- Reproducible: yes
+- Related Files: services/model-svc/assets/glb
+- See Also: ERR-20260904-013
+
+---
+
+## [ERR-20260904-020] blender_preview_batch_too_slow
+
+**Logged**: 2026-09-04T03:02:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+七设备生成命令默认附带 1280×900、64 样本预览，复杂气泡清洗机单张渲染超过三分钟，不适合作为日常资产生成门禁。
+
+### Error
+```
+bubble-washer preview remained in rendering after three minutes
+```
+
+### Context
+- GLB 导出本身只需数秒，耗时集中在离线预览。
+- 已终止本任务启动的 Blender 进程，保留已完成资产。
+
+### Suggested Fix
+`gen-all.sh` 默认只生成 GLB；通过 `GLTF_RENDER_PREVIEWS=1` 显式开启预览，并降低预览分辨率。视觉验收优先用整线 Babylon 页面。
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/gltf-gen/gen-all.sh, scripts/gltf-gen/gen_freshcut.py
+
+---
+
+## [ERR-20260904-021] bash3_empty_array_with_nounset
+
+**Logged**: 2026-09-04T03:08:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+macOS Bash 3 在 `set -u` 下展开已声明但为空的数组仍报 unbound variable，快速 GLB 批次未启动。
+
+### Error
+```
+PREVIEW_ARGS[@]: unbound variable
+```
+
+### Context
+- 预览参数为空时使用了 `"${PREVIEW_ARGS[@]}"`。
+- 已改为 `run_freshcut` 函数内显式区分带预览和不带预览两条命令。
+
+### Suggested Fix
+仓库 shell 脚本需兼容 macOS Bash 3；在 `set -u` 下避免依赖空数组展开。
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/gltf-gen/gen-all.sh
+
+---
+
+## [ERR-20260904-022] unqualified_node_missing_from_path
+
+**Logged**: 2026-09-04T03:22:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+当前 Codex shell 的 PATH 没有 `node`，使用 `env -u NODE_OPTIONS node ...` 无法启动 GLB 量测。
+
+### Error
+```
+env: node: No such file or directory
+```
+
+### Context
+- 运行 `scripts/gltf-gen/measure_glb.mjs` 时使用了 AGENTS 中的通用 Node 写法。
+- 当前可用运行时位于 Codex runtime 的绝对路径。
+
+### Suggested Fix
+在本环境使用 `/Users/zenquan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node`；项目脚本保持普通 `node`，不写入个人绝对路径。
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/gltf-gen/measure_glb.mjs, AGENTS.md
+- See Also: ERR-20260904-014
+
+---
+
+## [ERR-20260904-023] babylon_node_local_glb_load_silent_exit
+
+**Logged**: 2026-09-04T03:25:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+Babylon NullEngine 在纯 Node 中以绝对路径加载本地 GLB 时没有完成回调，量测脚本无输出退出。
+
+### Error
+```
+measure_glb.mjs exited without bounds output
+```
+
+### Context
+- `SceneLoader.LoadAssetContainerAsync('', absolutePath, scene)` 依赖浏览器式文件加载链路。
+- Node 进程没有抛出可诊断异常，也没有返回任何设备尺寸。
+
+### Suggested Fix
+量测脚本改为直接解析 GLB JSON chunk，遍历场景节点并应用 matrix/TRS 世界变换到 POSITION accessor 八角点；避免使用浏览器文件 API。
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/gltf-gen/measure_glb.mjs
+
+---
+
+## [ERR-20260904-024] pnpm_child_node_missing_from_path
+
+**Logged**: 2026-09-04T03:33:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+用绝对 Node 启动 `pnpm.cjs` 后，pnpm 派生的 package script 仍因 PATH 没有 `node` 而失败。
+
+### Error
+```
+env: node: No such file or directory
+spawn ENOENT
+```
+
+### Context
+- `pnpm.cjs` 自身由绝对 Node 正常启动。
+- package script 的 shebang 仍需从 PATH 解析 Node。
+
+### Suggested Fix
+执行门禁时同时前置 `PATH=/Users/zenquan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH`，让 pnpm 的整个子进程树使用同一 Node。
+
+### Metadata
+- Reproducible: yes
+- Related Files: package.json, AGENTS.md
+- See Also: ERR-20260904-022
+
+---
+
+## [ERR-20260904-025] sandbox_local_service_process_control
+
+**Logged**: 2026-09-04T03:50:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+沙箱内不能停止旧服务进程或绑定本地端口，assembly/model 联调启动首次失败。
+
+### Error
+```
+kill: operation not permitted
+listen EPERM: operation not permitted 0.0.0.0:7101
+```
+
+### Context
+- 7101/7103 仍运行旧 dist，必须重启后才能验证 freshcut seed 与新 GLB。
+- 文件构建和单测不受影响，只有进程控制与监听受限。
+
+### Suggested Fix
+仅对已定位的本项目 PID 和本地服务启动请求授权；启动时显式使用 `HOST=127.0.0.1`。
+
+### Metadata
+- Reproducible: yes
+- Related Files: services/assembly-svc/src/server.ts, services/model-svc/src/server.ts
+
+---
+
+## [ERR-20260904-026] framing_test_expected_value_rounding
+
+**Logged**: 2026-09-04T03:56:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+相机取景公式测试的手算期望值舍入错误，正确实现被过严断言误报。
+
+### Error
+```
+expected 40.44902571312859 to be close to 40.6
+```
+
+### Context
+- 竖向视口用水平半视场角计算包围球距离。
+- 手算近似值与实际公式相差约 0.151，超过一位小数精度容差。
+
+### Suggested Fix
+断言采用由公式校核后的 `40.449`，并保留竖向视口距离大于横向视口的行为断言。
+
+### Metadata
+- Reproducible: yes
+- Related Files: apps/sim-platform/src/engine/test/framing.test.ts
+
+---
+
+## [ERR-20260904-027] final_learning_patch_context_mismatch
+
+**Logged**: 2026-09-04T04:08:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: docs
+
+### Summary
+收尾学习记录的多文件补丁因 feature metadata 文本少了 `Babylon` 后缀而校验失败。
+
+### Error
+```
+apply_patch verification failed: Failed to find expected lines in .learnings/FEATURE_REQUESTS.md
+```
+
+### Context
+- 补丁预期 `Related Features` 以 `assembly BOM` 结束，实际还包含 `Babylon`。
+- 补丁原子失败，没有造成部分写入。
+
+### Suggested Fix
+读取条目尾部精确上下文后再拆分应用记录补丁。
+
+### Metadata
+- Reproducible: no
+- Related Files: .learnings/FEATURE_REQUESTS.md, .learnings/LEARNINGS.md
+
+---
+
+## [ERR-20260904-028] git_index_write_requires_approval
+
+**Logged**: 2026-09-04T04:20:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+当前工作区允许修改源码，但沙箱内直接 `git add` 无法创建 `.git/index.lock`。
+
+### Error
+```
+fatal: Unable to create '.git/index.lock': Operation not permitted
+```
+
+### Context
+- 用户明确要求把净菜线改动拆成小步提交。
+- `.git` 在当前权限配置中只读，源码工作树可写。
+
+### Suggested Fix
+在用户已授权提交的前提下，仅对具体 `git add` / `git commit` 命令请求提升权限。
+
+### Metadata
+- Reproducible: yes
+- Related Files: .git/index
+
+---

@@ -189,3 +189,35 @@ large
 - Frequency: first_time
 - Related Features: model-svc, assembly-svc, SimEngine, BOM tree, hardcode audit
 - Resolution: Implemented on `feat/0.4.0-glb-asset-pipeline`; commit recorded by Git history.
+
+---
+
+## [FEAT-20260904-005] freshcut_industry_digital_twins
+
+**Logged**: 2026-09-04T02:10:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: domain / assembly-svc / model-svc / Blender / Web3D / docs
+**Closed At**: 2026-09-04
+
+### Requested Capability
+把当前过于简单的通用设备模型升级为果蔬/净菜行业真实可信的加工线；允许参考公开厂商资料，首批完整制作净菜加工线，并通过 Blender 生成后端下发的 GLB。
+
+### User Context
+现有模型由少量 cube/cylinder/cone 合并成单 mesh，只能验证 GLB 链路，缺少食品设备结构、真实比例、材质层次、行业细节和可动节点，无法体现生鲜供应链场景。
+
+### Complexity Estimate
+large
+
+### Suggested Implementation
+- 建立净菜设备尺寸、坐标、节点、材质和面数规范。
+- 生成提升上料、气泡清洗、人工挑选、切配、振动沥水、称重包装、金检七台分层 GLB。
+- 扩展共享资产契约和 model-svc 白名单，assembly-svc 净菜 seed 改为七工位。
+- 量测 GLB，并在工作台验证整线布局、BOM 和可见质量。
+
+### Metadata
+- Frequency: first_time
+- Related Features: fresh-cut line, Blender, model-svc, assembly BOM, Babylon
+- Resolution: 七台分层 GLB、七工位后端 BOM、世界包围盒/运动节点量测、整线与单机浏览器验收均已完成。
+
+---
