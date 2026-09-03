@@ -25,6 +25,7 @@ import {
   Color4,
   Engine,
   HemisphericLight,
+  Matrix,
   MeshBuilder,
   Scene,
   StandardMaterial,
@@ -32,16 +33,19 @@ import {
 } from '@babylonjs/core';
 
 import type { AssemblyBom, OBB, ProductionLine, Vec3 } from '@assemble/domain';
+import { obbFromCenterHalfExtents } from '@assemble/clearance-core';
 
 import { NoopAssembler, NoopClearance, NoopSimEngine } from './noop.js';
 import { AssemblyAnimator } from './animator.js';
 import { computeTwoStatePlacement, type PartPlacement } from './placement.js';
+import { ManualDragSession, boxObbAt, rayPlaneYIntersect, type DragGeometry } from './drag.js';
 import type {
   AssetManager,
   AssemblyController,
   CameraPose,
   CameraViewId,
   ClearanceController,
+  DragLiveState,
   EngineHealth,
   InteractionManager,
   PickResult,
@@ -136,10 +140,14 @@ class BabylonScene implements SceneManager {
   private seatPos = new Map<string, Vector3>();
   /** partId -> 待装配散落待料位 */
   private scatterPos = new Map<string, Vector3>();
+  /** S3 · partId -> 轴对齐半轴长（供 seat OBB 构造，实时干涉用） */
+  private halfSize = new Map<string, Vec3>();
   /** 稳定零件序（决定散落环相位与 palette 着色） */
   private _partOrder: string[] = [];
   /** S2 · 每件 seat/scatter 纯布局（renderParts 时缓存，供 animator 构造） */
   private _placements: PartPlacement[] = [];
+  /** S3c · 射线求交用单位矩阵（createPickingRay 的 world 参数） */
+  private _idMatrix = Matrix.Identity();
   /** S2 · 最近一次已知的 assembled 集合快照（供飞行覆盖退出时回落 S1 seat/scatter 判定） */
   private _assembledIds: ReadonlySet<string> = new Set();
   /** S2 · 每帧驱动回调（render loop 每帧先调再 render；由引擎注册动画推进） */
@@ -147,6 +155,11 @@ class BabylonScene implements SceneManager {
 
   get isMounted(): boolean {
     return this.engine !== null && this.scene !== null;
+  }
+
+  /** 视口 canvas（供 pointer 监听挂载）；未挂载返回 null */
+  get canvasEl(): HTMLCanvasElement | null {
+    return this.canvas;
   }
 
   /** 当前已贴合/散落集合快照（供 HUD 与门面同步断言；纯读取） */
@@ -165,6 +178,25 @@ class BabylonScene implements SceneManager {
   /** S2 · 读取 renderParts 时缓存的 seat/scatter 纯布局（供引擎构造动画驱动器） */
   get placements(): PartPlacement[] {
     return this._placements;
+  }
+
+  /** S3 · 取给定零件集合在 seat 处的世界 OBB（实时干涉的"已装配静态集"几何源）。
+   *  半轴来自 renderParts 时登记的 halfSize；无该件登记则跳过。 */
+  seatObbsOf(ids: ReadonlySet<string>): Array<{ partId: string; obb: OBB }> {
+    const out: Array<{ partId: string; obb: OBB }> = [];
+    for (const id of ids) {
+      const seat = this.seatPos.get(id);
+      const half = this.halfSize.get(id);
+      if (!seat || !half) continue;
+      out.push({
+        partId: id,
+        obb: obbFromCenterHalfExtents(
+          [seat.x, seat.y, seat.z],
+          [half[0], half[1], half[2]],
+        ),
+      });
+    }
+    return out;
   }
 
   mount(container: HTMLElement): boolean {
@@ -224,6 +256,9 @@ class BabylonScene implements SceneManager {
     this.canvas = null;
     this.container = null;
     this.meshes.clear();
+    this.seatPos.clear();
+    this.scatterPos.clear();
+    this.halfSize.clear();
     this._placements = [];
     this.onFrame = null;
   }
@@ -365,6 +400,7 @@ class BabylonScene implements SceneManager {
     this.meshes.clear();
     this.seatPos.clear();
     this.scatterPos.clear();
+    this.halfSize.clear();
     this._partOrder = parts.map((p) => p.partId);
 
     placements.forEach((pl, i) => {
@@ -380,6 +416,7 @@ class BabylonScene implements SceneManager {
       mesh.position = seat.clone(); // 默认贴合位（完整装配体）
       this.seatPos.set(part.partId, seat);
       this.scatterPos.set(part.partId, new Vector3(pl.scatter[0], pl.scatter[1], pl.scatter[2]));
+      this.halfSize.set(part.partId, part.half); // S3 · 供 seat OBB 构造（实时干涉）
 
       // 边框描边用 wireframe 叠加层提"工程件"观感
       const paletteColor = palette[i % palette.length] as Color3;
@@ -516,6 +553,75 @@ class BabylonScene implements SceneManager {
   get loadedPartCount(): number {
     return this.meshes.size;
   }
+
+  /* ---------------- S3c · 手动拖拽渲染原语（仅 Babylon 侧，门面窄口消费） ------------- */
+
+  /** 取某件 seat 中心 + 半轴（拖拽平面高度 = seat.y，几何源）。无该件返回 null。 */
+  partSeatHalf(partId: string): { seat: Vector3; half: Vec3 } | null {
+    const seat = this.seatPos.get(partId);
+    const half = this.halfSize.get(partId);
+    if (!seat || !half) return null;
+    return { seat, half };
+  }
+
+  /** 屏幕坐标拾取零件 id；未命中任何零件盒体返回空串。 */
+  pickPartId(clientX: number, clientY: number): string {
+    const scene = this.scene;
+    if (!scene) return '';
+    const hit = scene.pick(clientX, clientY, undefined, false, this.camera ?? undefined);
+    if (!hit?.hit || !hit.pickedMesh) return '';
+    const name = hit.pickedMesh.name ?? '';
+    if (!name.startsWith('part-')) return '';
+    return name.slice('part-'.length);
+  }
+
+  /** 屏幕坐标 → 世界射线与水平拖拽平面（y=planeY）的交点 XZ；无命中返回 null。 */
+  pointerXZAtPlane(clientX: number, clientY: number, planeY: number): { x: number; z: number } | null {
+    const scene = this.scene;
+    if (!scene) return null;
+    const ray = scene.createPickingRay(clientX, clientY, this._idMatrix, this.camera ?? null);
+    const p = rayPlaneYIntersect(
+      {
+        origin: [ray.origin.x, ray.origin.y, ray.origin.z],
+        direction: [ray.direction.x, ray.direction.y, ray.direction.z],
+      },
+      planeY,
+    );
+    return p ? { x: p.x, z: p.z } : null;
+  }
+
+  /** 把某件 mesh 停到世界候选中心（拖拽实时摆位；不写 seat/scatter 两态 map）。 */
+  setMeshWorldCenter(partId: string, center: Vec3): void {
+    const mesh = this.meshes.get(partId);
+    if (!mesh) return;
+    mesh.position = new Vector3(center[0], center[1], center[2]);
+  }
+
+  /** 取某件 mesh 当前世界中心（拖拽起点/复位用）；无该件返回 null。 */
+  meshCenterOf(partId: string): Vec3 | null {
+    const mesh = this.meshes.get(partId);
+    if (!mesh) return null;
+    return [mesh.position.x, mesh.position.y, mesh.position.z];
+  }
+
+  /** 临时高亮某件 mesh（拖拽 hover / 干涉变红）。'none' 还原材质原色（琥珀散落/青贴合由 setAssemblyState 统一） */
+  setMeshHighlight(partId: string, kind: 'none' | 'hover' | 'blocked'): void {
+    const mesh = this.meshes.get(partId);
+    if (!mesh) return;
+    const mat = mesh.material as StandardMaterial | null;
+    if (!mat) return;
+    if (kind === 'blocked') mat.diffuseColor = new Color3(0.95, 0.2, 0.2); // 红：干涉拦截
+    else if (kind === 'hover') mat.diffuseColor = new Color3(0.4, 0.7, 1.0); // 亮蓝：可拖 hover
+    // 'none' → 交还 setAssemblyState 语义（下轮 sync 覆盖），此处不硬改
+  }
+
+  /** 拖拽期间挂起/恢复相机轨道控制（避免旋转与零件拖拽冲突） */
+  setCameraControlEnabled(on: boolean): void {
+    if (!this.canvas || !this.camera) return;
+    // Babylon 9：detachControl 无参、attachControl(canvas, noPreventDefault)
+    if (!on) this.camera.detachControl();
+    else this.camera.attachControl(this.canvas, true);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -627,21 +733,166 @@ function buildSyntheticBom(parts: readonly RenderPart[], lineId: string): Assemb
 /* Interaction / Assembly / Clearance —— 复用 noop 真实逻辑            */
 /* ------------------------------------------------------------------ */
 
-/** 交互拾取/拖拽：0.2.x 无真拖拽，沿用 noop 的命中记录行为（真拖拽归 0.3.x） */
+/** 交互拾取/拖拽：S3c · 射线拾取 + 平面拖拽（方案A）。驱动纯逻辑 ManualDragSession，
+ * 与 Noop 镜像共享同一裁决口径。落位后经 onStateChange（引擎 syncAssemblyState）同步渲染+clearance。 */
 class BabylonInteraction implements InteractionManager {
-  private picked: PickResult = { partId: '', ok: false };
-  pick(): PickResult {
-    return this.picked;
+  private scene: BabylonScene;
+  private assembly: NoopAssembler;
+  private clearance: NoopClearance;
+  private session = new ManualDragSession();
+  /** 拖拽候选当前世界中心（seat 平面 Y；随 dragTo/pointermove 累计，供落位决策） */
+  private cursor: Vec3 = [0, 0, 0];
+  /** 引擎注入的"同步分态渲染 + clearance 重登记"回调（构造函数传入，避免类间环引用） */
+  private onStateChange: () => void;
+
+  constructor(
+    scene: BabylonScene,
+    assembly: NoopAssembler,
+    clearance: NoopClearance,
+    onStateChange: () => void,
+  ) {
+    this.scene = scene;
+    this.assembly = assembly;
+    this.clearance = clearance;
+    this.onStateChange = onStateChange;
   }
+
+  /** 拖拽抓取点相对指针的偏移（世界 XZ），使零件跟随指针而不跳变到指针处 */
+  private _grabX = 0;
+  private _grabZ = 0;
+  private _wired = false;
+
+  /** 绑定视口 pointer 事件（真鼠标拖拽入口；门面程序化 beginDrag/dragTo 独立可用）。
+   *  需在 scene.mount 后调用（此时 canvas 已就绪）。幂等。 */
+  wirePointer(): void {
+    if (this._wired) return;
+    const canvas = this.scene.canvasEl;
+    if (!canvas) return;
+    this._wired = true;
+    canvas.addEventListener('pointerdown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const id = this.scene.pickPartId(e.clientX - rect.left, e.clientY - rect.top);
+      if (!id || !this.beginDrag(id)) return;
+      // 记录抓取偏移：零件中心 - 指针在 seat 平面的命中点
+      const geo = this.scene.partSeatHalf(id);
+      const cur = this.scene.meshCenterOf(id);
+      const pz = this.scene.pointerXZAtPlane(e.clientX - rect.left, e.clientY - rect.top, geo ? geo.seat.y : 0);
+      this._grabX = cur ? cur[0] - (pz ? pz.x : cur[0]) : 0;
+      this._grabZ = cur ? cur[2] - (pz ? pz.z : cur[2]) : 0;
+      canvas.setPointerCapture?.(e.pointerId);
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!this.session.dragging) return;
+      const rect = canvas.getBoundingClientRect();
+      const geo = this.scene.partSeatHalf(this.session.state.partId);
+      if (!geo) return;
+      const pz = this.scene.pointerXZAtPlane(e.clientX - rect.left, e.clientY - rect.top, geo.seat.y);
+      if (pz) this.placeCandidate(this.session.state.partId, pz.x + this._grabX, pz.z + this._grabZ);
+    });
+    canvas.addEventListener('pointerup', (e) => {
+      if (this.session.dragging) this.endDrag(this.session.state.partId);
+      if (canvas.hasPointerCapture?.(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    });
+    canvas.addEventListener('pointercancel', () => {
+      if (this.session.dragging) {
+        this.session.abort();
+        this.scene.setCameraControlEnabled(true);
+        this.onStateChange();
+      }
+    });
+  }
+
+  get dragState(): DragLiveState {
+    return this.session.state;
+  }
+
+  /** manual 模式且当前装配步下一步即 partId（未装配）→ 该件可拖 */
+  private isNextPending(partId: string): boolean {
+    if (this.assembly.mode !== 'manual') return false;
+    const next = this.assembly.bom?.steps[this.assembly.currentStepSeq];
+    if (!next || next.partId !== partId) return false;
+    return !this.assembly.assembledPartIds.includes(partId);
+  }
+
+  private canDrag(partId: string): boolean {
+    if (partId === '') return false;
+    const part = this.assembly.bom?.parts.find((p) => p.id === partId);
+    if (!part || part.isMovable === false) return false;
+    if (this.assembly.assembledPartIds.includes(partId)) return false;
+    return this.isNextPending(partId);
+  }
+
+  /** 把该件 mesh 移到 seat 平面给定 XZ（保持 planeY=seat.y），并做实时裁决/高亮 */
+  private placeCandidate(partId: string, x: number, z: number): void {
+    const geo = this.scene.partSeatHalf(partId);
+    if (!geo) return;
+    const center: Vec3 = [x, geo.seat.y, z];
+    this.cursor = center;
+    this.scene.setMeshWorldCenter(partId, center);
+    const st = this.session.moveTo(center);
+    this.scene.setMeshHighlight(partId, st.blocked ? 'blocked' : 'hover');
+  }
+
+  /** 落位决策回调（传给 ManualDragSession.finish）：干涉或非下一序 → 驳回，否则贴合。 */
+  private decideLand(partId: string, candidate: Vec3): boolean {
+    const geo = this.scene.partSeatHalf(partId);
+    if (!geo) return false;
+    if (this.clearance.queryInteractive({ partId, obb: boxObbAt(candidate, geo.half) }).length > 0) {
+      return false; // 实时干涉 → 不落位
+    }
+    return this.assembly.assemble(partId); // 严格步骤序（canDrag 已保证是下一序）
+  }
+
+  pick(clientX: number, clientY: number): PickResult {
+    const id = this.scene.pickPartId(clientX, clientY);
+    return { partId: id, ok: id !== '' };
+  }
+
+  /** 点选散落件（manual）→ 进入拖拽：件降到 seat 高度（XZ 保持 scatter），相机轨道挂起。 */
   beginDrag(partId: string): boolean {
-    this.picked = { partId, ok: true };
+    if (!this.canDrag(partId)) {
+      const reason: DragLiveState['reason'] = 'not-movable';
+      this.session.state = { dragging: false, partId, blocked: false, hitPartId: '', nearSeat: false, canLand: false, reason };
+      return false;
+    }
+    const geo = this.scene.partSeatHalf(partId);
+    if (!geo) return false;
+    const cur = this.scene.meshCenterOf(partId);
+    const start: Vec3 = [cur ? cur[0] : geo.seat.x, geo.seat.y, cur ? cur[2] : geo.seat.z];
+    this.scene.setMeshWorldCenter(partId, start);
+    this.session.begin(
+      { partId, seat: [geo.seat.x, geo.seat.y, geo.seat.z], half: geo.half },
+      (m) => this.clearance.queryInteractive(m),
+      (candidate) => this.decideLand(partId, candidate),
+    );
+    this.cursor = start;
+    this.scene.setCameraControlEnabled(false);
+    this.scene.setMeshHighlight(partId, 'hover');
+    this.scene.requestRender();
     return true;
   }
-  dragTo(): void {
-    /* 0.3.x：真拖拽由交互系统结算 */
+
+  dragTo(partId: string, delta: Vec3): void {
+    if (!this.session.dragging || this.session.state.partId !== partId) return;
+    const next: Vec3 = [this.cursor[0] + delta[0], this.cursor[1], this.cursor[2] + delta[2]];
+    this.placeCandidate(partId, next[0], next[2]);
+    this.scene.requestRender();
   }
+
   endDrag(partId: string): { ok: boolean; hits: import('@assemble/domain').InterferenceHit[] } {
-    return { ok: true, hits: [] };
+    const active = this.session.dragging && this.session.state.partId === partId;
+    const geo = active ? this.scene.partSeatHalf(partId) : null;
+    const hits = !geo
+      ? []
+      : this.clearance.queryInteractive({ partId, obb: boxObbAt(this.cursor, geo.half) });
+    this.scene.setCameraControlEnabled(true);
+    if (!active) return { ok: false, hits };
+    const landed = this.session.finish();
+    this.scene.setMeshHighlight(partId, 'none');
+    // 无论贴合或回 scatter，均让引擎同步一次分态摆位 + clearance 集（land→青贴seat；否则回散落）
+    this.onStateChange();
+    this.scene.requestRender();
+    return { ok: landed, hits };
   }
 }
 
@@ -668,8 +919,9 @@ export class BabylonSimEngine implements SimEngine {
     this.clearance = new NoopClearance();
     this.scene = new BabylonScene();
     this.assets = new BabylonAssets(this.scene);
-    this.interaction = new BabylonInteraction();
     this.assembly = new NoopAssembler(this.clearance);
+    // S3c · 手动拖拽真拾取/落位交互，注入引擎分态同步（land→青贴seat / snap→回散落 + clearance 重登记）
+    this.interaction = new BabylonInteraction(this.scene, this.assembly as NoopAssembler, this.clearance as NoopClearance, () => this.syncAssemblyState());
   }
 
   /** S2 · 读取当前动画播放态（供 HUD/断言） */
@@ -763,6 +1015,8 @@ export class BabylonSimEngine implements SimEngine {
     if (opts.line) this._activeLineId = opts.line.id;
     if (opts.container) {
       const mounted = this.scene.mount(opts.container);
+      // S3c · 视口就绪后绑定 pointer 拖拽监听（canvas 已创建）
+      if (mounted) (this.interaction as BabylonInteraction).wirePointer();
       // 视口渲染循环由 Scene 管理；fps 通过帧计数近似（取整数）
       if (mounted && opts.line) {
         void this.assets.loadLine(opts.line).then(() => {
@@ -804,8 +1058,18 @@ export class BabylonSimEngine implements SimEngine {
     if (!this._animator?.playing) {
       this._animator?.syncCursor(this.assembly.currentStepSeq);
     }
+    // S3b · 把"已装配集合"的 seat OBB 对齐进 clearance 静态集，使拖拽实时干涉
+    //       能看到当前已贴合件。被拖拽的散落件不在 assembledPartIds → 天然排除，
+    //       不会把自己误判为障碍。
+    this._syncClearanceSeated();
     if (!this.scene.isMounted) return this.scene.stateSnapshot;
     return this.scene.setAssemblyState(new Set(this.assembly.assembledPartIds));
+  }
+
+  /** S3b · 注册"已装配零件在 seat 处"的世界 OBB 为 clearance 静态集（覆盖式） */
+  private _syncClearanceSeated(): void {
+    const seated = new Set(this.assembly.assembledPartIds);
+    this.clearance.registerAssembled(this.scene.seatObbsOf(seated));
   }
 
   health(): EngineHealth {

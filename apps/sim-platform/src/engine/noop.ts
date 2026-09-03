@@ -22,6 +22,7 @@ import type {
   CameraPose,
   CameraViewId,
   ClearanceController,
+  DragLiveState,
   EngineHealth,
   InteractionManager,
   ModeSwitchResult,
@@ -233,23 +234,63 @@ class NoopAssets implements AssetManager {
 }
 
 class NoopInteraction implements InteractionManager {
-  /** 拖拽中零件的最近位置（noop 内存态，供测试注入命中行为可覆盖） */
+  /** 拖拽中零件的最近命中（noop 无真实射线，仅供记录/测试覆盖） */
   private picked: PickResult = { partId: '', ok: false };
+
+  /** Noop 装配状态机引用（用于镜像"下一步序可拖"门槛与落位裁决） */
+  private assembler: NoopAssembler | null = null;
+
+  /** 会话实时状态（noop 无几何，不搬网格；如实反映 ordering 门槛与会话生命周期） */
+  private _drag: DragLiveState = {
+    dragging: false,
+    partId: '',
+    blocked: false,
+    hitPartId: '',
+    nearSeat: false,
+    canLand: false,
+    reason: 'idle',
+  };
+
+  /** 由宿主（NoopSimEngine）注入装配状态机，供拖拽门槛/落位镜像 */
+  bind(assembler: NoopAssembler): void {
+    this.assembler = assembler;
+  }
 
   pick(_clientX: number, _clientY: number): PickResult {
     // 未接真实射线：返回上一次记录（无命中表则 miss）
     return this.picked;
   }
+
+  /** 仅"下一步待装配"的散落件可拖（镜像 babylon 真拾取后的门槛） */
   beginDrag(partId: string): boolean {
-    this.picked = { partId, ok: true };
+    const as = this.assembler;
+    if (!as) return false;
+    const next = as.bom?.steps[as.currentStepSeq];
+    const draggable = !!next && next.partId === partId && !as.assembledPartIds.includes(partId);
+    this.picked = { partId, ok: draggable };
+    if (!draggable) {
+      this._drag = { dragging: false, partId, blocked: false, hitPartId: '', nearSeat: false, canLand: false, reason: 'not-movable' };
+      return false;
+    }
+    this._drag = { dragging: true, partId, blocked: false, hitPartId: '', nearSeat: true, canLand: true, reason: 'dragging' };
     return true;
   }
+
   dragTo(_partId: string, _delta: readonly [number, number, number]): void {
-    /* noop：位置由真引擎计算 */
+    // noop：位置由真引擎（babylon）计算；此处仅保持会话状态
   }
+
   endDrag(partId: string): { ok: boolean; hits: InterferenceHit[] } {
-    // 结束拖拽无算法归属（真引擎由交互系统结算）；本替身默认放行
-    return { ok: true, hits: [] };
+    const as = this.assembler;
+    // 仅当确实是下一步序件 → 镜像落位成功（几何干涉判定归 babylon 真渲染）
+    const next = as?.bom?.steps[as.currentStepSeq];
+    const ok = !!next && next.partId === partId;
+    this._drag = { dragging: false, partId: '', blocked: false, hitPartId: '', nearSeat: false, canLand: false, reason: ok ? 'landed' : 'snapped-back' };
+    return { ok, hits: [] };
+  }
+
+  get dragState(): DragLiveState {
+    return this._drag;
   }
 }
 
@@ -273,8 +314,11 @@ export class NoopSimEngine implements SimEngine {
     this.clearance = new NoopClearance();
     this.scene = new NoopScene();
     this.assets = new NoopAssets();
-    this.interaction = new NoopInteraction();
     this.assembly = new NoopAssembler(this.clearance);
+    // 手动拖拽的 ordering 门槛镜像需引用装配状态机
+    const interaction = new NoopInteraction();
+    interaction.bind(this.assembly as NoopAssembler);
+    this.interaction = interaction;
   }
 
   /** S2 门面契约 · 动画播放态（Noop 无帧循环，如实反映状态机 + 无真实播放） */

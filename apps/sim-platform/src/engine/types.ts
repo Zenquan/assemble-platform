@@ -119,16 +119,45 @@ export interface AssetManager {
   readonly loadedPartCount: number;
 }
 
+/** 手动拖拽会话的实时状态（供 HUD / 无 WebGL 断言读取，引擎无关值类型） */
+export interface DragLiveState {
+  /** 是否正处于拖拽会话中 */
+  dragging: boolean;
+  /** 当前被拖拽的零件 id（未拖拽为空串） */
+  partId: string;
+  /** 当前候选是否与已装配件干涉（命中→拦截/变红） */
+  blocked: boolean;
+  /** 命中并拦截的已装配件 id（供提示；无命中为空串） */
+  hitPartId: string;
+  /** XZ 是否已贴近该件 seat（吸附半径内） */
+  nearSeat: boolean;
+  /** 综合结算：可落位 = 贴近 seat 且无干涉 */
+  canLand: boolean;
+  /** 会话阶段/原因（供 UI 文案与测试断言） */
+  reason:
+    | 'idle' // 未拖拽
+    | 'not-movable' // 目标不可拖（非散落待装件 / 非下一步件）
+    | 'dragging' // 拖拽进行中
+    | 'blocked' // 拖拽中且当前干涉（拦截）
+    | 'landed' // 本次成功贴合
+    | 'snapped-back'; // 本次未能落位，回散落位
+}
+
 /** 交互拾取/拖拽（手动装配入口） */
 export interface InteractionManager {
   /** 屏幕坐标拾取零件；返回命中零件（noop 未接真实射线时按命中表 mock 返回） */
   pick(clientX: number, clientY: number): PickResult;
-  /** 开始拖拽某零件（进入手动自由移动） */
+  /** 开始拖拽某零件（进入手动自由移动）；仅散落待装且为下一步序的件可拖 */
   beginDrag(partId: string): boolean;
-  /** 拖拽过程中更新零件位置（delta，mm） */
+  /** 拖拽过程中更新零件位置（delta，mm 世界位移）；内部逐帧做实时干涉判定并更新 dragState */
   dragTo(partId: string, delta: Vec3): void;
-  /** 结束拖拽，请求实时干涉校验，返回是否允许落位 */
+  /**
+   * 结束拖拽，请求实时干涉校验并结算：可落位（贴近 seat 且无干涉）→贴合，
+   * 否则回 scatter。返回是否允许落位及其命中。
+   */
   endDrag(partId: string): { ok: boolean; hits: InterferenceHit[] };
+  /** 读取当前手动拖拽会话的实时状态（供 HUD/断言；引擎内部随会话更新） */
+  readonly dragState: DragLiveState;
 }
 
 /* ------------------------------------------------------------------ */

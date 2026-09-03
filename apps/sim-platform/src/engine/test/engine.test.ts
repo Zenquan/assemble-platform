@@ -221,3 +221,49 @@ describe('门面装配动画（S2 auto/replay 播放态契约）', () => {
     engine.dispose();
   });
 });
+
+describe('门面手动拖拽（S3 manual drag · Noop 镜像 contract）', () => {
+  function loadedManual() {
+    const engine = createSimEngine(); // noop
+    engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' } });
+    engine.assembly.load(makeBom());
+    engine.assembly.assemble('base'); // step0 → step1，下一待装 = shaft_1
+    return engine;
+  }
+
+  it('beginDrag 仅允许"下一步待装"散落件；装配中件/非下一序被拒', () => {
+    const engine = loadedManual();
+    expect(engine.assembly.currentStepSeq).toBe(1);
+    // 下一步 shaft_1 可拖
+    expect(engine.interaction.beginDrag('shaft_1')).toBe(true);
+    expect(engine.interaction.dragState.dragging).toBe(true);
+    expect(engine.interaction.dragState.partId).toBe('shaft_1');
+    expect(engine.interaction.dragState.reason).toBe('dragging');
+    // 非下一序（shaft_2）被拒
+    expect(engine.interaction.beginDrag('shaft_2')).toBe(false);
+    expect(engine.interaction.dragState.reason).toBe('not-movable');
+    // 已装配件（base）被拒
+    expect(engine.interaction.beginDrag('base')).toBe(false);
+    expect(engine.interaction.dragState.reason).toBe('not-movable');
+    engine.dispose();
+  });
+
+  it('endDrag 对下一步件返回 ok（镜像贴合）；dragState 收束', () => {
+    const engine = loadedManual();
+    engine.interaction.beginDrag('shaft_1');
+    expect(engine.interaction.dragState.reason).toBe('dragging');
+    const r = engine.interaction.endDrag('shaft_1');
+    expect(r.ok).toBe(true);
+    expect(engine.interaction.dragState.dragging).toBe(false);
+    expect(engine.interaction.dragState.reason).toBe('landed');
+    engine.dispose();
+  });
+
+  it('dragState 缺省为 idle（未拖拽）', () => {
+    const engine = createSimEngine();
+    engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' } });
+    expect(engine.interaction.dragState.reason).toBe('idle');
+    expect(engine.interaction.dragState.dragging).toBe(false);
+    engine.dispose();
+  });
+});
