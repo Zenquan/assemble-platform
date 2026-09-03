@@ -157,4 +157,35 @@ M1 收尾 · 单条产线 Demo —— **后端服务层跑通 + 前端 SimEngine
   - 播完全部 `已贴合 12 / 12`（截图 `docs/s2-all-seated.png`）—— 全部青盒严丝合缝停 seat，验证 auto 推进到全贴合。
 - 验收对照：散落→贴合逐件平滑插值（easeInOutCubic + `durationSeconds` 节奏）；seek/undo 走跳变（无插帧）；纯逻辑驱动器 5/5 单测锁定；Babylon 真渲染经 3 截图证明集合与渲染位置一致。
 
+### Added（0.3.0 S3 切片推进）
+
+- **S3 手动装配拖拽（FEAT-20260903-003 第三切片 · 方案A：射线拾取 + 平面拖拽）**：manual 模式下点选散落件（琥珀）→ 锁定水平拖拽平面（过该件 seat 高度）→ 随指针/程序化 dragTo 平移 → 逐帧 clearance.queryInteractive 判定 → 命中则变红拦截、贴近 seat则可贴合、落位或回散落。架构红线延续 S1/S2：动画进度=纯数据 / 渲染是被动摆位执行者 / 落位裁决走引擎门面 syncAssemblyState。
+  - `engine/drag.ts`（新）：纯逻辑裁决核心
+    - `boxObbAt / candidateCenterAt / adjudicateLand`：候选中心 OBB 与已装配静态集的实时裁决 + XZ 吸附半径判定
+    - `ManualDragSession`：有状态拖拽会话（dragging/blocked/nearSeat/canLand/reason），用注入的 `queryInteractive` 与 `landDecision` 解耦真实几何；引擎无关、可被 vitest 锁定
+    - `rayPlaneYIntersect`：世界射线与水平面（y=planeY）求交，供拖拽平面把屏幕坐标→世界 XZ
+  - `engine/types.ts`：`InteractionManager` 增 `dragState: DragLiveState`（d 产品ing / / partId / blocked / hitPartId / nearSeat / canLand / reason）只读会话态；HUD/无 WebGL 断言均按此口径消费
+  - `engine/noop.ts`：`NoopInteraction` 镜像 ordering 门槛（仅"下一步序"散落件可拖）+ `dragState` 状态机，Noop 后端亦满足门面契约
+  - `engine/babylon.ts`：
+    - `BabylonScene` 增 S3 渲染原语：`partSeatHalf` / `meshCenterOf` / `setMeshWorldCenter` / `setMeshHighlight`（hover 蓝 / blocked 红）/ `pickPartId`（scene.pick → part-盒体）/ `pointerXZAtPlane`（createPickingRay + 平面求交）/ `setCameraControlEnabled`（拖拽期间 detachControl 挂起 ArcRotateCamera，endDrag 后重挂）
+    - `BabylonInteraction` 真驱动 ManualDragSession：beginDrag 把件从 scatter 降到 seat 高度（XZ 不变）挂起相机轨道；dragTo 累计 XZ、逐帧调 `clearance.queryInteractive` 判定 blocked；endDrag 落位或回散落，复相机并经 `onStateChange` 回调触发引擎 `syncAssemblyState`（含 S3b clearance 重登记）
+    - canvas pointerdown/move/up/cancel 真鼠标拖拽监听（pointerCapture 防脱出）+ grab offset 防止件跳到指针处
+    - 引擎 init `scene.mount` 后调 `interaction.wirePointer()` 装监听（constructor 时 canvas 未就绪，故延后挂）
+  - `views/WorkbenchView.vue`：
+    - 轮询读 `interaction.dragState` 映射 HUD 文案（拖拽中 / 可贴合 / 干涉拦截变红）
+    - 标题/副标/左右栏/step 提示文案改 S3 手动拖拽语义
+    - `window.__sim = eng` 暴露引擎实例供浏览器自动化读几何/驱动拖拽（无害，浏览器态生效）
+  - `engine/test/drag.test.ts`（新，13 例）：boxObbAt 构造 / candidateCenterAt 换算 / rayPlaneYIntersect 平行反向 / adjudicate 三态裁决（贴近+清 / 不贴近 / 贴近但干涉，NoopClearance 真算法）/ 吸附半径默认与显式 / `ManualDragSession` 4 例（begin/moveTo blocked/finish landed+snapped-back/abort）
+  - `engine/test/engine.test.ts`：S3 门面增 3 例（beginDrag 门槛仅下一步序 / endDrag 收束 dragState / dragState 默认 idle）
+
+### Verified（0.3.0 S3）
+
+- vue-tsc 0 错；sim-platform vitest **46/46 全绿**（placement 7 + animator 5 + drag 13 + engine 17 + useLineCatalog 4）
+- 浏览器 E2E（playwright chromium headless + swiftshader + 反节流参数）：
+  - 初始化 + seekTo(1)（base 已贴合青）→ beginDrag(part1) → 拖到与 base 相叠（候选=base seat 中心）→ 变红、HUD chip "S3 · 干涉拦截 · 无法贴合（命中 line-sorting-01-001）"、dragState.blocked=true（截图 `docs/s3-drag-blocked.png`）
+  - 拖回 part1 自己的 seat（候选=seat1，干净）→ 蓝（dragTo 起点=blocked 候选，delta=seat1-seat0）→ dragState.blocked=false / canLand=true
+  - endDrag → ok=true / reason='landed' / 已贴合 2/12（截图 `docs/s3-drag-landed.png`）—— base + part1 两件相邻蓝盒贴合；剩余 10 件琥珀散落
+  - begin 起始态（截图 `docs/s3-drag-begin.png`）：HUD "拖拽 line-sorting-01-001 · 可贴合"
+- 验收对照：干涉→变红拦截、贴近 seat 无干涉可贴合、严格步骤序（手动 assemble 仅接受下一步序件）、clearance 静态集与渲染两态集合一致（syncAssemblyState 单点维护）
+
 <!-- 占位：本版已完成 0.2.0 出口闭合与文档归档；后续 0.2.x 增量（一键起脚本等）将由此段起。 -->

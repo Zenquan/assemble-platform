@@ -358,3 +358,63 @@ S2 E2E 视觉冒烟在 headless chromium 下首跑「飞行到中途 / 全贴合
 - Related Files: apps/sim-platform/src/views/WorkbenchView.vue, /tmp/shot-s2-anim.mjs
 - Tags: e2e, headless, rAF, polling, scene-write
 - Pattern-Key: e2e.headless_raf_throttle
+
+---
+
+## [LRN-20260903-011] best_practice
+
+**Logged**: 2026-09-03T13:45:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: sim-platform / engine
+
+### Summary
+S3 手动拖拽把 S1/S2「纯逻辑 + 渲染被动」红线延到**交互层**：裁决（`drag.ts` ManualDragSession）与几何/相机完全解耦，渲染只执行裁决结果；业务/门面不直引 Babylon。用户拍板方案 = 射线拾取 + 水平平面拖拽 + 逐帧 queryInteractive，clearance 静态集在门面 `syncAssemblyState` 单点维护。
+
+### Details
+- `drag.ts`（纯逻辑）：`boxObbAt/candidateCenterAt/adjudicateLand` 用 `obbFromCenterHalfExtents` 把候选 XZ → OBB，与已装配静态集做实时 SAT（经注入 `queryInteractive`）；`rayPlaneYIntersect` 屏幕射线→世界 XZ。`ManualDragSession` 有状态会话，`begin/moveTo/finish/abort` 各吐 `DragLiveState {dragging,blocked,hitPartId,nearSeat,canLand,reason}`，用注入的 `queryInteractive` 与 `landDecision` 解耦真实几何——纯逻辑引擎无关，13 例 vitest 无 WebGL 锁定。
+- `types.ts`：`InteractionManager` 只暴露**只读** `dragState: DragLiveState`（HUD/单测/门面同口径，防直接改内部态）。
+- `noop.ts`：`NoopInteraction` 镜像 ordering 门槛（仅下一步序散落件可拖，否则 `reason='not-movable'`），Noop 后端同样满足门面契约（3 例门面镜像测试）。
+- `babylon.ts` `BabylonInteraction`：**真 pointer 层**负责 scene 拾取/平面求交/高亮/相机挂起 + canvas 监听，但**不裁决**——只把候选喂给 session.moveTo。渲染原语：`pickPartId`(scene.pick)、`pointerXZAtPlane`(createPickingRay)、`setMeshHighlight`、`setCameraControlEnabled`(detachControl 挂起相机)。落位最终经 `landDecision→assembly.assemble` + `onStateChange→syncAssemblyState`。
+- **相机 vs 拖拽分流**：beginDrag 时 detach ArcRotateCamera、endDrag 重 attach；grab offset + pointerCapture 防"件跳到指针"、防指针脱出 canvas。
+- **S3b clearance 静态集 = 门面单点**：`syncAssemblyState` 内把"已装配 seat 的 OBB"覆盖式 `registerAssembled` 进 clearance；被拖的散落件天然不在 assembled 集合 → 不会自干涉误判。S1/S2/S3 复用同一同步点。
+
+### Suggested Action
+- 交互类切片继续走「输入→纯逻辑校验（可注入真实几何）→渲染只消费裁决结果」；门面只暴露只读状态，绝不让 UI 直接改内部态。
+- 真几何（clearance/BVH/OBB）永远经**注入**进纯逻辑（构造时 queryInteractive），换取 vitest 零 WebGL 可测。
+- 拖拽交互的相机/拾取/高亮三件事拆成独立渲染原语，互不耦合，才好在 Noop 下镜像测试。
+
+### Metadata
+- Source: insight
+- Related Files: apps/sim-platform/src/engine/{drag,types,noop,babylon}.ts, apps/sim-platform/src/views/WorkbenchView.vue, apps/sim-platform/src/engine/test/drag.test.ts
+- Tags: s3, manual-drag, pure-adjudicate, inject-geometry, readonly-state, camera-vs-drag
+- Pattern-Key: s3.manual_drag_pure_adjudicate
+
+---
+
+## [LRN-20260903-012] correction
+
+**Logged**: 2026-09-03T13:50:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: sim-platform / babylon-api / e2e
+
+### Summary
+S3 踩到三处 Babylon 9.23 与工具链的具体 API 差异，以及一条 E2E 可行性判断上的自我纠错——(a) `detachControl()` 无参；(b) `createPickingRay` 第三参要 `Nullable<Matrix>`（不接受 `IdentityReadOnly` 的 DeepImmutableObject）；(c) 断言书写反了 NoopClearance 的 firstPartId；(d) 一度误以为 dense 布局 seat 重叠致手动恒失败，探针实测 0 冲突。
+
+### Details
+- (a) Babylon 9：`ArcRotateCamera.detachControl()` **不接受参数**（TS2554 expected 0），旧版 `(canvas)` 写法报错；`attachControl(canvas, true)` 可带参数。vue-tsc 直接锁死，无需运行时排查。
+- (b) `scene.createPickingRay(x, y, world, camera)` 第三参形参类型 `Nullable<Matrix>`，`Matrix.IdentityReadOnly` 是 `DeepImmutableObject<Matrix>` **不可赋**——须传一份 `Matrix.Identity()` 实例（模块内缓存 `_idMatrix` 复用）。
+- (c) `NoopClearance.queryInteractive` 里 `firstPartId = moving.partId < otherId ? moving : other`（字典序小者），断言应检查两 id 都在结果集，而不是假设哪一个是 first。
+- (d) 判断 dense sorting 布局「1.6 占地 / 2.2 中心距」时一度误算成重叠 0.6 → 担心手动落位恒失败；写 `/tmp/probe_seats.mjs` 探针实测**顺序贴合 0 冲突**（间隙 0.6）。结论：顺序落位恒干净，干涉只能由"把件拖到已装配件上"触发——设计成立。**别用脑内几何估算代替可执行的探针。**
+
+### Suggested Action
+- 引 Babylon 相机/射线 API 先查版本签名（9.x `detachControl` 无参、Matrix 传实例），vue-tsc strict 会把 DeepImmutableObject 赋 Nullable 报出来——趁早信编译器。
+- 写 NoopClearance/假实现类断言前先读源码确定 id 排序语义，别拍脑袋。
+- 凡涉"布局/几何是否冲突/重叠"的判断一律跑探针脚本验证，几何直觉在高密度布局下不可靠。
+
+### Metadata
+- Source: error
+- Related Files: apps/sim-platform/src/engine/babylon.ts, apps/sim-platform/src/engine/noop.ts, apps/sim-platform/src/engine/test/drag.test.ts, /tmp/probe_seats.mjs, /tmp/shot-s3-drag.mjs
+- Tags: babylon-api, detachControl, picking-ray, firstPartId, probe-geometry
+- Pattern-Key: s3.babylon_api_and_probe

@@ -50,6 +50,8 @@ onMounted(async () => {
   const eng = createSimEngine();
   engine.value = eng;
   backend.value = eng.backend;
+  // 调试/E2E 钩子：暴露引擎实例供浏览器自动化读取几何/驱动拖拽（无害，浏览器态生效）
+  (window as unknown as { __sim?: SimEngine }).__sim = eng;
   const health = eng.init({ container: canvasHost.value, line: line.value ?? undefined });
   engineState.value = health.ok
     ? (eng.backend === 'babylon' ? '引擎实时' : '引擎占位(Noop)')
