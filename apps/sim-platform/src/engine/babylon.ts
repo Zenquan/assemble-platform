@@ -23,14 +23,18 @@ import {
   ArcRotateCamera,
   Color3,
   Color4,
+  DirectionalLight,
   Engine,
   HemisphericLight,
   Matrix,
   MeshBuilder,
   Scene,
+  SceneLoader,
   StandardMaterial,
+  TransformNode,
   Vector3,
 } from '@babylonjs/core';
+import '@babylonjs/loaders/glTF'; // side-effect: register glTF loader plugin (Babylon 9 split)
 
 import type { AssemblyBom, OBB, ProductionLine, Vec3 } from '@assemble/domain';
 import { obbFromCenterHalfExtents } from '@assemble/clearance-core';
@@ -148,6 +152,10 @@ class BabylonScene implements SceneManager {
   private _placements: PartPlacement[] = [];
   /** S3c · 射线求交用单位矩阵（createPickingRay 的 world 参数） */
   private _idMatrix = Matrix.Identity();
+  /** 0.4.x · 工位设备布景层根节点（外观 shell，不参与装配/干涉） */
+  private _devicesRoot: TransformNode | null = null;
+  /** 0.4.x · 已加载设备 id 集合（dispose 时释放 mesh） */
+  private _loadedDeviceIds: string[] = [];
   /** S2 · 最近一次已知的 assembled 集合快照（供飞行覆盖退出时回落 S1 seat/scatter 判定） */
   private _assembledIds: ReadonlySet<string> = new Set();
   /** S2 · 每帧驱动回调（render loop 每帧先调再 render；由引擎注册动画推进） */
@@ -230,6 +238,17 @@ class BabylonScene implements SceneManager {
       new HemisphericLight('hemi', new Vector3(0, 1, 0), this.scene);
       const hemi = this.scene.getLightByName('hemi');
       if (hemi && 'intensity' in hemi) hemi.intensity = 0.85;
+      // 0.4.x · 设备 PBR 金属需要强方向光 + 一定环境填光才可见（glb 大量 metal* 材质
+      // 在无 IBL/环境贴图时接近全黑）。三方向光照 + 半球填光，强度分别调高，让
+      // 设备外壳高光区域/暗部都能在深色背景里分辨。
+      const dirA = new DirectionalLight('dirA', new Vector3(-0.5, -1, -0.6), this.scene);
+      dirA.intensity = 1.4;
+      dirA.diffuse = new Color3(1.0, 0.96, 0.86); // 暖白主光
+      const dirB = new DirectionalLight('dirB', new Vector3(0.7, -0.6, 0.5), this.scene);
+      dirB.intensity = 0.7;
+      dirB.diffuse = new Color3(0.7, 0.85, 1.0); // 冷蓝辅光（另一侧补形）
+      // 提亮半球光强度，强化暗部填充（让金属背光面有底色）
+      if (hemi && 'intensity' in hemi) hemi.intensity = 1.1;
       this._buildFloorGrid();
       this._setupCamera();
       this._startRenderLoop();
@@ -260,6 +279,8 @@ class BabylonScene implements SceneManager {
     this.scatterPos.clear();
     this.halfSize.clear();
     this._placements = [];
+    this._devicesRoot = null;
+    this._loadedDeviceIds = [];
     this.onFrame = null;
   }
 
@@ -376,6 +397,168 @@ class BabylonScene implements SceneManager {
         this.engine.stopRenderLoop();
       }
     }
+  }
+
+  /**
+   * 0.4.x · 加载工位设备布景层。**只做外观 shell**：用 SceneLoader.ImportMeshAsync
+   * 把每件 .glb 包到一个 TransformNode 应用 position/rotation/scale，**不参与**
+   * 装配/干涉/贴合算法（设备 mesh 无 `metadata.partId` 标记，不会被 syncAssemblyState
+   * 当作零件处理）。
+   * 重复调用：先清空旧设备根节点（支持产线切换重载）。
+   * 错误：单件加载失败不阻塞后续，最终返成功列表。
+   */
+  async loadDevices(layout: ReadonlyArray<{
+    deviceId: string;
+    assetUrl: string;
+    position: readonly [number, number, number];
+    rotationYDeg?: number;
+    scale?: number;
+  }>): Promise<readonly string[]> {
+    if (!this.scene) return [];
+    // 清旧根节点
+    if (this._devicesRoot) {
+      this._devicesRoot.dispose(false, true);
+      this._devicesRoot = null;
+      this._loadedDeviceIds = [];
+    }
+    this._devicesRoot = new TransformNode('devices-root', this.scene);
+    const ok: string[] = [];
+    for (const item of layout) {
+      try {
+        const container = await SceneLoader.LoadAssetContainerAsync('', item.assetUrl, this.scene);
+        const result = { meshes: container.meshes, particleSystems: container.particleSystems,
+          skeletons: container.skeletons, animationGroups: container.animationGroups };
+        // 包到一个子根节点，统一变换
+        const child = new TransformNode(`device-${item.deviceId}`, this.scene);
+        child.parent = this._devicesRoot;
+        // 0.4.x 修复：Babylon 9 的 glTF 加载器会给 container 自动加一个 __root__ TransformNode
+        // 携带 Z 轴负缩放（右手→左手系约定）。__root__ 的负缩放若不被清理，会让所有
+        // 真实 mesh 的 worldMatrix 在 GPU 端被裁掉/法线反向，设备表现为"看不见"。
+        // 修复：找到并强制把 __root__ 的 transform 重置为 identity；mesh 仍按其本地几何渲染。
+        const rootNode = container.rootNodes?.[0];
+        if (rootNode && rootNode.name === '__root__') {
+          rootNode.position.set(0, 0, 0);
+          rootNode.rotation.set(0, 0, 0);
+          rootNode.scaling.set(1, 1, 1);
+          rootNode.parent = child; // 挂到 child 下，绕开独立 transform 影响
+        }
+        for (const mesh of result.meshes) {
+          mesh.parent = child;
+          mesh.isPickable = false; // 设备不可拾取，避免干扰拖拽拾取
+        }
+        // 0.4.x · PBR 金属（metal_dark/metal_mid/aluminum）无 IBL 时接近全黑，
+        // 用 StandardMaterial 覆写 albedo + ambient，确保任意光照下可见且保留色彩。
+        // 解析原始材质颜色（取 PBR.albedoColor 或 material 名称），落到设备 id 配色。
+        const shellMat = this._shellMaterialForDevice(item.deviceId);
+        for (const mesh of result.meshes) {
+          if (mesh.getTotalVertices() === 0) continue; // __root__ 等空节点跳过
+          mesh.material = shellMat;
+          mesh.refreshBoundingInfo(); // 父级变换变更后强制刷新本地包围盒
+        }
+        // 包围盒居中：让 glb 原点已经在底面，但仍应用 transform
+        child.position = new Vector3(item.position[0], item.position[1], item.position[2]);
+        if (item.rotationYDeg !== undefined) {
+          child.rotation = new Vector3(0, (item.rotationYDeg * Math.PI) / 180, 0);
+        }
+        if (item.scale !== undefined) {
+          child.scaling = new Vector3(item.scale, item.scale, item.scale);
+        }
+        // 强制刷新 worldMatrix 与世界包围盒：Babylon 9 默认在下一帧才计算，
+        // 此处 await 链路需立即可见（否则 _frameWithDevices 用 0 半径取景、视口空白）。
+        child.computeWorldMatrix(true);
+        for (const mesh of result.meshes) {
+          if (mesh.getTotalVertices() === 0) continue;
+          mesh.computeWorldMatrix(true);
+        }
+        this.scene?.render(); // 立即渲一帧（不阻塞 await）
+      } catch (e) {
+        // 单件失败不阻断其它（网络/URL/格式）
+        // eslint-disable-next-line no-console
+        console.warn('[devices] load failed', item.deviceId, item.assetUrl, e);
+      }
+    }
+    // 设备就位后，把「零件 ∪ 设备」联合包围盒重新取景，确保设备也入框
+    this._frameWithDevices();
+    return ok;
+  }
+
+  /**
+   * 0.4.x · 把「零件盒体 ∪ 设备布景」的联合包围盒重新取景。
+   * 相机 target = 联合质心，radius = 联合包围半径 × 系数（兜底 >= 14）。
+   * 不侵入装配/干涉；仅视觉取景，使设备（产线布景）与装配体同框。
+   */
+  private _frameWithDevices(): void {
+    if (!this.camera || !this.scene) return;
+    // 采样点：零件盒体中心 + 设备 mesh 世界包围盒中心
+    const cxList: number[] = [];
+    const cyList: number[] = [];
+    const czList: number[] = [];
+    const rList: number[] = [];
+
+    // 1) 零件盒体（当前实际位置）
+    for (const mesh of this.meshes.values()) {
+      cxList.push(mesh.position.x);
+      cyList.push(mesh.position.y);
+      czList.push(mesh.position.z);
+      rList.push(Math.max(0.8, mesh.scaling.x / 2 || 0.8));
+    }
+    // 2) 设备 mesh（世界系包围盒中心 + 半对角半径）
+    if (this._devicesRoot) {
+      for (const mesh of this._devicesRoot.getChildMeshes()) {
+        const bb = mesh.getBoundingInfo().boundingBox;
+        const minW = bb.minimumWorld;
+        const maxW = bb.maximumWorld;
+        const c = minW.add(maxW).scale(0.5);
+        cxList.push(c.x);
+        cyList.push(c.y);
+        czList.push(c.z);
+        rList.push(Vector3.Distance(minW, maxW) * 0.5);
+      }
+    }
+    if (cxList.length === 0) return;
+
+    let cx = 0, cy = 0, cz = 0;
+    for (let i = 0; i < cxList.length; i++) {
+      cx += cxList[i]!;
+      cy += cyList[i]!;
+      cz += czList[i]!;
+    }
+    cx /= cxList.length;
+    cy /= cyList.length;
+    cz /= czList.length;
+
+    let maxR = 0;
+    for (let i = 0; i < cxList.length; i++) {
+      const r = Math.hypot(cxList[i]! - cx, cyList[i]! - cy, czList[i]! - cz) + rList[i]!;
+      if (r > maxR) maxR = r;
+    }
+    this.camera.setTarget(new Vector3(cx, cy, cz));
+    this.camera.radius = Math.max(14, maxR * 2.6);
+  }
+
+  /**
+   * 0.4.x · 设备外观 shell 材质。glb 原始材质是 PBR 金属（metal_dark/metal_mid/
+   * aluminum），在无 IBL/环境贴图时接近全黑，深色背景下不可见。这里按设备 id
+   * 给一个亮色 StandardMaterial（保持色彩识别度），确保任意光照下都清晰可见。
+   * 纯外观，不影响装配/干涉（设备 mesh 无 partId 标记）。
+   */
+  private _shellMaterialForDevice(deviceId: string): StandardMaterial {
+    const scene = this.scene!;
+    // 每类设备一个柔和但醒目的工业色，深色底上足够亮
+    const palette: Record<string, [number, number, number]> = {
+      conveyor: [0.42, 0.50, 0.60], // 钢青灰
+      feeder: [0.85, 0.55, 0.20], // 琥珀（上料）
+      'vision-module': [0.20, 0.62, 0.90], // 亮蓝（视觉检测）
+      'gantry-arm': [0.55, 0.36, 0.72], // 紫灰（桁架）
+      'box-pack': [0.30, 0.72, 0.45], // 绿（装箱）
+    };
+    const [r, g, b] = palette[deviceId] ?? [0.55, 0.58, 0.62];
+    const mat = new StandardMaterial(`device-shell-${deviceId}`, scene);
+    mat.diffuseColor = new Color3(r, g, b);
+    mat.specularColor = new Color3(0.35, 0.38, 0.42);
+    mat.ambientColor = new Color3(r * 0.45, g * 0.45, b * 0.45);
+    mat.emissiveColor = new Color3(r * 0.12, g * 0.12, b * 0.12);
+    return mat;
   }
 
   /**
