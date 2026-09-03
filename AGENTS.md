@@ -40,10 +40,13 @@ pnpm test              # packages 单测全量
 pnpm typecheck         # 全量类型检查
 pnpm --filter @assemble/clearance-core test
 
-# 一键起 dev（精简：assembly-svc:7101 + interference-svc:7102 + vite:5173）
+# 一键起 dev（默认精简：assembly-svc:7101 + interference-svc:7102 + vite:5173）
 pnpm dev               # = node scripts/dev.mjs（自包含 Node 编排，不依赖 pnpm）
-#  Ctrl+C 会统一清理三个子进程；已占用的端口自动复用不重复起。
-# 先决条件：两个后端 dist 已构建（node scripts/dev.mjs 会在缺产物时报错引导 build）。
+pnpm dev:all           # = node scripts/dev.mjs --all（全量：5 个后端 + vite）
+#  Ctrl+C 会统一清理所有子进程；已占用的端口自动复用不重复起。
+# 先决条件：后端 dist 已构建（脚本在缺产物时报错引导 build）。
+# 精简模式 vite 代理实际只连 7101+7102；--all 额外起 model:7103/takt:7104/auth:7105
+# 供后端自治/全链路联调（前端暂不直连这三个）。
 
 # ── 后端服务启动/构建速查 ──────────────────────────────
 # 5 个后端服务，各自独立（cwd 进服务目录）：
@@ -56,8 +59,8 @@ pnpm dev               # = node scripts/dev.mjs（自包含 Node 编排，不依
 #   npm run start          # = node dist/server.js（一次性，前台阻塞）
 #   npm run dev            # = node --watch dist/server.js（改动热重启，适合开发）
 # vite 代理只连 assembly(7101)+interference(7102)；auth/model/takt 属后端自治、
-# 前端暂不直连（需要全链路时才单独起）。
-# 注：services/ 下另有 gateway、auth-svc 等；clearance 算法在 packages/clearance-core，
+# 前端暂不直连（需要全链路时用 pnpm dev:all 一起起）。
+# 注：services/ 下另有 gateway；clearance 算法在 packages/clearance-core，
 #     非独立 HTTP 服务（勿把它当 7103）。
 
 # 装依赖/构建务必 unset NODE_OPTIONS（否则 node-language-shim broker 会误拒 pnpm 的 *_tmp_* mkdir，见 .learnings LRN-20260902-004）
