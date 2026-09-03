@@ -8,6 +8,10 @@ metadata:
 
 Log learnings and errors to markdown files for continuous improvement. Coding agents can later process these into fixes, and important learnings get promoted to project memory.
 
+## Assemble-Platform 流程接入
+
+本技能是 [assemble-platform-workflow](../assemble-platform-workflow/SKILL.md) 的常驻记录层。需求澄清由 [grill-me](../grill-me/SKILL.md) 执行；跨端/API 经验回流 [senior-fullstack-engineer](../senior-fullstack-engineer/SKILL.md)，Web3D/GLB 经验回流 [senior-web3d-engineer](../senior-web3d-engineer/SKILL.md)。可复用且稳定的结论先记 `.learnings/`，再 promote 到对应技能、`docs/` 或 `AGENTS.md`，避免只写日志却不更新项目流程。
+
 ## First-Use Initialisation
 
 Before logging anything, ensure the `.learnings/` directory and files exist in the project or workspace root. If any are missing, create them:

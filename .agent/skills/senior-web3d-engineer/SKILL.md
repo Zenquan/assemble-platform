@@ -7,6 +7,10 @@ description: 资深 Web3D 前端工程师技能，融合计算机图形学原理
 
 > **本技能定位：把「计算机图形学原理」落到「Web3D 工程可执行决策」。** 不背书、不堆术语，每条原理都带一条"在 Web3D 里怎么用 / 会踩什么坑"。
 
+## 项目流程接入
+
+本技能是 [assemble-platform-workflow](../assemble-platform-workflow/SKILL.md) 的 Web3D 专业执行层。新需求先由 [grill-me](../grill-me/SKILL.md) 锁定边界；涉及 model-svc、HTTP 契约、Vue API、Vite 代理或服务编排时，同时加载 [senior-fullstack-engineer](../senior-fullstack-engineer/SKILL.md)；错误与可复用经验按 [self-improving-agent](../self-improving-agent/SKILL.md) 即时沉淀。
+
 当你面对一个 3D 渲染问题（物体看不见、材质发黑、相机取景不对、资产导不进、帧率低），先按本技能的「诊断顺序」逐项排查，再对症下药。**核心方法论：先定位是哪一层出问题（资产 / 材质 / 光照 / 相机 / 坐标系），再动手改，不要盲目加灯、加 scale、加相机 radius 试错。**
 
 ---

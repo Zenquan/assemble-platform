@@ -479,3 +479,51 @@ S4 E2E 启动 `chromium.launch({headless:true})` 直接报「Executable doesn't 
 - Related Files: /tmp/shot-s4-bomtakt.mjs, apps/sim-platform/vite.config.ts, scripts/dev.mjs, apps/sim-platform/src/engine/babylon.ts
 - Tags: e2e, playwright, executablePath, default-state, resetForPlay
 - Pattern-Key: s4.e2e_pin_browser
+
+---
+
+## [LRN-20260903-015] best_practice
+
+**Logged**: 2026-09-03T18:30:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: agent-skills / workflow
+
+### Summary
+项目技能应由一个主流程集中路由，并在每个条件技能中反向声明上游流程、协作技能和学习回流，避免新增技能存在于目录中却未真正进入开发流程。
+
+### Details
+原流程仍声明“三 skill”，但仓库已新增 `senior-web3d-engineer`，导致专业技能只能靠人工记忆触发。本次扩展为五技能分层：workflow/grill/self-improving 为基础层，fullstack/Web3D 为条件执行层；跨端 3D 同时加载两个专业技能。主流程、AGENTS、docs 导航和每个 skill 均建立双向引用。
+
+### Suggested Action
+后续新增项目级 skill 时，同一改动内完成：目录创建与校验、workflow 路由表、AGENTS 触发规则、docs 导航、相关 skill 反向链接；禁止只把 SKILL.md 丢进 `.agent/skills/`。
+
+### Metadata
+- Source: best_practice
+- Related Files: .agent/skills/*/SKILL.md, AGENTS.md, docs/README.md
+- Tags: skills, orchestration, routing, project-workflow
+- Pattern-Key: workflow.skill_bidirectional_routing
+
+---
+
+## [LRN-20260903-016] correction
+
+**Logged**: 2026-09-03T18:45:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: docs / agent-skills / workflow
+
+### Summary
+新增和编排项目 Skill 时，必须保留 `docs/` 作为工程标准事实源；Skill 只负责路由与执行，不能让技能说明取代架构、代码风格、测试、版本和 Git 标准。
+
+### Details
+用户明确纠正“docs 里的标准还是需要的”。五技能流程虽然已有必读文档列表，但职责优先级表达不够强，容易被理解为 Skill 已吸收并替代文档。现已在 `AGENTS.md`、主流程、fullstack skill 与 docs 导航中统一声明：发生差异时以 `docs/` 校正 Skill，并同步修复失配。
+
+### Suggested Action
+后续 Skill 只提炼执行步骤和触发路由，稳定工程规范继续维护在 `docs/`；任何 Skill 修改都检查是否保留文档入口、事实源定位和冲突处理规则。
+
+### Metadata
+- Source: user_feedback
+- Related Files: AGENTS.md, docs/README.md, .agent/skills/assemble-platform-workflow/SKILL.md, .agent/skills/senior-fullstack-engineer/SKILL.md
+- Tags: docs, standards, skills, source-of-truth
+- Pattern-Key: workflow.docs_remain_canonical

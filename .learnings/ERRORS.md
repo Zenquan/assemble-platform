@@ -84,3 +84,52 @@ BVH 干涉检测初版三类 bug：索引复用栈溢出、OBB-SAT 分离轴误�
 - Related Files: packages/clearance-core/src/bvh.ts, obbSat.ts, detector.ts
 
 ---
+
+## [ERR-20260903-004] skill_creator_short_description_length
+
+**Logged**: 2026-09-03T18:30:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: agent-skills
+
+### Summary
+`skill-creator` 初始化项目技能时，`short_description` 只有 19 个字符，未达到 25–64 字符校验范围，导致目录和 `SKILL.md` 已创建但 `agents/openai.yaml` 未生成。
+
+### Context
+- 命令：`init_skill.py senior-fullstack-engineer --path .agent/skills --interface ...`
+- 初始化器不是事务性的；接口元数据校验失败时会保留部分生成结果。
+- `generate_openai_yaml.py` 和 `quick_validate.py` 默认 import `PyYAML`，当前 Python 3.14 环境未安装，直接运行报 `ModuleNotFoundError: No module named 'yaml'`。
+- 修复：生成元数据时给 `generate_openai_yaml.py` 显式传 `--name`，绕过读取 frontmatter 的 PyYAML 分支；校验阶段用系统 Ruby/Psych 解析 YAML 并复刻名称、字段、长度检查。
+
+### Suggested Fix
+调用初始化器前先检查 `short_description` 长度；初始化失败后先检查已生成文件，避免重复初始化或误删有效骨架。运行官方生成器时可显式传 `--name` 降低可选依赖影响；官方校验器缺 PyYAML 时使用等价的本地 YAML 解析校验，不为单次文档任务联网安装依赖。
+
+### Metadata
+- Reproducible: yes
+- Related Files: .agent/skills/senior-fullstack-engineer/SKILL.md
+
+---
+
+## [ERR-20260903-005] shell_backtick_in_double_quoted_rg_pattern
+
+**Logged**: 2026-09-03T18:48:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+在双引号包裹的 `rg` 正则中写入 Markdown 反引号，zsh 把 `` `docs/` `` 当成命令替换执行，产生 `permission denied: docs/`。
+
+### Context
+- 原命令意图仅搜索“以 docs 为准”等文本。
+- shell 会在双引号内继续展开反引号；搜索主体仍执行成功，但混入了无关错误。
+- 修复：正则整体改用单引号，避免 Markdown 反引号参与 shell 展开。
+
+### Suggested Fix
+终端命令参数包含 Markdown 反引号、`$()` 或 `$VAR` 时优先使用单引号；执行前检查是否存在命令替换风险。
+
+### Metadata
+- Reproducible: yes
+- Related Files: AGENTS.md, docs/README.md
+
+---

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Assemble Platform Full-Stack"
+  short_description: "Project full-stack contracts and integration workflow"
+  default_prompt: "Use $senior-fullstack-engineer to implement a full-stack change in assemble-platform following its contracts and verification gates."

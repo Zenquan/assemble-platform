@@ -1,6 +1,6 @@
 ---
 name: assemble-platform-workflow
-description: 产线3D装配仿真平台（assemble-platform）的本工程开发流程技能，编排三个 skill：需求追问(grill-me) → 文档驱动 → Workbuddy 深色科技设计稿 → 小步实现 → 小步提交 → 学习沉淀(self-improving-agent 记入 .learnings/)。当在本仓库开发任何功能、修复、里程碑任务前，先加载本 skill。对照 docs/ 规范（GIT_GUIDE / CODE_STYLE / ARCHITECTURE / VERSIONING / TESTING）。触发：开发新功能、改造既有模块、跨层改动、进入新的版本里程碑（0.1.x/0.2.x/…）、被要求"按项目流程来"。
+description: 产线3D装配仿真平台（assemble-platform）的项目主流程技能，统一编排五个本地 skill：需求澄清 grill-me、全栈工程 senior-fullstack-engineer、Web3D 工程 senior-web3d-engineer、学习沉淀 self-improving-agent，以及本主流程。覆盖 Phase 0→4 的需求共识、文档/契约、Workbuddy 深色科技设计稿、小步实现、验证、提交与复盘。进入本仓开发任何功能、修复、评审或里程碑任务前加载本 skill，再按任务路由条件技能。
 ---
 
 # Assemble-Platform 开发流程
@@ -9,19 +9,34 @@ description: 产线3D装配仿真平台（assemble-platform）的本工程开发
 
 ---
 
-## 0. 技能编排（三个 skill 各司其职，构成完整流程）
+## 0. 技能编排（五个 skill 分层协作）
 
-本仓 `.agent/skills/` 下的三个技能按如下方式协作，**主流程是本 SKILL.md，另外两个是它的固定环节**：
+本仓 `.agent/skills/` 下的五个技能统一由本文件编排。前三个是流程基础层，两个 senior 技能是按任务加载的专业执行层：
 
 | Skill | 环节 | 在流程中的职责 | 触发点 |
 |-------|------|--------------|--------|
 | `assemble-platform-workflow`（本文件） | 主流程 | 编排 Phase 0→4，规定每阶段动作、文档/设计/提交规范 | 每次开发/修复/里程碑任务开工前必加载 |
 | `grill-me` | **Phase 0 执行者** | 用 GRILL 五问把目标/边界/约束/验收问清，产出并确认「需求共识」 | 任何新需求、功能变更、跨层改动，需求边界不清时**强制**加载，问清前不写码 |
 | `self-improving-agent` | **贯穿全程的记录层** | 错误/纠正/知识缺口/待建能力发生时记入 `.learnings/`（团队共享、入库）；里程碑后 review，重要约定 promote 到 `docs/` 或 `AGENTS.md` | 命令失败、用户纠正、发现更好做法、API 坑、跨包踩坑——**即时记**；每阶段完成——**review 一次** |
+| `senior-fullstack-engineer` | **全栈执行层** | 约束 domain 契约、Fastify 服务、Vue API 接入、代理/服务编排与集成验证 | 修改 API，或改动横跨 `apps/services/packages` 两层以上时加载 |
+| `senior-web3d-engineer` | **Web3D 执行层** | 约束 Babylon、GLB 资产、材质/光照、坐标/包围盒、相机与视觉验收 | 涉及 3D、Babylon、glTF/GLB、渲染与 Web3D 性能时加载 |
 
-> **规则**：grill-me 管"开始前问清"，self-improving-agent 管"过程里记下、结束后沉淀"，二者都是主流程的**强制环节**而非可选项。
+> **规则**：主流程负责时序；grill-me 管开始前问清；self-improving-agent 管过程记录与结束沉淀；两个 senior 技能管实现质量。GLB 后端下发、实时干涉等跨端 3D 任务必须同时加载两个 senior 技能。
+
+### 0.1 路由规则
+
+| 改动类型 | 必需技能组合 |
+|----------|--------------|
+| 文档、流程、普通单层修复 | `assemble-platform-workflow` + `self-improving-agent`；新需求再加 `grill-me` |
+| Vue + API、服务端、共享契约 | 基础组合 + `senior-fullstack-engineer` |
+| Babylon、GLB、材质、相机、包围盒 | 基础组合 + `senior-web3d-engineer` |
+| 模型服务到 Babylon、前后端干涉链路 | 基础组合 + `senior-fullstack-engineer` + `senior-web3d-engineer` |
+
+每次 Phase 0 收敛后明确写出本次加载组合；任务中途跨入另一专业边界时立即补加载对应技能。
 
 ## 0.5 开工前必读
+
+`docs/` 是本仓工程标准的单一事实源，本 skill 只负责编排执行，不替代下列文档。若 skill 与文档不一致，先按文档执行并在当前任务内同步修正 skill；不得为了缩短流程跳过文档标准。
 
 - `docs/README.md` —— 文档导航，先看它决定读哪份。
 - `docs/VERSIONING.md` —— 判断当前做到哪个版本、本次属哪一档（0.1 算法地基 / 0.2 单产线 Demo / …）。
@@ -41,8 +56,10 @@ description: 产线3D装配仿真平台（assemble-platform）的本工程开发
 - 对照 `VERSIONING.md` 判断改动落在哪个版本档与里程碑出口门禁。
 - 产出：标准「**需求共识**」（格式见 grill-me §输出）——含目标 / 范围✅❌ / 输入 / 约束 / 核心逻辑 / 验收标准 / 影响范围。
 - **必须得到用户"对，就按这个来"的确认**，共识才算锁定，方可进 Phase 1。
+- 按 §0.1 选择专业执行技能，并在需求共识的「影响范围」中标明前端/后端/契约/Web3D。
 
 ### Phase 1 —— 文档驱动（先落文档/契约，再写码）
+- 跨 `apps/services/packages` 的改动加载 `senior-fullstack-engineer`，先画出契约与调用链。
 - **契约先行**：跨端数据形状改动先改 `@assemble/domain`，并评估波及面（向后兼容优先）。
 - 复杂功能先在 `docs/` 补/更新方案片段或模块说明；改动既有架构红线则同步更新 `ARCHITECTURE.md`。
 - 规划落地时维护 `CHANGELOG.md` 的 Unreleased（归类 feat/fix/perf）。
@@ -62,6 +79,8 @@ description: 产线3D装配仿真平台（assemble-platform）的本工程开发
 - **一个逻辑单元一次提交**；每个逻辑单元做完即过该包 `typecheck` + `test`。
 - 核心算法（clearance-core / sim-utils）改动必须带单测，且 **200 件 `runFull<200ms` 性能门禁不得突破**（`docs/TESTING.md`）。
 - 前端只经 SimEngine 门面，业务代码禁止直引 `@babylonjs/core`。
+- 全栈改动遵循 `senior-fullstack-engineer` 的“契约 -> 后端 -> 前端 -> 编排 -> 集成验证”顺序。
+- Web3D 改动遵循 `senior-web3d-engineer` 的资产/材质/光照/相机诊断顺序；跨端 3D 同时执行两套门禁。
 - 修 bug 先补能复现的红用例，再改实现转绿。
 - **记录**：命令失败 / 算法坑 / 环境坑（如 pnpm 沙箱禁 symlink、vitest 临时文件、strict 索引）→ **即时**记 `.learnings/ERRORS.md` 或 `LEARNINGS.md`（类别 `error` / `knowledge_gap`）；能沉淀成通用规则的在修复后 promote 到 `docs/` 或 `AGENTS.md`。
 
@@ -100,7 +119,8 @@ feat(sim-platform): 新增产线选择页（SimEngine 门面渲染）
 4. **小步提交**：一个逻辑单元一个 Conventional Commit，main 随时可发布。
 5. **门禁**：每包 `typecheck`+`test`；clearance-core 200 件 <200ms；merge 前全仓绿。
 6. **边界**：遵守 `ARCHITECTURE.md`（SimEngine 门面、依赖方向、纯算法无 DOM）。
-7. **即时记录**：错误/纠正/知识缺口发生时按 `self-improving-agent` 记入 `.learnings/`，不丢上下文；阶段收尾 review + promote。
+7. **专业路由**：跨端/API 加载 `senior-fullstack-engineer`；3D/GLB 加载 `senior-web3d-engineer`；跨端 3D 两者同时加载。
+8. **即时记录**：错误/纠正/知识缺口发生时按 `self-improving-agent` 记入 `.learnings/`，不丢上下文；阶段收尾 review + promote。
 
 ---
 

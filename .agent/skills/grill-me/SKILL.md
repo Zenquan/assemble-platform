@@ -7,6 +7,10 @@ description: 需求追问澄清技能。当用户提出任何新需求、功能�
 
 > **原则：先问清楚再动手，宁可多问 3 分钟，不要返工 3 小时。**
 
+## 项目流程接入
+
+本技能是 [assemble-platform-workflow](../assemble-platform-workflow/SKILL.md) 的 Phase 0 执行者。需求共识确认后，把「影响范围」交给主流程做技能路由：跨 `apps/services/packages` 两层以上加载 [senior-fullstack-engineer](../senior-fullstack-engineer/SKILL.md)，涉及 Babylon/glTF/GLB/Web3D 加载 [senior-web3d-engineer](../senior-web3d-engineer/SKILL.md)，两类同时命中则共同加载。过程中的纠正与知识缺口交给 [self-improving-agent](../self-improving-agent/SKILL.md) 记录。
+
 ---
 
 ## 什么时候触发
