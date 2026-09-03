@@ -191,3 +191,33 @@ describe('门面 syncAssemblyState（S1 分态同步口径）', () => {
     engine.dispose();
   });
 });
+
+describe('门面装配动画（S2 auto/replay 播放态契约）', () => {
+  it('resetForPlay 复位到全待装配（seated=0）', () => {
+    const engine = createSimEngine(); // noop
+    engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' } });
+    engine.assembly.load(makeBom());
+    engine.assembly.seekTo(3); // 先到全贴合
+    expect(engine.syncAssemblyState()).toEqual({ seated: 3, scattered: 0 });
+    const r = engine.resetForPlay();
+    expect(r).toEqual({ seated: 0, scattered: 3 });
+    expect(engine.animState.cursorSeq).toBe(0);
+    expect(engine.animState.done).toBe(false);
+    engine.dispose();
+  });
+
+  it('manual 模式 playAssembly 被拒；切 auto 后可播放且播放态如实', () => {
+    const engine = createSimEngine(); // noop
+    engine.init({ line: { id: 'L1', name: '', kind: 'sorting', stations: [], enabled: true, modelVersion: '', createdAt: '', updatedAt: '' } });
+    engine.assembly.load(makeBom());
+    // manual 下不可自动播放
+    expect(engine.assembly.mode).toBe('manual');
+    expect(engine.playAssembly()).toBe(false);
+    // 切 auto/replay 后可播放
+    engine.assembly.switchMode('auto');
+    expect(engine.playAssembly()).toBe(true);
+    expect(engine.animState.playing).toBe(false); // Noop 无帧循环 → 不处于真实播放
+    engine.pauseAssembly();
+    engine.dispose();
+  });
+});

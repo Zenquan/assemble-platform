@@ -7,9 +7,9 @@
  *      配网格 + 坐标轴 + ArcRotateCamera + 环境/平行光 + HUD(STEP/引擎实时)。
  *   ✅ S1 · 分态渲染：零件被分为「已贴合 / 待装配」两态。已贴合停 seat（贴合位），
  *      待装配停确定性散落待料位；由 `assembledPartIds` 驱动归属切换（`setAssemblyState`）。
- *   ❌ 不做（归 0.3.x S2+）：自动/手动/回放动画过渡、实时干涉拖拽联动、
- *      BOM 树/节拍面板、真 glTF 资产管线。装配状态机与实时干涉仍复用
- *      noop.ts 里委托 clearance-core 纯算法的 NoopAssembler/NoopClearance。
+ *   ✅ S2 · 装配过程动画：门面经 `AssemblyAnimator`（纯逻辑驱动器）在每帧（scene.onFrame）
+ *      推进 auto/replay 播放，零件从散落位平滑滑向贴合位；seek/undo 仍走瞬时跳变。
+ *   ❌ 不做（归 0.3.x S3+）：实时干涉拖拽联动、BOM 树/节拍面板、真 glTF 资产管线。
  *
  * 架构红线（ARCHITECTURE §2）：
  *   1. 本文件是本仓**唯一** import '@babylonjs/core' 的渲染实现边界；
@@ -34,7 +34,8 @@ import {
 import type { AssemblyBom, OBB, ProductionLine, Vec3 } from '@assemble/domain';
 
 import { NoopAssembler, NoopClearance, NoopSimEngine } from './noop.js';
-import { computeTwoStatePlacement } from './placement.js';
+import { AssemblyAnimator } from './animator.js';
+import { computeTwoStatePlacement, type PartPlacement } from './placement.js';
 import type {
   AssetManager,
   AssemblyController,
@@ -137,6 +138,12 @@ class BabylonScene implements SceneManager {
   private scatterPos = new Map<string, Vector3>();
   /** 稳定零件序（决定散落环相位与 palette 着色） */
   private _partOrder: string[] = [];
+  /** S2 · 每件 seat/scatter 纯布局（renderParts 时缓存，供 animator 构造） */
+  private _placements: PartPlacement[] = [];
+  /** S2 · 最近一次已知的 assembled 集合快照（供飞行覆盖退出时回落 S1 seat/scatter 判定） */
+  private _assembledIds: ReadonlySet<string> = new Set();
+  /** S2 · 每帧驱动回调（render loop 每帧先调再 render；由引擎注册动画推进） */
+  onFrame: (() => void) | null = null;
 
   get isMounted(): boolean {
     return this.engine !== null && this.scene !== null;
@@ -153,6 +160,11 @@ class BabylonScene implements SceneManager {
     }
     scattered = Math.max(0, base - seated);
     return { seated, scattered };
+  }
+
+  /** S2 · 读取 renderParts 时缓存的 seat/scatter 纯布局（供引擎构造动画驱动器） */
+  get placements(): PartPlacement[] {
+    return this._placements;
   }
 
   mount(container: HTMLElement): boolean {
@@ -212,6 +224,8 @@ class BabylonScene implements SceneManager {
     this.canvas = null;
     this.container = null;
     this.meshes.clear();
+    this._placements = [];
+    this.onFrame = null;
   }
 
   /** 地板：一块深色半透明网格底 + 坐标轴线（X 红 / Y 绿 / Z 蓝 简化示意） */
@@ -263,7 +277,11 @@ class BabylonScene implements SceneManager {
     if (!this.engine || !this.scene) return;
     this._rendering = true;
     this.engine.runRenderLoop(() => {
-      if (this.scene) this.scene.render();
+      if (this.scene) {
+        // S2 · 每帧驱动点：动画推进器（引擎注册）先于 scene.render 结算本帧零件位
+        this.onFrame?.();
+        this.scene.render();
+      }
     });
   }
 
@@ -335,6 +353,8 @@ class BabylonScene implements SceneManager {
     const scene = this.scene;
     if (!scene) return;
     const placements = computeTwoStatePlacement(parts);
+    // S2 · 缓存纯布局，供引擎构造动画驱动器（seat/scatter 双目标位）
+    this._placements = placements;
     // 深色科技扁平调色：主用青/蓝系，个别强调件用琥珀/绿（对齐 tokens.css）
     const palette = [
       new Color3(0.20, 0.44, 0.92), // blue #1f6feb
@@ -450,6 +470,7 @@ class BabylonScene implements SceneManager {
   setAssemblyState(assembledIds: ReadonlySet<string>): { seated: number; scattered: number } {
     const scene = this.scene;
     if (!scene) return this.stateSnapshot;
+    this._assembledIds = new Set(assembledIds);
     // 两态着色：已贴合亮青（确认），待装配琥珀（待料、显眼）。
     const seatedTint = new Color3(0.18, 0.85, 0.9); // 青
     const pendingTint = new Color3(0.95, 0.62, 0.18); // 琥珀（与青形成强对比）
@@ -466,6 +487,30 @@ class BabylonScene implements SceneManager {
     this._frameForCurrentState();
     if (this.scene) this.scene.render();
     return this.stateSnapshot;
+  }
+
+  /**
+   * S2 · 应用某件的"飞行插值位"（动画中视觉叠加，不写 seatPos/scatterPos）。
+   * - 传 Vec3：把该件 mesh 覆盖到动画当前位置（渲染层每帧驱动用）；
+   * - 传 null：退出飞行覆盖，回落 S1 的 seat/scatter 判定（由 syncAssemblyState 落位）。
+   */
+  applyFlightPose(partId: string, pos: Vec3 | null): void {
+    const mesh = this.meshes.get(partId);
+    if (!mesh) return;
+    if (pos) mesh.position = new Vector3(pos[0], pos[1], pos[2]);
+    else {
+      // 退出覆盖：按 S1 seat/scatter 判定落回
+      const assembled = this._assembledIds?.has(partId) ?? false;
+      const seat = this.seatPos.get(partId);
+      const scatter = this.scatterPos.get(partId);
+      if (assembled && seat) mesh.position = seat.clone();
+      else if (scatter) mesh.position = scatter.clone();
+    }
+  }
+
+  /** S2 · 引擎把某件在动画完成时标记为已贴合集合（供 applyFlightPose(null) 回落判定） */
+  setAssembledSnapshot(ids: ReadonlySet<string>): void {
+    this._assembledIds = new Set(ids);
   }
 
   get loadedPartCount(): number {
@@ -616,6 +661,8 @@ export class BabylonSimEngine implements SimEngine {
   private _initialized = false;
   private _fps = 0;
   private _line: ProductionLine | null = null;
+  /** S2 · 装配过程动画驱动器（纯逻辑，每帧由 scene.onFrame 推进） */
+  private _animator: AssemblyAnimator | null = null;
 
   constructor() {
     this.clearance = new NoopClearance();
@@ -623,6 +670,91 @@ export class BabylonSimEngine implements SimEngine {
     this.assets = new BabylonAssets(this.scene);
     this.interaction = new BabylonInteraction();
     this.assembly = new NoopAssembler(this.clearance);
+  }
+
+  /** S2 · 读取当前动画播放态（供 HUD/断言） */
+  get animPlaying(): boolean {
+    return this._animator?.playing ?? false;
+  }
+  get animCursorSeq(): number {
+    return this._animator?.cursorSeq ?? 0;
+  }
+  get animTotalSteps(): number {
+    return this._animator?.totalSteps ?? 0;
+  }
+  get animDone(): boolean {
+    const a = this._animator;
+    return a ? a.cursorSeq >= a.totalSteps : false;
+  }
+  /** S2 · 门面契约：动画播放态聚合（供 HUD/无 WebGL 断言读取） */
+  get animState(): SimEngine['animState'] {
+    return {
+      playing: this.animPlaying,
+      cursorSeq: this.animCursorSeq,
+      totalSteps: this.animTotalSteps,
+      done: this.animDone,
+    };
+  }
+
+  /**
+   * S2 · 装载 BOM 后初始化动画驱动器：绑定每帧推进（scene.onFrame）与落集合回调。
+   * 驱动器与装配状态机共享同一 BOM 步骤序；placements 来自 scene 缓存（seat/scatter）。
+   */
+  private _wireAnimator(): void {
+    const bom = this.assets.synthesizedBom;
+    const placements = this.scene.placements;
+    if (!bom || placements.length === 0) return;
+    const animator = new AssemblyAnimator({
+      placements,
+      getSteps: () => bom.steps,
+      onAssemble: (partId) => this._landAnimatedPart(partId),
+    });
+    this._animator = animator;
+    // 每帧：推进动画并结算"飞行中"零件的插值位；播放结束自动停。
+    this.scene.onFrame = () => {
+      if (!this._animator) return;
+      this._animator.tick();
+      // 飞行中的件 → 用插值位覆盖（视觉平滑滑向 seat）；无飞行件则保持 S1 seat/scatter 判定
+      const fid = this._animator.flyingPartId;
+      if (fid) {
+        const pos = this._animator.pose(fid);
+        if (pos) this.scene.applyFlightPose(fid, pos);
+      }
+    };
+    // 让驱动器游标对齐状态机当前步（如初始 seekTo 到全贴合）
+    this._animator.syncCursor(this.assembly.currentStepSeq);
+  }
+
+  /** S2 · 动画完成某件 → 落进装配状态机（factual）+ 渲染停驻青色 seat */
+  private _landAnimatedPart(partId: string): void {
+    if (!this.assembly.assemble(partId)) return;
+    // 该件已视觉滑到 seat —— 用 S1 sync 把集合/tint 落定（含本次新贴合件）
+    this.syncAssemblyState();
+  }
+
+  /** S2 · 自动播放（auto/replay）：从当前装配步起逐件播过渡到全贴合。返回是否开始 */
+  playAssembly(): boolean {
+    const animator = this._animator;
+    if (!animator) return false;
+    // 驱动器游标对齐状态机（手动步进/撤销后也能续播）
+    if (animator.cursorSeq !== this.assembly.currentStepSeq) {
+      animator.syncCursor(this.assembly.currentStepSeq);
+    }
+    return animator.play();
+  }
+
+  pauseAssembly(): boolean {
+    return this._animator?.pause() ?? false;
+  }
+
+  /** S2 · 复位到初始（全部散落待装配）并停播放 —— auto/replay 从头演示用 */
+  resetForPlay(): { seated: number; scattered: number } {
+    const bom = this.assembly.bom;
+    if (!bom) return this.scene.stateSnapshot;
+    this.assembly.seekTo(0); // 集合清空
+    this._animator?.seekTo(0);
+    this.syncAssemblyState(); // 全部落散落位
+    return this.scene.stateSnapshot;
   }
 
   init(opts: { container?: HTMLElement; line?: ProductionLine }): EngineHealth {
@@ -640,6 +772,7 @@ export class BabylonSimEngine implements SimEngine {
           if (bom) {
             this.assembly.load(bom);
             this.assembly.seekTo(bom.steps.length); // 全贴合起始
+            this._wireAnimator(); // S2：装配动画驱动器绑定（每帧推进 + 落集合回调）
             this.syncAssemblyState();
           }
           if (this.scene.isMounted) this.scene.requestRender();
@@ -650,7 +783,8 @@ export class BabylonSimEngine implements SimEngine {
   }
 
   dispose(): void {
-    this.scene.unmount();
+    this.scene.unmount(); // unmount 内清 onFrame + _placements
+    this._animator = null;
     this.assets.dispose();
     this._activeLineId = null;
     this._initialized = false;
@@ -664,6 +798,12 @@ export class BabylonSimEngine implements SimEngine {
    * 返回应用后的 {seated, scattered}，供 HUD/断言读取。
    */
   syncAssemblyState(): { seated: number; scattered: number } {
+    // 非播放时（手动 assemble/undo/seek/复位）让动画游标对齐装配状态机步进，
+    // 保证后续 play 能从当前步续播。播放中（onAssemble 回调触发本方法）跳过，
+    // 避免 syncCursor 清飞行打断正在进行的动画。
+    if (!this._animator?.playing) {
+      this._animator?.syncCursor(this.assembly.currentStepSeq);
+    }
     if (!this.scene.isMounted) return this.scene.stateSnapshot;
     return this.scene.setAssemblyState(new Set(this.assembly.assembledPartIds));
   }

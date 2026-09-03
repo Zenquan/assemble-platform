@@ -202,6 +202,29 @@ export interface SimEngine {
    * 返回 {seated, scattered}（Noop 无网格，返回当前占位计数语义的镜像）。
    */
   syncAssemblyState(): { seated: number; scattered: number };
+
+  /**
+   * S2 · 装配过程动画（auto/replay）：从当前装配步起，按 BOM 步骤序 +
+   * `AssemblyStep.durationSeconds` 逐件播"散落→贴合"过渡直到全贴合。
+   * - Babylon：经纯逻辑驱动器每帧推进（scene render loop 消费飞行插值位）；
+   * - Noop：镜像计数，供无 WebGL 单测/占位 UI 断言"播放推进到全贴合"。
+   * 返回是否成功开始播放。
+   */
+  playAssembly(): boolean;
+  /** S2 · 暂停播放（飞行中零件停在当前插值位；seek/undo 仍走跳变）。 */
+  pauseAssembly(): boolean;
+  /**
+   * S2 · 复位到"全部待装配散落"并停止播放（auto/replay 从头演示前调用）。
+   * 返回复位后的 {seated, scattered}（通常 seated=0，除基座外全散落）。
+   */
+  resetForPlay(): { seated: number; scattered: number };
+  /** S2 · 当前装配动画播放状态（供 HUD/断言读取；无驱动时恒不播放） */
+  readonly animState: {
+    playing: boolean;
+    cursorSeq: number;
+    totalSteps: number;
+    done: boolean;
+  };
 }
 
 /* 供外部引用的领域形状再导出（组件薄、只在门面口统一 type） */

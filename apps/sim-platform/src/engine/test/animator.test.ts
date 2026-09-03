@@ -14,7 +14,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AssemblyStep, Vec3 } from '@assemble/domain';
-import { AssemblyAnimator, type PartPlacement } from '@/engine/animator';
+import { AssemblyAnimator } from '@/engine/animator';
+import type { PartPlacement } from '@/engine/placement';
 
 /** 造一个 layout（partId + seat/scatter 两目标位） */
 function pl(partId: string, seat: [number, number, number], scatter: [number, number, number]): PartPlacement {

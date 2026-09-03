@@ -277,6 +277,17 @@ export class NoopSimEngine implements SimEngine {
     this.assembly = new NoopAssembler(this.clearance);
   }
 
+  /** S2 门面契约 · 动画播放态（Noop 无帧循环，如实反映状态机 + 无真实播放） */
+  private _animSnapshot(): SimEngine['animState'] {
+    const total = this.assembly.bom?.steps.length ?? 0;
+    return {
+      playing: false,
+      cursorSeq: this.assembly.currentStepSeq,
+      totalSteps: total,
+      done: this.assembly.currentStepSeq >= total,
+    };
+  }
+
   init(opts: { container?: HTMLElement; line?: import('@assemble/domain').ProductionLine }): EngineHealth {
     if (opts.container) this.scene.mount(opts.container);
     if (opts.line) this._activeLineId = opts.line.id;
@@ -297,6 +308,28 @@ export class NoopSimEngine implements SimEngine {
     const seated = this.assembly.assembledPartIds.length;
     const total = this.assembly.bom?.parts.length ?? 0;
     return { seated, scattered: Math.max(0, total - seated) };
+  }
+
+  /** S2 · Noop 镜像：auto 播放推进由 animator 纯逻辑驱动（animator.test 覆盖逐步到位）；
+   *  本门面在无帧循环后端不做瞬时快进，仅校验前置并如实反映状态（播放语义归 Babylon 真渲染）。 */
+  playAssembly(): boolean {
+    if (this.assembly.mode === 'manual') return false;
+    if (!this.assembly.bom) return false;
+    return this.assembly.play();
+  }
+
+  pauseAssembly(): boolean {
+    this.assembly.pause();
+    return true;
+  }
+
+  resetForPlay(): { seated: number; scattered: number } {
+    this.assembly.seekTo(0);
+    return this.syncAssemblyState();
+  }
+
+  get animState(): SimEngine['animState'] {
+    return this._animSnapshot();
   }
 
   health(): EngineHealth {
