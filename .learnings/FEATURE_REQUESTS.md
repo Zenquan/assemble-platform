@@ -116,3 +116,43 @@ large
 ### Metadata
 - Frequency: first_time
 - Related Features: sim-platform, WorkbenchView, SimEngine facade
+
+## [FEAT-20260903-003] 0.3.0_assembly_visual_feedback
+
+**Logged**: 2026-09-03T11:58:00+08:00
+**Priority**: high
+**Status**: planned
+**Area**: sim-platform / engine (babylon) + WorkbenchView + domain
+**Milestone**: 0.3.0
+
+### Requested Capability
+在 Babylon 真渲染后端上把「装配过程」可视化 —— 让渲染**跟随 `AssemblyController` 的 step/已装配集合**做分态表现，把 0.2.0 已就位的三模式状态机（NoopAssembler 真实逻辑）接到真网格/动画上。产线装配不再是一次性把零件摆到最终位，而是 auto/replay 按 BOM `steps` 逐个把零件从「散落起点」动画到「贴合位」，manual 下可拾取拖拽单件实时过干涉。这是 0.3.0 出口「交互式装配仿真」的门禁。
+
+### User Context
+用户在 FEAT-002 明示把「三模式真装配 + 实时干涉拖拽 + BOM 树/节拍面板」归 0.3.x。本轮仅**规划不写码**，把 0.3.0 拆成可独立验收的切片（记入 FEATURE_REQUESTS + 任务看板），等用户选定推进顺序。
+
+### 现状基线（已就位，勿重复做）
+- `NoopAssembler`（noop.ts）：真实三模式状态机 —— mode/step/assembled 集合、load 清空、switchMode(带拒绝语义)、assemble(严格按 steps 序)、undo、play/pause、seekTo、checkPlacement(委托 clearance)。**纯逻辑无渲染依赖，可单测，0.3.x 不必重写。**
+- `NoopClearance`（noop.ts）：真实委托 clearance-core（registerAssembled 建 BVH / queryInteractive 返回 hits / runFull 出标准报告）。**复用，不重写。**
+- Babylon 后端复用 NoopAssembler+NoopClearance；`renderBoxes` 现一次性把所有零件摆到 `AssemblyPart.localPosition`（贴合位）。**缺分态/动画。**
+- domain：`AssemblyPart.localPosition/localRotation`=贴合基准位；`AssemblyStep{seq,partId,constraintIds,durationSeconds,description}`=自动/回放最小单元（durationSeconds 可作动画时长）。
+- 业务只能经 `SimEngine` 门面访问，禁止直引 Babylon。
+
+### Complexity Estimate
+large（拆 4 切片，各自 small~medium，见下）
+
+### Slicing（各自可独立验收）
+- **S1 · 分态渲染（最小、建议首做）**：BabylonScene 把每条产线的零件分成「已贴合/待装配」两态。已贴合零件在 `localPosition` 常驻；待装配零件停驻在**确定性散落起点**（相对原位的偏移/上浮），由 `assembledPartIds` 驱动归属切换。验收：切换 mode/assemble 后渲染的贴合/散落集合与 `assembly.assembledPartIds` 一致（截图+单测）。
+- **S2 · 装配过程动画（auto/replay）**：auto 按 `bom.steps` 顺序、用 `durationSeconds` 做「散落→贴合」位姿过渡；`seekTo(step)`/`undo` 支持跳变（取消动画直达）。replay 复用同动画按需回放 + `description` 字幕位。验收：play 后零件逐个贴合、seek/undo 正确（截图 + 无 WebGL 单测走 Noop 状态断言）。
+- **S3 · 交互拾取与实时干涉拖拽（manual）**：Babylon InteractionManager 接射线拾取（pointer → 网格命中）+ `dragTo` 更新零件位姿；拖拽中持续调 `clearance.queryInteractive`，命中零件变红/拦截，`endDrag` 用 `checkPlacement` 裁决落位。验收：浏览器拖拽零件与已装配件干涉时变色/无法贴合（E2E 截图）。
+- **S4 · BOM 树 + 节拍面板（HUD）**：Workbench 侧栏展示 `bom.parts/steps` 层级与当前 step 高亮、选中零件联动视图；节拍数据接 `takt-svc`。验收：UI 展示 + 与装配态联动。（此切片偏 UI/数据，可与 S1-S3 并行。）
+
+### Non-Goals（0.3.0 不做，留 0.4+）
+- 真 glTF 资产管线（AssetManager.loadLine 的 bom 分支、model-svc 真模型下发）——仍合成 OBB 盒体占位。
+- 装配约束的**几何解算/贴合吸附**（Constraint 仅作步骤说明，不参与平移旋转求解）。
+- 多用户协同装配会话。
+
+### Metadata
+- Frequency: first_time
+- Related Features: WorkbenchView, SimEngine facade, babylon.ts, noop.ts, clearance-core
+- Branch (later): feat/0.3.0-<slice>（每切片可独立合 main 保留分支）
