@@ -790,3 +790,31 @@ fatal: Unable to create '.git/index.lock': Operation not permitted
 - Related Files: .git/index
 
 ---
+
+## [ERR-20260904-029] browser_binding_lost_after_interruption
+
+**Logged**: 2026-09-04T04:28:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+任务被中断后，浏览器标签仍存在，但持久 JavaScript 会话中的 `browser` 绑定已丢失。
+
+### Error
+```
+browser is not defined
+```
+
+### Context
+- 试图直接 finalize 先前验证用的工作台标签页。
+- 重新初始化 browser runtime、按 URL 选择浏览器并 claim 现有标签后成功保留页面。
+
+### Suggested Fix
+跨中断恢复浏览器工作时先检查绑定是否存在；页面标签与控制会话是两个独立生命周期。
+
+### Metadata
+- Reproducible: unknown
+- Related Files: none
+
+---
