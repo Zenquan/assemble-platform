@@ -601,7 +601,7 @@ class BabylonScene implements SceneManager {
    * 按后端 BOM 加载真实 GLB。GLB 是唯一可见零件；透明 box 仅承载拾取与 OBB。
    * 任一资产失败即清理本轮已加载内容并抛错，不回退到可见模拟盒。
    */
-  async renderParts(bom: AssemblyBom): Promise<void> {
+  async renderParts(bom: AssemblyBom, modelVersion: string): Promise<void> {
     const scene = this.scene;
     if (!scene) throw new Error('Babylon 场景尚未挂载');
     this._clearParts();
@@ -610,7 +610,11 @@ class BabylonScene implements SceneManager {
     const runtimeNodes: TransformNode[] = [];
     try {
       for (const part of bom.parts) {
-        const container = await SceneLoader.LoadAssetContainerAsync('', modelGlbUrl(part.assetId), scene);
+        const container = await SceneLoader.LoadAssetContainerAsync(
+          '',
+          modelGlbUrl(part.assetId, modelVersion),
+          scene,
+        );
         const visualRoot = new TransformNode(`visual-${part.id}`, scene);
         const contentRoot = new TransformNode(`content-${part.id}`, scene);
         contentRoot.parent = visualRoot;
@@ -909,7 +913,7 @@ class BabylonAssets implements AssetManager {
 
   async loadLine(line: ProductionLine, bom: AssemblyBom): Promise<readonly string[]> {
     if (line.id !== bom.lineId) throw new Error('产线与 BOM 不匹配');
-    await this.sceneMgr.renderParts(bom);
+    await this.sceneMgr.renderParts(bom, line.modelVersion);
     this._partIds = bom.parts.map((part) => part.id);
     this._loaded = this._partIds.length;
     return this._partIds;

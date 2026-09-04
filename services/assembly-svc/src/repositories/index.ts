@@ -58,7 +58,7 @@ export function buildSeedLines(): ProductionLine[] {
       id: 'line-freshcut-01',
       name: '果蔬净菜加工线',
       kind: 'fresh-cut',
-      modelVersion: 'freshcut-v1.0.0',
+      modelVersion: 'freshcut-v1.0.1',
       enabled: true,
       createdAt: now,
       updatedAt: now,
