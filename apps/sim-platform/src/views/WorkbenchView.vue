@@ -34,6 +34,8 @@ const totalParts = ref(0);
 const animProgress = ref(0); // 动画进度 seq（S2 播放态）
 const isAnimPlaying = ref(false);
 const animTotal = ref(0);
+const runtimeNodeCount = ref(0);
+const isRuntimePlaying = ref(false);
 // S3 · 手动拖拽实时状态（拖拽中零件 / 干涉拦截 / 可落位提示）
 const dragText = ref('');
 // S4 · BOM 树 + 节拍面板
@@ -68,6 +70,8 @@ async function loadWorkbench(nextLineId: string) {
   animProgress.value = 0;
   animTotal.value = 0;
   isAnimPlaying.value = false;
+  runtimeNodeCount.value = 0;
+  isRuntimePlaying.value = false;
   let eng: SimEngine | null = null;
   try {
     const [loadedLine, bom] = await Promise.all([
@@ -92,6 +96,7 @@ async function loadWorkbench(nextLineId: string) {
     assembledCount.value = assemblyState.seated;
     totalParts.value = assemblyState.seated + assemblyState.scattered;
     refreshAnimState();
+    refreshRuntimeState();
     refreshBomTree();
     stepText.value = eng.backend === 'babylon'
       ? `已加载 ${health.totalParts} 个 GLB 零件 · 手动拖拽下一件装配（滚轮缩放 / 左键旋转）`
@@ -166,6 +171,27 @@ function pauseAuto() {
   refreshAnimState();
 }
 
+function startRuntime() {
+  const eng = engine.value;
+  if (!eng) return;
+  eng.runtime.start();
+  refreshRuntimeState();
+}
+
+function pauseRuntime() {
+  const eng = engine.value;
+  if (!eng) return;
+  eng.runtime.pause();
+  refreshRuntimeState();
+}
+
+function resetRuntime() {
+  const eng = engine.value;
+  if (!eng) return;
+  eng.runtime.reset();
+  refreshRuntimeState();
+}
+
 /** 刷新动画播放态与已贴合计数（巴比仑后端由 render loop 内部推进，UI 轮询展示） */
 function refreshAnimState() {
   const eng = engine.value;
@@ -181,6 +207,13 @@ function refreshAnimState() {
   assembledCount.value = seated;
 }
 
+function refreshRuntimeState() {
+  const eng = engine.value;
+  if (!eng) return;
+  runtimeNodeCount.value = eng.runtime.boundNodeCount;
+  isRuntimePlaying.value = eng.runtime.playing;
+}
+
 onBeforeUnmount(() => {
   unmounted = true;
   loadVersion += 1;
@@ -194,6 +227,7 @@ onMounted(() => {
   // 轮询刷新动画进度（播放由引擎 render loop 驱动，Vue 无帧 hook）
   pollTimer = window.setInterval(() => {
     if (!unmounted) refreshAnimState();
+    if (!unmounted) refreshRuntimeState();
     if (!unmounted) refreshDragState();
     if (!unmounted) refreshBomTree();
   }, UI_STATE_POLL_INTERVAL_MS);
@@ -296,6 +330,14 @@ async function loadTakt(version: number, ln: ProductionLine) {
           <template v-else>
             <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（BOM 树联动 · 当前步骤高亮）</div>
             <div class="hud-bottom">{{ stepText }}</div>
+            <div class="runtimebar">
+              <span class="runtime-label">设备运行态</span>
+              <span class="runtime-count">{{ runtimeNodeCount }} 个运动节点</span>
+              <span class="runtime-status" :class="{ live: isRuntimePlaying }"><i class="dot"></i>{{ isRuntimePlaying ? '运行中' : '已暂停' }}</span>
+              <button class="runtime-btn" :disabled="isRuntimePlaying || runtimeNodeCount === 0" @click="startRuntime">▶ 启动</button>
+              <button class="runtime-btn" :disabled="!isRuntimePlaying" @click="pauseRuntime">⏸ 暂停</button>
+              <button class="runtime-btn" :disabled="runtimeNodeCount === 0" @click="resetRuntime">↺ 复位</button>
+            </div>
             <div class="s1bar">
               <span class="s1count">已贴合 <b>{{ assembledCount }}</b> / {{ totalParts }}</span>
               <span v-if="animTotal > 0" class="s1prog">动画 {{ animProgress }}/{{ animTotal }}{{ isAnimPlaying ? ' · 播放中' : '' }}</span>
@@ -440,7 +482,7 @@ async function loadTakt(version: number, ln: ProductionLine) {
 }
 .s1bar {
   position: absolute;
-  top: 46px;
+  top: 88px;
   left: 12px;
   display: inline-flex;
   flex-wrap: wrap;
@@ -449,6 +491,66 @@ async function loadTakt(version: number, ln: ProductionLine) {
   max-width: 96%;
   z-index: 3;
   font-size: 11px;
+}
+.runtimebar {
+  position: absolute;
+  top: 46px;
+  left: 12px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  max-width: 96%;
+  z-index: 3;
+  font-size: 11px;
+}
+.runtime-label,
+.runtime-count,
+.runtime-status {
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: rgba(10, 20, 32, 0.72);
+  border: 1px solid var(--line-3);
+  color: var(--mute);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.runtime-label {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+.runtime-status.live {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.35);
+}
+.runtime-status .dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--ghost);
+}
+.runtime-status.live .dot {
+  background: #34d399;
+  box-shadow: 0 0 7px rgba(52, 211, 153, 0.75);
+}
+.runtime-btn {
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--line-3);
+  background: rgba(13, 22, 38, 0.75);
+  color: var(--ink);
+  font-size: 11px;
+  padding: 5px 9px;
+  border-radius: 6px;
+}
+.runtime-btn:hover:not(:disabled) {
+  border-color: #fbbf24;
+  color: #fbbf24;
+}
+.runtime-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .s1count {
   color: var(--ink);
