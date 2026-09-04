@@ -38,6 +38,7 @@ PALETTE = {
     "accent_orange":dict(base=(0.95,0.36,0.05), metal=0.20, rough=0.45),
     "led_ring":     dict(base=(0.7,0.72,0.78),  metal=0.0,  rough=0.30, emissive=(0.9,0.95,1.0)),
     "aluminum":     dict(base=(0.55,0.57,0.60), metal=0.85, rough=0.25),
+    "food_belt":    dict(base=(0.02,0.36,0.43),  metal=0.02, rough=0.64),
     "dark_rubber":  dict(base=(0.05,0.05,0.06), metal=0.0,  rough=0.95),
 }
 
@@ -306,14 +307,16 @@ def build_transfer_conveyor() -> list[bpy.types.Object]:
     objs = []
     length = 0.8
     body_y0 = 0.5
-    objs.append(cube((length, 0.05, 0.18), (0, 0.28, body_y0), "metal_dark", "side_rail_R"))
-    objs.append(cube((length, 0.05, 0.18), (0, -0.28, body_y0), "metal_dark", "side_rail_L"))
+    objs.append(cube((length, 0.05, 0.24), (0, 0.28, body_y0 + 0.08), "metal_dark", "side_rail_R"))
+    objs.append(cube((length, 0.05, 0.24), (0, -0.28, body_y0 + 0.08), "metal_dark", "side_rail_L"))
     objs.append(cube((0.06, 0.6, 0.08), (0, 0, body_y0 - 0.06), "aluminum", "cross_center"))
     roller_offset = length / 2 - 0.18
     for x in (-roller_offset, roller_offset):
         objs.append(cylinder(0.18, 0.5, (x, 0, body_y0 + 0.05), "metal_mid", f"roller_{x}", axis="Y"))
-    objs.append(cube((length - 0.2, 0.5, 0.02), (0, 0, body_y0 + 0.12), "dark_rubber", "food_belt"))
-    leg_h = body_y0 - 0.16
+    belt_top = body_y0 + 0.22
+    objs.append(cube((length - 0.04, 0.5, 0.045), (0, 0, belt_top - 0.0225), "food_belt", "food_belt"))
+    objs.append(cube((length - 0.16, 0.44, 0.025), (0, 0, body_y0 + 0.02), "dark_rubber", "belt_return"))
+    leg_h = body_y0 - 0.09
     for x in (-roller_offset, roller_offset):
         for sy in (-0.32, 0.32):
             objs.append(cube((0.06, 0.06, leg_h), (x, sy, leg_h / 2), "metal_dark", f"leg_{x}_{sy}"))
