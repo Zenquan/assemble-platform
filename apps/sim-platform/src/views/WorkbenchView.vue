@@ -277,6 +277,11 @@ function selectPart(partId: string) {
   refreshBomTree();
 }
 
+/** 恢复整条真实 GLB 产线的初始化最佳轴测视角。 */
+function frameAssembly() {
+  engine.value?.scene.frameToAssembly();
+}
+
 /** S4 · 拉取节拍仿真（一次）：目标产能取瓶颈工位小时速率。 */
 async function loadTakt(version: number, ln: ProductionLine) {
   if (ln.stations.length === 0) {
@@ -325,6 +330,9 @@ async function loadTakt(version: number, ln: ProductionLine) {
           <template v-else>
             <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（BOM 树联动 · 当前步骤高亮）</div>
             <div class="hud-bottom">{{ stepText }}</div>
+            <button class="view-reset-btn" type="button" title="定位到初始化最佳视角" @click="frameAssembly">
+              <span aria-hidden="true">⌖</span> 初始视角
+            </button>
             <div class="runtimebar">
               <span class="runtime-label">设备运行态</span>
               <span class="runtime-count">{{ runtimeNodeCount }} 个运动节点</span>
@@ -467,6 +475,30 @@ async function loadTakt(version: number, ln: ProductionLine) {
   background: rgba(10, 20, 32, 0.55);
   border: 1px solid rgba(34, 211, 238, 0.25);
   border-radius: 6px;
+}
+.view-reset-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 4;
+  pointer-events: auto;
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid rgba(94, 234, 212, 0.35);
+  background: rgba(10, 20, 32, 0.82);
+  color: #99f6e4;
+  font-size: 11px;
+  padding: 5px 9px;
+  border-radius: 6px;
+}
+.view-reset-btn span {
+  margin-right: 3px;
+  font-size: 14px;
+  line-height: 0;
+}
+.view-reset-btn:hover {
+  border-color: #5eead4;
+  background: rgba(20, 45, 55, 0.9);
 }
 .hud-bottom {
   bottom: 12px;

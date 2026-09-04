@@ -227,6 +227,9 @@ class NoopScene implements SceneManager {
   frameToPart(_partIds: readonly string[]): void {
     /* noop：真 Babylon 实现时改为聚焦包围盒 */
   }
+  frameToAssembly(): void {
+    /* noop：无真实场景可供重新取景 */
+  }
   requestRender(): boolean {
     return this.mounted;
   }

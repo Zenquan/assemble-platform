@@ -203,6 +203,8 @@ class BabylonScene implements SceneManager {
   private _partOrder: string[] = [];
   /** S2 · 每件 seat/scatter 纯布局（renderParts 时缓存，供 animator 构造） */
   private _placements: PartPlacement[] = [];
+  /** 最近一次真实 GLB 装配体的包围数据，供用户恢复初始化最佳视角。 */
+  private _assemblyBounds: RenderPart[] = [];
   /** S3c · 射线求交用单位矩阵（createPickingRay 的 world 参数） */
   private _idMatrix = Matrix.Identity();
   /** S2 · 最近一次已知的 assembled 集合快照（供飞行覆盖退出时回落 S1 seat/scatter 判定） */
@@ -480,6 +482,7 @@ class BabylonScene implements SceneManager {
     this.halfSize.clear();
     this._partOrder = [];
     this._placements = [];
+    this._assemblyBounds = [];
     this.runtimeBindings.clear();
     this.runtimePlayer = new RuntimeMotionPlayer([]);
   }
@@ -698,6 +701,11 @@ class BabylonScene implements SceneManager {
     this.configureRuntimeAnimations(runtimeNodes);
     this.startRuntimeAnimations();
     const placements = computeTwoStatePlacement(renderParts);
+    this._assemblyBounds = renderParts.map((part) => ({
+      partId: part.partId,
+      center: [...part.center] as Vec3,
+      half: [...part.half] as Vec3,
+    }));
     this._placements = placements;
     this._partOrder = renderParts.map((part) => part.partId);
     for (const [index, placement] of placements.entries()) {
@@ -713,6 +721,13 @@ class BabylonScene implements SceneManager {
       this._setPartCenter(part.partId, seat);
     }
     this._frameWholeAssembly(renderParts);
+  }
+
+  frameToAssembly(): void {
+    if (!this.camera || this._assemblyBounds.length === 0) return;
+    this.setCamera('iso');
+    this._frameWholeAssembly(this._assemblyBounds);
+    this.scene?.render();
   }
 
   /** 把相机取景到装配体（质心 + 包围半径 → 半径取景公式，见 LRN-005） */
