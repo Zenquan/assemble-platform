@@ -35,6 +35,22 @@ export interface PartPlacement {
   scatter: Vec3;
 }
 
+/** 计算真实装配体外包络中心到地板原点的平移量（只居中 X/Z，不改变高度）。 */
+export function floorCenterOffset(parts: readonly SeatInput[]): Vec3 {
+  if (parts.length === 0) return [0, 0, 0];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const part of parts) {
+    minX = Math.min(minX, part.center[0] - part.half[0]);
+    maxX = Math.max(maxX, part.center[0] + part.half[0]);
+    minZ = Math.min(minZ, part.center[2] - part.half[2]);
+    maxZ = Math.max(maxZ, part.center[2] + part.half[2]);
+  }
+  return [(minX + maxX) / 2, 0, (minZ + maxZ) / 2];
+}
+
 /** 装配体质心（各零件 seat 中心的算术平均） */
 function centroid(parts: readonly SeatInput[]): Vec3 {
   let x = 0;

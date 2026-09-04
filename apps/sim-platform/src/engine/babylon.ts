@@ -47,7 +47,7 @@ import { modelGlbUrl } from '../api/model.js';
 
 import { NoopAssembler, NoopClearance, NoopSimEngine } from './noop.js';
 import { AssemblyAnimator } from './animator.js';
-import { computeTwoStatePlacement, type PartPlacement } from './placement.js';
+import { computeTwoStatePlacement, floorCenterOffset, type PartPlacement } from './placement.js';
 import { ManualDragSession, boxObbAt, rayPlaneYIntersect, type DragGeometry } from './drag.js';
 import { fitSphereCameraRadius } from './framing.js';
 import {
@@ -698,6 +698,7 @@ class BabylonScene implements SceneManager {
       throw error instanceof Error ? error : new Error('GLB 装配资产加载失败');
     }
 
+    this._centerAssemblyOnFloor(renderParts);
     this.configureRuntimeAnimations(runtimeNodes);
     this.startRuntimeAnimations();
     const placements = computeTwoStatePlacement(renderParts);
@@ -721,6 +722,29 @@ class BabylonScene implements SceneManager {
       this._setPartCenter(part.partId, seat);
     }
     this._frameWholeAssembly(renderParts);
+  }
+
+  /** 将整条真实 GLB 产线的外包络中心对齐到底板原点，保持 BOM 内部相对位置不变。 */
+  private _centerAssemblyOnFloor(parts: RenderPart[]): void {
+    const offset = floorCenterOffset(parts);
+    if (offset[0] === 0 && offset[2] === 0) return;
+    for (const part of parts) {
+      part.center = [
+        part.center[0] - offset[0],
+        part.center[1],
+        part.center[2] - offset[2],
+      ];
+      const proxy = this.meshes.get(part.partId);
+      if (proxy) {
+        proxy.position.x -= offset[0];
+        proxy.position.z -= offset[2];
+      }
+      const visualRoot = this.visualRoots.get(part.partId);
+      if (visualRoot) {
+        visualRoot.position.x -= offset[0];
+        visualRoot.position.z -= offset[2];
+      }
+    }
   }
 
   frameToAssembly(): void {
