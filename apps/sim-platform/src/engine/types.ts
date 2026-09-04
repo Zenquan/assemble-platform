@@ -142,6 +142,20 @@ export interface DragLiveState {
     | 'snapped-back'; // 本次未能落位，回散落位
 }
 
+/** GLB `extras.motion` 节点的运行态动画控制。 */
+export interface RuntimeAnimationController {
+  /** 当前是否在逐帧采样运行态位姿 */
+  readonly playing: boolean;
+  /** 已从当前产线 GLB 绑定的运动节点数 */
+  readonly boundNodeCount: number;
+  /** 启动运行态动画；没有运动节点时返回 false */
+  start(): boolean;
+  /** 暂停并保持当前设备位姿 */
+  pause(): boolean;
+  /** 清除运行态时间并恢复 GLB 初始位姿 */
+  reset(): void;
+}
+
 /** 交互拾取/拖拽（手动装配入口） */
 export interface InteractionManager {
   /** 屏幕坐标拾取零件；返回命中零件（noop 未接真实射线时按命中表 mock 返回） */
@@ -223,6 +237,7 @@ export interface SimEngine {
   readonly interaction: InteractionManager;
   readonly assembly: AssemblyController;
   readonly clearance: ClearanceController;
+  readonly runtime: RuntimeAnimationController;
 
   /**
    * S1 · 把渲染同步到装配状态机的 `assembledPartIds`：

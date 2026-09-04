@@ -18,6 +18,7 @@ export type {
   InteractionManager,
   AssemblyController,
   ClearanceController,
+  RuntimeAnimationController,
   EngineHealth,
   CameraPose,
   CameraViewId,

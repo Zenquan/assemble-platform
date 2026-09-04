@@ -50,6 +50,12 @@ import { AssemblyAnimator } from './animator.js';
 import { computeTwoStatePlacement, type PartPlacement } from './placement.js';
 import { ManualDragSession, boxObbAt, rayPlaneYIntersect, type DragGeometry } from './drag.js';
 import { fitSphereCameraRadius } from './framing.js';
+import {
+  RuntimeMotionPlayer,
+  type RuntimeMotionKind,
+  type RuntimeMotionPose,
+  type RuntimeMotionSpec,
+} from './runtime-motion.js';
 import type {
   AssetManager,
   AssemblyController,
@@ -60,6 +66,7 @@ import type {
   EngineHealth,
   InteractionManager,
   PickResult,
+  RuntimeAnimationController,
   SceneManager,
   SimEngine,
 } from './types.js';
@@ -114,6 +121,56 @@ export interface RenderPart {
   half: Vec3;
 }
 
+type RecordValue = Record<string, unknown>;
+
+interface RuntimeNodeBinding {
+  node: TransformNode;
+  basePosition: Vector3;
+  baseRotation: Quaternion | null;
+  baseEuler: Vector3;
+  baseScale: Vector3;
+}
+
+function asRecord(value: unknown): RecordValue | null {
+  return value !== null && typeof value === 'object' ? (value as RecordValue) : null;
+}
+
+function readMotionRecord(metadata: unknown): RecordValue | null {
+  const root = asRecord(metadata);
+  const gltf = asRecord(root?.gltf);
+  const rootExtras = asRecord(root?.extras);
+  const gltfExtras = asRecord(gltf?.extras);
+  return gltfExtras ?? rootExtras ?? gltf ?? root;
+}
+
+function readRuntimeMotion(node: TransformNode): RuntimeMotionSpec | null {
+  const record = readMotionRecord(node.metadata as unknown);
+  const motion = record?.motion;
+  if (typeof motion !== 'string') return null;
+  const supported: readonly RuntimeMotionKind[] = [
+    'translate-x-loop',
+    'translate-incline-loop',
+    'rotate-y',
+    'vibrate-xz',
+    'vibrate-radial',
+    'bucket-gates',
+    'close-open-x',
+    'translate-y',
+  ];
+  if (!supported.includes(motion as RuntimeMotionKind)) return null;
+  const numberValue = (key: string): number | undefined => {
+    const value = record?.[key];
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  };
+  return {
+    nodeId: `${node.name}:${node.uniqueId}`,
+    motion: motion as RuntimeMotionKind,
+    amplitude: numberValue('motion_amplitude'),
+    periodSeconds: numberValue('motion_period_seconds'),
+    phase: numberValue('motion_phase'),
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* SceneManager（真 WebGL）                                            */
 /* ------------------------------------------------------------------ */
@@ -152,6 +209,8 @@ class BabylonScene implements SceneManager {
   private _assembledIds: ReadonlySet<string> = new Set();
   /** S2 · 每帧驱动回调（render loop 每帧先调再 render；由引擎注册动画推进） */
   onFrame: (() => void) | null = null;
+  private runtimeBindings = new Map<string, RuntimeNodeBinding>();
+  private runtimePlayer = new RuntimeMotionPlayer([]);
 
   get isMounted(): boolean {
     return this.engine !== null && this.scene !== null;
@@ -418,6 +477,84 @@ class BabylonScene implements SceneManager {
     this.halfSize.clear();
     this._partOrder = [];
     this._placements = [];
+    this.runtimeBindings.clear();
+    this.runtimePlayer = new RuntimeMotionPlayer([]);
+  }
+
+  configureRuntimeAnimations(nodes: readonly TransformNode[]): void {
+    this.runtimeBindings.clear();
+    const specs: RuntimeMotionSpec[] = [];
+    for (const node of nodes) {
+      const spec = readRuntimeMotion(node);
+      if (!spec || this.runtimeBindings.has(spec.nodeId)) continue;
+      this.runtimeBindings.set(spec.nodeId, {
+        node,
+        basePosition: node.position.clone(),
+        baseRotation: node.rotationQuaternion?.clone() ?? null,
+        baseEuler: node.rotation.clone(),
+        baseScale: node.scaling.clone(),
+      });
+      specs.push(spec);
+    }
+    this.runtimePlayer = new RuntimeMotionPlayer(specs);
+  }
+
+  startRuntimeAnimations(): boolean {
+    return this.runtimePlayer.start(this.runtimeNowMs());
+  }
+
+  pauseRuntimeAnimations(): boolean {
+    return this.runtimePlayer.pause(this.runtimeNowMs());
+  }
+
+  resetRuntimeAnimations(): void {
+    this.runtimePlayer.reset();
+    for (const binding of this.runtimeBindings.values()) this.restoreRuntimeNode(binding);
+  }
+
+  tickRuntimeAnimations(): void {
+    for (const frame of this.runtimePlayer.tick(this.runtimeNowMs())) {
+      const binding = this.runtimeBindings.get(frame.nodeId);
+      if (binding) this.applyRuntimePose(binding, frame.pose);
+    }
+  }
+
+  get runtimePlaying(): boolean {
+    return this.runtimePlayer.playing;
+  }
+
+  get runtimeBindingCount(): number {
+    return this.runtimePlayer.bindingCount;
+  }
+
+  private runtimeNowMs(): number {
+    return typeof performance !== 'undefined' ? performance.now() : Date.now();
+  }
+
+  private restoreRuntimeNode(binding: RuntimeNodeBinding): void {
+    binding.node.position.copyFrom(binding.basePosition);
+    binding.node.scaling.copyFrom(binding.baseScale);
+    if (binding.baseRotation) binding.node.rotationQuaternion = binding.baseRotation.clone();
+    else {
+      binding.node.rotationQuaternion = null;
+      binding.node.rotation.copyFrom(binding.baseEuler);
+    }
+  }
+
+  private applyRuntimePose(binding: RuntimeNodeBinding, pose: RuntimeMotionPose): void {
+    binding.node.position.copyFrom(
+      binding.basePosition.add(new Vector3(pose.translation[0], pose.translation[1], pose.translation[2])),
+    );
+    binding.node.scaling.copyFrom(
+      new Vector3(
+        binding.baseScale.x * pose.scale[0],
+        binding.baseScale.y * pose.scale[1],
+        binding.baseScale.z * pose.scale[2],
+      ),
+    );
+    const offset = Quaternion.FromEulerAngles(pose.rotation[0], pose.rotation[1], pose.rotation[2]);
+    if (binding.baseRotation) binding.node.rotationQuaternion = binding.baseRotation.multiply(offset);
+    else binding.node.rotation.copyFrom(binding.baseEuler.add(new Vector3(...pose.rotation)));
   }
 
   private _boundsOf(meshes: readonly AbstractMesh[]): {
@@ -470,6 +607,7 @@ class BabylonScene implements SceneManager {
     this._clearParts();
 
     const renderParts: RenderPart[] = [];
+    const runtimeNodes: TransformNode[] = [];
     try {
       for (const part of bom.parts) {
         const container = await SceneLoader.LoadAssetContainerAsync('', modelGlbUrl(part.assetId), scene);
@@ -478,6 +616,9 @@ class BabylonScene implements SceneManager {
         contentRoot.parent = visualRoot;
         container.addAllToScene();
         for (const node of container.rootNodes) node.parent = contentRoot;
+        for (const node of [...container.transformNodes, ...container.meshes]) {
+          if (!runtimeNodes.includes(node)) runtimeNodes.push(node);
+        }
 
         const meshes = container.meshes.filter((mesh) => mesh.getTotalVertices() > 0);
         if (meshes.length === 0) {
@@ -547,6 +688,8 @@ class BabylonScene implements SceneManager {
       throw error instanceof Error ? error : new Error('GLB 装配资产加载失败');
     }
 
+    this.configureRuntimeAnimations(runtimeNodes);
+    this.startRuntimeAnimations();
     const placements = computeTwoStatePlacement(renderParts);
     this._placements = placements;
     this._partOrder = renderParts.map((part) => part.partId);
@@ -778,6 +921,30 @@ class BabylonAssets implements AssetManager {
   }
 }
 
+class BabylonRuntime implements RuntimeAnimationController {
+  constructor(private readonly scene: BabylonScene) {}
+
+  get playing(): boolean {
+    return this.scene.runtimePlaying;
+  }
+
+  get boundNodeCount(): number {
+    return this.scene.runtimeBindingCount;
+  }
+
+  start(): boolean {
+    return this.scene.startRuntimeAnimations();
+  }
+
+  pause(): boolean {
+    return this.scene.pauseRuntimeAnimations();
+  }
+
+  reset(): void {
+    this.scene.resetRuntimeAnimations();
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Interaction / Assembly / Clearance —— 复用 noop 真实逻辑            */
 /* ------------------------------------------------------------------ */
@@ -965,6 +1132,7 @@ export class BabylonSimEngine implements SimEngine {
   readonly interaction: InteractionManager;
   readonly assembly: AssemblyController;
   readonly clearance: ClearanceController;
+  readonly runtime: RuntimeAnimationController;
 
   private _activeLineId: string | null = null;
   private _initialized = false;
@@ -976,6 +1144,7 @@ export class BabylonSimEngine implements SimEngine {
     this.clearance = new NoopClearance();
     this.scene = new BabylonScene();
     this.assets = new BabylonAssets(this.scene);
+    this.runtime = new BabylonRuntime(this.scene);
     this.assembly = new NoopAssembler(this.clearance);
     // S3c · 手动拖拽真拾取/落位交互，注入引擎分态同步（land→青贴seat / snap→回散落 + clearance 重登记）
     this.interaction = new BabylonInteraction(this.scene, this.assembly as NoopAssembler, this.clearance as NoopClearance, () => this.syncAssemblyState());
@@ -1021,6 +1190,7 @@ export class BabylonSimEngine implements SimEngine {
     this._animator = animator;
     // 每帧：推进动画并结算"飞行中"零件的插值位；播放结束自动停。
     this.scene.onFrame = () => {
+      this.scene.tickRuntimeAnimations();
       if (!this._animator) return;
       this._animator.tick();
       // 飞行中的件 → 用插值位覆盖（视觉平滑滑向 seat）；无飞行件则保持 S1 seat/scatter 判定

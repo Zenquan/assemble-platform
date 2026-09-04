@@ -29,6 +29,7 @@ import type {
   PickResult,
   SceneManager,
   SimEngine,
+  RuntimeAnimationController,
 } from './types.js';
 
 /* ------------------------------------------------------------------ */
@@ -86,6 +87,23 @@ export class NoopClearance implements ClearanceController {
       broadCullRatio: r.broadCullRatio,
       createdAt: new Date().toISOString(),
     };
+  }
+}
+
+class NoopRuntime implements RuntimeAnimationController {
+  readonly boundNodeCount = 0;
+  readonly playing = false;
+
+  start(): boolean {
+    return false;
+  }
+
+  pause(): boolean {
+    return true;
+  }
+
+  reset(): void {
+    // Noop 没有 Babylon 节点可复位。
   }
 }
 
@@ -305,6 +323,7 @@ export class NoopSimEngine implements SimEngine {
   readonly interaction: InteractionManager;
   readonly assembly: AssemblyController;
   readonly clearance: ClearanceController;
+  readonly runtime: RuntimeAnimationController;
 
   private _activeLineId: string | null = null;
   private _initialized = false;
@@ -315,6 +334,7 @@ export class NoopSimEngine implements SimEngine {
     this.scene = new NoopScene();
     this.assets = new NoopAssets();
     this.assembly = new NoopAssembler(this.clearance);
+    this.runtime = new NoopRuntime();
     // 手动拖拽的 ordering 门槛镜像需引用装配状态机
     const interaction = new NoopInteraction();
     interaction.bind(this.assembly as NoopAssembler);
