@@ -44,6 +44,7 @@ describe('GET /lines/:id/bom', () => {
   it('净菜 seed 使用七个行业设备且不附加通用整线基座', () => {
     const freshcut = buildSeedLines().find((item) => item.id === 'line-freshcut-01');
     expect(freshcut?.baseAssetId).toBeUndefined();
+    expect(freshcut?.transferAssetId).toBe('transfer-conveyor');
     expect(freshcut?.stations.map((station) => station.deviceKind)).toEqual([
       'infeed-elevator',
       'bubble-washer',
@@ -53,6 +54,23 @@ describe('GET /lines/:id/bom', () => {
       'weigh-packer',
       'metal-detector',
     ]);
+  });
+
+  it('两条扩展净菜线复用真实设备资产但工艺组合不同', () => {
+    const lines = buildSeedLines();
+    const leaf = lines.find((item) => item.id === 'line-freshcut-02');
+    const root = lines.find((item) => item.id === 'line-freshcut-03');
+
+    expect(leaf?.stations.map((station) => station.deviceKind)).toEqual([
+      'infeed-elevator', 'bubble-washer', 'inspection-conveyor',
+      'vibratory-dewaterer', 'weigh-packer', 'metal-detector',
+    ]);
+    expect(root?.stations.map((station) => station.deviceKind)).toEqual([
+      'infeed-elevator', 'bubble-washer', 'vegetable-cutter',
+      'inspection-conveyor', 'weigh-packer', 'metal-detector',
+    ]);
+    expect(buildBomForLine(leaf!).parts.filter((part) => part.assetId === 'transfer-conveyor')).toHaveLength(5);
+    expect(buildBomForLine(root!).parts.filter((part) => part.assetId === 'transfer-conveyor')).toHaveLength(5);
   });
 
   it('净菜 BOM 按 GLB 外包络排布，并用固定转运段填满设备间隙', () => {

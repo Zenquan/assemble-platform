@@ -9,16 +9,7 @@ const DEFAULT_FACING_DEGREES = 90;
 const MIN_ASSEMBLY_DURATION_SECONDS = 0.6;
 const MAX_ASSEMBLY_DURATION_SECONDS = 2.5;
 const TAKT_TO_ANIMATION_RATIO = 3;
-const FRESHCUT_TRANSFER_LENGTH_METERS = 0.8;
-const FRESHCUT_FOOTPRINT_LENGTHS: Record<string, number> = {
-  'infeed-elevator': 3.49,
-  'bubble-washer': 4.50,
-  'inspection-conveyor': 3.73,
-  'vegetable-cutter': 2.49,
-  'vibratory-dewaterer': 3.02,
-  'weigh-packer': 2.15,
-  'metal-detector': 2.32,
-};
+const DEFAULT_TRANSFER_GAP_METERS = 0.8;
 const IDENTITY_ROTATION: Quat = { x: 0, y: 0, z: 0, w: 1 };
 
 /** 装配服务仓储：以产线为主聚合，用降级存储（内存/文件） */
@@ -26,7 +17,7 @@ export interface AssemblyRepos {
   lines: Repository<ProductionLine>;
 }
 
-/** 种子产线：覆盖三类产线，供本地演示/联调 */
+/** 种子产线：覆盖通用分拣、三条净菜工艺与冷链预包装，供本地演示/联调 */
 export function buildSeedLines(): ProductionLine[] {
   const now = new Date().toISOString();
   const lines: ProductionLine[] = [
@@ -58,6 +49,8 @@ export function buildSeedLines(): ProductionLine[] {
       id: 'line-freshcut-01',
       name: '果蔬净菜加工线',
       kind: 'fresh-cut',
+      transferAssetId: 'transfer-conveyor',
+      transferGapMeters: DEFAULT_TRANSFER_GAP_METERS,
       modelVersion: 'freshcut-v1.0.1',
       enabled: true,
       createdAt: now,
@@ -65,31 +58,105 @@ export function buildSeedLines(): ProductionLine[] {
       stations: [
         {
           id: 'st-f1', lineId: 'line-freshcut-01', seq: 1, name: '提升上料', taktSeconds: 5.2,
-          deviceKind: 'infeed-elevator', facingDeg: 0,
+          deviceKind: 'infeed-elevator', footprintLengthMeters: 3.49, facingDeg: 0,
         },
         {
           id: 'st-f2', lineId: 'line-freshcut-01', seq: 2, name: '气泡清洗', taktSeconds: 6.8,
-          deviceKind: 'bubble-washer', facingDeg: 0,
+          deviceKind: 'bubble-washer', footprintLengthMeters: 4.50, facingDeg: 0,
         },
         {
           id: 'st-f3', lineId: 'line-freshcut-01', seq: 3, name: '人工挑选', taktSeconds: 5.6,
-          deviceKind: 'inspection-conveyor', facingDeg: 0,
+          deviceKind: 'inspection-conveyor', footprintLengthMeters: 3.73, facingDeg: 0,
         },
         {
           id: 'st-f4', lineId: 'line-freshcut-01', seq: 4, name: '连续切配', taktSeconds: 4.4,
-          deviceKind: 'vegetable-cutter', facingDeg: 0,
+          deviceKind: 'vegetable-cutter', footprintLengthMeters: 2.49, facingDeg: 0,
         },
         {
           id: 'st-f5', lineId: 'line-freshcut-01', seq: 5, name: '振动沥水', taktSeconds: 5.0,
-          deviceKind: 'vibratory-dewaterer', facingDeg: 0,
+          deviceKind: 'vibratory-dewaterer', footprintLengthMeters: 3.02, facingDeg: 0,
         },
         {
           id: 'st-f6', lineId: 'line-freshcut-01', seq: 6, name: '组合称重包装', taktSeconds: 6.2,
-          deviceKind: 'weigh-packer', facingDeg: 0,
+          deviceKind: 'weigh-packer', footprintLengthMeters: 2.15, facingDeg: 0,
         },
         {
           id: 'st-f7', lineId: 'line-freshcut-01', seq: 7, name: '金属检测', taktSeconds: 4.8,
-          deviceKind: 'metal-detector', facingDeg: 0,
+          deviceKind: 'metal-detector', footprintLengthMeters: 2.32, facingDeg: 0,
+        },
+      ],
+    },
+    {
+      id: 'line-freshcut-02',
+      name: '叶菜净菜清洗线',
+      kind: 'fresh-cut',
+      transferAssetId: 'transfer-conveyor',
+      transferGapMeters: DEFAULT_TRANSFER_GAP_METERS,
+      modelVersion: 'freshcut-v1.0.1',
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+      stations: [
+        {
+          id: 'st-l1', lineId: 'line-freshcut-02', seq: 1, name: '提升上料', taktSeconds: 5.0,
+          deviceKind: 'infeed-elevator', footprintLengthMeters: 3.49, facingDeg: 0,
+        },
+        {
+          id: 'st-l2', lineId: 'line-freshcut-02', seq: 2, name: '气泡清洗', taktSeconds: 6.4,
+          deviceKind: 'bubble-washer', footprintLengthMeters: 4.50, facingDeg: 0,
+        },
+        {
+          id: 'st-l3', lineId: 'line-freshcut-02', seq: 3, name: '人工挑选', taktSeconds: 5.6,
+          deviceKind: 'inspection-conveyor', footprintLengthMeters: 3.73, facingDeg: 0,
+        },
+        {
+          id: 'st-l4', lineId: 'line-freshcut-02', seq: 4, name: '振动沥水', taktSeconds: 5.0,
+          deviceKind: 'vibratory-dewaterer', footprintLengthMeters: 3.02, facingDeg: 0,
+        },
+        {
+          id: 'st-l5', lineId: 'line-freshcut-02', seq: 5, name: '组合称重包装', taktSeconds: 6.2,
+          deviceKind: 'weigh-packer', footprintLengthMeters: 2.15, facingDeg: 0,
+        },
+        {
+          id: 'st-l6', lineId: 'line-freshcut-02', seq: 6, name: '金属检测', taktSeconds: 4.8,
+          deviceKind: 'metal-detector', footprintLengthMeters: 2.32, facingDeg: 0,
+        },
+      ],
+    },
+    {
+      id: 'line-freshcut-03',
+      name: '根茎净菜切配线',
+      kind: 'fresh-cut',
+      transferAssetId: 'transfer-conveyor',
+      transferGapMeters: DEFAULT_TRANSFER_GAP_METERS,
+      modelVersion: 'freshcut-v1.0.1',
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+      stations: [
+        {
+          id: 'st-r1', lineId: 'line-freshcut-03', seq: 1, name: '提升上料', taktSeconds: 5.4,
+          deviceKind: 'infeed-elevator', footprintLengthMeters: 3.49, facingDeg: 0,
+        },
+        {
+          id: 'st-r2', lineId: 'line-freshcut-03', seq: 2, name: '气泡清洗', taktSeconds: 6.6,
+          deviceKind: 'bubble-washer', footprintLengthMeters: 4.50, facingDeg: 0,
+        },
+        {
+          id: 'st-r3', lineId: 'line-freshcut-03', seq: 3, name: '连续切配', taktSeconds: 4.4,
+          deviceKind: 'vegetable-cutter', footprintLengthMeters: 2.49, facingDeg: 0,
+        },
+        {
+          id: 'st-r4', lineId: 'line-freshcut-03', seq: 4, name: '人工挑选', taktSeconds: 5.8,
+          deviceKind: 'inspection-conveyor', footprintLengthMeters: 3.73, facingDeg: 0,
+        },
+        {
+          id: 'st-r5', lineId: 'line-freshcut-03', seq: 5, name: '组合称重包装', taktSeconds: 6.2,
+          deviceKind: 'weigh-packer', footprintLengthMeters: 2.15, facingDeg: 0,
+        },
+        {
+          id: 'st-r6', lineId: 'line-freshcut-03', seq: 6, name: '金属检测', taktSeconds: 4.8,
+          deviceKind: 'metal-detector', footprintLengthMeters: 2.32, facingDeg: 0,
         },
       ],
     },
@@ -135,14 +202,17 @@ function durationFromTakt(taktSeconds: number): number {
   );
 }
 
-function compactFreshcutPositions(stations: readonly Station[]): Map<string, Vec3> {
+function compactStationPositions(
+  stations: readonly Station[],
+  transferGapMeters: number,
+): Map<string, Vec3> {
   const positions = new Map<string, Vec3>();
   let cursor = 0;
   let previousLength = 0;
   for (const [index, station] of stations.entries()) {
-    const length = FRESHCUT_FOOTPRINT_LENGTHS[station.deviceKind ?? ''] ?? 3;
+    const length = station.footprintLengthMeters ?? 3;
     if (index === 0) cursor = -length / 2;
-    else cursor += previousLength / 2 + length / 2 + FRESHCUT_TRANSFER_LENGTH_METERS;
+    else cursor += previousLength / 2 + length / 2 + transferGapMeters;
     positions.set(station.id, [cursor, 0, 0]);
     previousLength = length;
   }
@@ -160,7 +230,12 @@ export function buildBomForLine(line: ProductionLine): AssemblyBom {
     return { lineId: line.id, parts: [], constraints: [], steps: [] };
   }
 
-  const compactPositions = line.kind === 'fresh-cut' ? compactFreshcutPositions(stations) : null;
+  const hasFootprints = stations.length > 0 && stations.every(
+    (station) => station.footprintLengthMeters !== undefined,
+  );
+  const compactPositions = hasFootprints
+    ? compactStationPositions(stations, line.transferGapMeters ?? DEFAULT_TRANSFER_GAP_METERS)
+    : null;
   const positions = stations.map((station, index) =>
     compactPositions?.get(station.id) ?? positionOf(station, index, stations.length),
   );
@@ -213,7 +288,7 @@ export function buildBomForLine(line: ProductionLine): AssemblyBom {
     });
   }
 
-  if (line.kind === 'fresh-cut') {
+  if (line.transferAssetId) {
     for (let index = 1; index < stations.length; index += 1) {
       const previous = stations[index - 1];
       const current = stations[index];
@@ -221,12 +296,12 @@ export function buildBomForLine(line: ProductionLine): AssemblyBom {
       const currentPosition = positions[index];
       if (!previous || !current || !previousPosition || !currentPosition) continue;
       if (!previous.deviceKind || !current.deviceKind) continue;
-      const previousLength = FRESHCUT_FOOTPRINT_LENGTHS[previous.deviceKind] ?? 3;
-      const currentLength = FRESHCUT_FOOTPRINT_LENGTHS[current.deviceKind] ?? 3;
+      const previousLength = previous.footprintLengthMeters ?? 3;
+      const currentLength = current.footprintLengthMeters ?? 3;
       parts.push({
         id: `${line.id}-transfer-${previous.id}-${current.id}`,
         name: `${previous.name}至${current.name}卫生输送段`,
-        assetId: 'transfer-conveyor',
+        assetId: line.transferAssetId,
         localPosition: [
           (previousPosition[0] + previousLength / 2 + currentPosition[0] - currentLength / 2) / 2,
           0,
