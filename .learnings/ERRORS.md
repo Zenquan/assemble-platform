@@ -4,6 +4,98 @@ Command failures and integration errors.
 
 > 记录工具链/算法/环境层面的真实踩坑（含已修复），避免重复排查。格式遵循 `.agent/skills/self-improving-agent`。
 
+## [ERR-20260904-043] domain_empty_test_suite
+
+**Logged**: 2026-09-04T17:15:00+08:00
+**Priority**: low
+**Status**: pending
+**Area**: tests
+
+### Summary
+根 `pnpm test` 因 `@assemble/domain` 没有测试文件而失败。
+
+### Error
+```text
+No test files found, exiting with code 1
+```
+
+### Context
+- 根测试脚本递归执行所有 `packages/*` 的 `test` 脚本。
+- `domain` 本次仅修改类型契约，没有现成测试目录；类型检查已通过。
+
+### Suggested Fix
+后续为 domain 增加契约测试，或让空测试包使用显式的 no-test 配置。
+
+### Metadata
+- Reproducible: yes
+- Related Files: packages/domain/package.json, packages/domain/src/rhythm.ts
+- Tags: vitest, domain, baseline
+
+---
+
+## [ERR-20260904-041] sim_platform_vitest_path
+
+**Logged**: 2026-09-04T17:10:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+从仓库根目录向 sim-platform 的自定义 Vitest 配置传入应用相对路径，导致测试收集为空。
+
+### Error
+```text
+No test files found, exiting with code 1
+```
+
+### Context
+- `vue-tsc --noEmit -p apps/sim-platform/tsconfig.json` 已通过。
+- 失败命令使用了根目录工作路径和 `apps/sim-platform/src/...` 过滤路径。
+
+### Suggested Fix
+从 `apps/sim-platform` 目录执行包脚本或传入相对该目录的测试路径。
+
+### Resolution
+改为在应用目录执行 `vitest run src/engine/test/taktpanel.test.ts`。
+
+### Metadata
+- Reproducible: yes
+- Related Files: apps/sim-platform/vite.config.ts
+- Tags: vitest, path, frontend
+
+---
+
+## [ERR-20260904-042] sim_platform_hoisted_binary_path
+
+**Logged**: 2026-09-04T17:12:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+应用使用 hoisted 依赖，但整包校验命令误从应用目录寻找本地 `node_modules/.bin/vue-tsc`。
+
+### Error
+```text
+Cannot find module '.../apps/sim-platform/node_modules/.bin/vue-tsc'
+```
+
+### Context
+- 应用目录没有独立 `node_modules`，依赖位于仓库根目录。
+
+### Suggested Fix
+从应用目录执行时使用 `../../node_modules/.bin/<binary>`，或通过包管理器脚本调用。
+
+### Resolution
+改用根目录 hoisted 二进制路径重跑类型检查与测试。
+
+### Metadata
+- Reproducible: yes
+- Related Files: apps/sim-platform/package.json, .npmrc
+- Tags: pnpm, hoisted, vue-tsc
+
+---
+
 ## [ERR-20260904-039] git_index_lock_permission
 
 **Logged**: 2026-09-04T00:00:00+08:00

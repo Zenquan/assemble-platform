@@ -13,7 +13,7 @@
  *   其余            → 'ok'
  */
 
-import type { Station, TaktBottleneckResult } from '@assemble/domain';
+import type { Station, TaktBottleneckResult, TaktDataSource } from '@assemble/domain';
 
 /** 单工位负荷的行（含展示名与分级） */
 export interface TaktStationLoad {
@@ -47,6 +47,10 @@ export interface TaktPanelModel {
   bottleneckTaktSeconds: number;
   /** 各工位负荷行 */
   stationLoads: TaktStationLoad[];
+  /** 目标与开动率的数据来源 */
+  configSource: TaktDataSource;
+  /** 后端最近一次现场观测 */
+  actual: TaktBottleneckResult['actual'];
   /** 一句话中文汇总（HUD 顶部） */
   summary: string;
 }
@@ -100,6 +104,8 @@ export function deriveTaktPanel(
     bottleneckStationName: bn?.name ?? result.bottleneckStationId,
     bottleneckTaktSeconds: result.bottleneckTaktSeconds,
     stationLoads,
+    configSource: result.configSource,
+    actual: result.actual,
     summary,
   };
 }

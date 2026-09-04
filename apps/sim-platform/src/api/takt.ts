@@ -2,7 +2,7 @@
  * takt-svc(7104) 节拍仿真客户端 —— S4 节拍面板数据源。
  *
  * 真实口径：POST /takt/simulate 只提交 lineId，takt-svc 从 assembly-svc 读取工位，
- * 返回 TaktBottleneckResult（瓶颈工位/理论CT/产能/实际开动率/各工位负荷）。
+ * 返回 TaktBottleneckResult（配置目标、现场实际产出、瓶颈工位、理论CT与各工位负荷）。
  */
 import type { TaktBottleneckResult } from '@assemble/domain';
 import { http } from './http.js';

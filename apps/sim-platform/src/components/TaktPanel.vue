@@ -19,13 +19,35 @@ defineProps<{
 function barWidth(load: number): string {
   return `${Math.min(100, Math.round(load * 100))}%`;
 }
+
+function sourceLabel(source: string | undefined): string {
+  if (source === 'configuration') return '配置';
+  if (source === 'mes') return 'MES';
+  if (source === 'plc') return 'PLC';
+  return '推导';
+}
+
+function observedAtLabel(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+}
 </script>
 
 <template>
   <div class="takt-panel">
     <div class="tp-head">
       <span class="tp-title">节拍 · Takt</span>
-      <span class="tp-avail mono" title="OEE 时间开动率">A{{ model?.availability ?? '–' }}</span>
+      <span class="tp-head-meta">
+        <span class="tp-source">{{ sourceLabel(model?.configSource) }}</span>
+        <span class="tp-avail mono" title="OEE 时间开动率">A{{ model?.availability ?? '–' }}</span>
+      </span>
     </div>
 
     <template v-if="model">
@@ -45,6 +67,30 @@ function barWidth(load: number): string {
           <span class="tp-v mono">{{ model.targetUnitsPerHour }} P/H</span>
         </div>
       </div>
+
+      <div v-if="model.actual" class="tp-observation">
+        <div class="tp-observation-head">
+          <span class="tp-k">现场实际</span>
+          <span class="tp-observation-meta mono">
+            {{ sourceLabel(model.actual.source) }} · {{ observedAtLabel(model.actual.observedAt) }}
+          </span>
+        </div>
+        <div class="tp-observation-grid">
+          <div class="tp-cell">
+            <span class="tp-k">实际产量</span>
+            <span class="tp-v mono">{{ model.actual.actualThroughputPerHour.toFixed(0) }} P/H</span>
+          </div>
+          <div class="tp-cell">
+            <span class="tp-k">实际平均 CT</span>
+            <span class="tp-v mono">{{ model.actual.actualTaktSeconds.toFixed(1) }}s</span>
+          </div>
+          <div class="tp-cell">
+            <span class="tp-k">观测完成</span>
+            <span class="tp-v mono">{{ model.actual.completedUnits }} 件</span>
+          </div>
+        </div>
+      </div>
+      <div v-else class="tp-observation-empty">暂无现场实际观测</div>
 
       <div class="tp-bn">
         <span class="tp-k">瓶颈</span>
@@ -100,6 +146,15 @@ function barWidth(load: number): string {
   font-size: 10px;
   color: var(--mute);
 }
+.tp-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tp-source {
+  color: var(--cyan);
+  font-size: 9px;
+}
 .tp-summary {
   font-size: 10px;
   line-height: 1.6;
@@ -144,6 +199,29 @@ function barWidth(load: number): string {
   border-radius: 6px;
   background: rgba(244, 63, 94, 0.08);
   border: 1px solid rgba(244, 63, 94, 0.25);
+}
+.tp-observation {
+  padding-top: 2px;
+}
+.tp-observation-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.tp-observation-meta {
+  color: var(--mute);
+  font-size: 9px;
+}
+.tp-observation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.tp-observation-empty {
+  color: var(--faint);
+  font-size: 10px;
+  padding: 5px 0;
 }
 .tp-bn-name {
   color: var(--ink-2);

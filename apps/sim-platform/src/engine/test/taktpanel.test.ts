@@ -27,6 +27,7 @@ function makeResult(partial: Partial<TaktBottleneckResult> = {}): TaktBottleneck
     meetsTarget: true,
     bottleneckStationId: 'st-c',
     bottleneckTaktSeconds: 3.8,
+    configSource: 'configuration',
     stationLoads: [
       { stationId: 'st-a', load: 0.6 },
       { stationId: 'st-b', load: 0.95 },
@@ -46,6 +47,7 @@ describe('S4 · deriveTaktPanel 视图模型', () => {
     expect(model.lineId).toBe('L');
     expect(model.targetUnitsPerHour).toBe(60);
     expect(model.availability).toBe(0.85);
+    expect(model.configSource).toBe('configuration');
     expect(model.bottleneckStationId).toBe('st-c');
     expect(model.bottleneckStationName).toBe('装箱');
     const byId = new Map(model.stationLoads.map((s) => [s.stationId, s]));
