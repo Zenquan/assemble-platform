@@ -6,6 +6,33 @@ Command failures and integration errors.
 
 ---
 
+## [ERR-20260904-030] git_index_write_requires_approval
+
+**Logged**: 2026-09-04T11:04:30+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+沙箱内提交紧凑布局改动时无法创建 `.git/index.lock`。
+
+### Error
+```text
+fatal: Unable to create '.git/index.lock': Operation not permitted
+```
+
+### Context
+源码和测试可写，但当前 Git 索引写入仍需要提升本地权限。
+
+### Suggested Fix
+在用户已授权提交的前提下，仅对本次 `git add` / `git commit` 请求提升权限。
+
+### Metadata
+- Reproducible: yes
+- Related Files: .git/index
+- Resolution: 通过提升本地 Git 写权限完成提交 `2ae185a`。
+
+
 ## ERR-20260904-001
 
 - **Status**: resolved
@@ -41,6 +68,13 @@ Command failures and integration errors.
 - **Context**: 浏览器自动化点击运行态“暂停”按钮时，定位到唯一可见按钮但 CDP 操作在 3 秒内超时。
 - **Resolution**: 页面 DOM 已确认绑定 12 个节点且运行中；按钮点击自动化超时已保留为验证工具限制。
 
+
+## ERR-20260904-006
+
+- **Status**: pending
+- **Category**: tooling
+- **Context**: 使用 Blender 4.4 后台生成 `produce-sort` 新设备时发生原生 `Segmentation fault: 11`，没有 Python traceback。
+- **Resolution**: 缩小到单资产运行并检查 Blender 崩溃日志；必要时拆分生成批次。
 
 ## [ERR-20260902-001] pnpm_install_symlink
 

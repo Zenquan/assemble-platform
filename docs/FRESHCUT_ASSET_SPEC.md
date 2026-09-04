@@ -25,6 +25,7 @@
 - 每台设备根节点原点位于安装底面的包围盒中心。
 - 所有对象应用 scale；根节点保留位姿，运行时由 `AssemblyPart.localPosition/localRotation` 控制。
 - `line-freshcut-01` 不再增加一条贯穿全线的通用 conveyor；每台设备自带真实进出料段。
+- 工位中心由 assembly-svc 按 GLB 长度首尾累加，设备间目标保留 `0.12m` 卫生/转运间隙；禁止用固定等距坐标拉开整线。
 
 ## 3. 节点层级
 

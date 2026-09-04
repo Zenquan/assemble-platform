@@ -24,6 +24,14 @@ Corrections, insights, and knowledge gaps captured during development.
 - **Insight**: 可选配置测试必须使用明确的空值哨兵（本仓使用 `null`），避免默认参数让测试数据悄悄改变。
 - **Action**: assembly-svc BOM 测试改用 `null` 表达无基座，并验证真实净菜设备组合。
 
+## LRN-20260904-003
+
+- **Category**: correction
+- **Status**: resolved
+- **Context**: 用户指出净菜线设备之间显示距离过大。
+- **Insight**: 设备 GLB 的真实包络与工位中心坐标必须一起规划；仅按工艺序号或早期演示坐标摆放，会把相邻设备的转运间隙放大成不真实的断线。
+- **Action**: 净菜线中心坐标按真实 GLB 长度累加，并固定小额卫生/转运间隙；测试校验相邻包络不超过目标间隙。
+
 
 ## [LRN-20260902-001] best_practice
 
