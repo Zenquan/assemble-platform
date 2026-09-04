@@ -4,7 +4,7 @@ import type { AssemblyBom, ModelAssetId, ProductionLine } from '@assemble/domain
 import { createMemoryRepo } from '@assemble/storage';
 
 import { buildApp } from '../src/app.js';
-import { buildSeedLines } from '../src/repositories/index.js';
+import { buildBomForLine, buildSeedLines } from '../src/repositories/index.js';
 
 function line(
   id: string,
@@ -53,6 +53,14 @@ describe('GET /lines/:id/bom', () => {
       'weigh-packer',
       'metal-detector',
     ]);
+  });
+
+  it('净菜 BOM 按 GLB 外包络紧凑排布，仅保留卫生转运间隙', () => {
+    const freshcut = buildSeedLines().find((item) => item.id === 'line-freshcut-01');
+    expect(freshcut).toBeDefined();
+    const positions = buildBomForLine(freshcut!).parts.map((part) => part.localPosition[0]);
+    const expected = [-1.745, 2.37, 6.605, 9.835, 12.71, 15.415, 17.77];
+    positions.forEach((position, index) => expect(position).toBeCloseTo(expected[index] ?? 0, 3));
   });
 
   it('按所选流水线工位返回不同 BOM、GLB 资产与步骤归属', async () => {
