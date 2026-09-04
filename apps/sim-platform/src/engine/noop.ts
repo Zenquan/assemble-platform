@@ -93,6 +93,9 @@ export class NoopClearance implements ClearanceController {
 class NoopRuntime implements RuntimeAnimationController {
   readonly boundNodeCount = 0;
   readonly playing = false;
+  readonly materialItemCount = 0;
+  readonly materialCompletedUnits = 0;
+  readonly activeStationIds: readonly string[] = [];
 
   start(): boolean {
     return false;

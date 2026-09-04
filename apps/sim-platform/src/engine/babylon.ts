@@ -56,6 +56,11 @@ import {
   type RuntimeMotionPose,
   type RuntimeMotionSpec,
 } from './runtime-motion.js';
+import {
+  MaterialFlowPlayer,
+  type MaterialFlowFrame,
+  type MaterialFlowWaypoint,
+} from './material-flow.js';
 import type {
   AssetManager,
   AssemblyController,
@@ -108,6 +113,9 @@ const CAMERA_PRESETS: Record<CameraViewId, CameraPose> = {
 const NO_IBL_MIN_ROUGHNESS = 0.7;
 const PART_FRAME_MIN_RADIUS = 8;
 const PART_FRAME_PADDING = 1.15;
+const RUNTIME_MATERIAL_MAX_ITEMS = 6;
+const RUNTIME_MATERIAL_MIN_ITEMS = 3;
+const RUNTIME_MATERIAL_CYCLE_SECONDS = 1.8;
 
 /**
  * 单一事实：一个待渲染零件的几何（含贴合基准 seat + 半轴长），供 `computeTwoStatePlacement`
@@ -222,6 +230,11 @@ class BabylonScene implements SceneManager {
   onFrame: (() => void) | null = null;
   private runtimeBindings = new Map<string, RuntimeNodeBinding>();
   private runtimePlayer = new RuntimeMotionPlayer([]);
+  private materialPlayer = new MaterialFlowPlayer([]);
+  private materialVisuals: Mesh[] = [];
+  private materialMaterial: StandardMaterial | null = null;
+  private materialStationPartIds = new Map<string, string>();
+  private _activeStationIds: readonly string[] = [];
 
   get isMounted(): boolean {
     return this.engine !== null && this.scene !== null;
@@ -325,6 +338,10 @@ class BabylonScene implements SceneManager {
 
   unmount(): void {
     this._rendering = false;
+    for (const mesh of this.materialVisuals) mesh.dispose(false, true);
+    this.materialVisuals = [];
+    this.materialMaterial?.dispose();
+    this.materialMaterial = null;
     if (this.engine) {
       this.engine.stopRenderLoop();
       this.engine.dispose();
@@ -341,6 +358,9 @@ class BabylonScene implements SceneManager {
     this.scatterPos.clear();
     this.halfSize.clear();
     this._placements = [];
+    this.materialPlayer = new MaterialFlowPlayer([]);
+    this.materialStationPartIds.clear();
+    this._activeStationIds = [];
     this.onFrame = null;
   }
 
@@ -495,6 +515,13 @@ class BabylonScene implements SceneManager {
     this._assemblyViewBaseline = null;
     this.runtimeBindings.clear();
     this.runtimePlayer = new RuntimeMotionPlayer([]);
+    for (const mesh of this.materialVisuals) mesh.dispose(false, true);
+    this.materialVisuals = [];
+    this.materialMaterial?.dispose();
+    this.materialMaterial = null;
+    this.materialPlayer = new MaterialFlowPlayer([]);
+    this.materialStationPartIds.clear();
+    this._activeStationIds = [];
   }
 
   configureRuntimeAnimations(nodes: readonly TransformNode[]): void {
@@ -515,17 +542,55 @@ class BabylonScene implements SceneManager {
     this.runtimePlayer = new RuntimeMotionPlayer(specs);
   }
 
+  configureMaterialFlow(
+    waypoints: readonly MaterialFlowWaypoint[],
+    stationPartIds: ReadonlyMap<string, string>,
+  ): void {
+    this.materialStationPartIds = new Map(stationPartIds);
+    this.materialPlayer = new MaterialFlowPlayer(waypoints, {
+      itemCount: Math.min(
+        RUNTIME_MATERIAL_MAX_ITEMS,
+        Math.max(RUNTIME_MATERIAL_MIN_ITEMS, waypoints.length),
+      ),
+      cycleSeconds: Math.max(6, waypoints.length * RUNTIME_MATERIAL_CYCLE_SECONDS),
+    });
+    if (!this.scene || waypoints.length < 2) return;
+    this.materialMaterial = new StandardMaterial('material-flow', this.scene);
+    this.materialMaterial.diffuseColor = new Color3(0.22, 0.72, 0.28);
+    this.materialMaterial.emissiveColor = new Color3(0.04, 0.18, 0.05);
+    this.materialMaterial.specularColor = Color3.Black();
+    for (let index = 0; index < this.materialPlayer.itemCount; index += 1) {
+      const mesh = MeshBuilder.CreateIcoSphere(
+        `material-flow-${index + 1}`,
+        { radius: 0.16, subdivisions: 1 },
+        this.scene,
+      );
+      mesh.material = this.materialMaterial;
+      mesh.isPickable = false;
+      this.materialVisuals.push(mesh);
+    }
+    this.applyMaterialFlowFrames(this.materialPlayer.tick(this.runtimeNowMs()));
+  }
+
   startRuntimeAnimations(): boolean {
-    return this.runtimePlayer.start(this.runtimeNowMs());
+    const nowMs = this.runtimeNowMs();
+    const deviceStarted = this.runtimePlayer.start(nowMs);
+    const materialStarted = this.materialPlayer.start(nowMs);
+    return deviceStarted || materialStarted;
   }
 
   pauseRuntimeAnimations(): boolean {
-    return this.runtimePlayer.pause(this.runtimeNowMs());
+    const nowMs = this.runtimeNowMs();
+    const devicePaused = this.runtimePlayer.pause(nowMs);
+    const materialPaused = this.materialPlayer.pause(nowMs);
+    return devicePaused || materialPaused;
   }
 
   resetRuntimeAnimations(): void {
     this.runtimePlayer.reset();
+    this.materialPlayer.reset();
     for (const binding of this.runtimeBindings.values()) this.restoreRuntimeNode(binding);
+    this.applyMaterialFlowFrames(this.materialPlayer.tick(this.runtimeNowMs()));
   }
 
   tickRuntimeAnimations(): void {
@@ -533,14 +598,48 @@ class BabylonScene implements SceneManager {
       const binding = this.runtimeBindings.get(frame.nodeId);
       if (binding) this.applyRuntimePose(binding, frame.pose);
     }
+    this.applyMaterialFlowFrames(this.materialPlayer.tick(this.runtimeNowMs()));
   }
 
   get runtimePlaying(): boolean {
-    return this.runtimePlayer.playing;
+    return this.runtimePlayer.playing || this.materialPlayer.playing;
   }
 
   get runtimeBindingCount(): number {
     return this.runtimePlayer.bindingCount;
+  }
+
+  get materialItemCount(): number {
+    return this.materialPlayer.itemCount;
+  }
+
+  get materialCompletedUnits(): number {
+    return this.materialPlayer.completedUnits;
+  }
+
+  get activeStationIds(): readonly string[] {
+    return this._activeStationIds;
+  }
+
+  private applyMaterialFlowFrames(
+    frames: readonly MaterialFlowFrame[],
+  ): void {
+    const activeStationIds = new Set(frames.map((frame) => frame.stationId).filter(Boolean));
+    for (const [index, mesh] of this.materialVisuals.entries()) {
+      const frame = frames[index];
+      if (frame) mesh.position.set(frame.position[0], frame.position[1] + 0.25, frame.position[2]);
+    }
+    for (const stationId of this._activeStationIds) {
+      if (!activeStationIds.has(stationId)) {
+        const partId = this.materialStationPartIds.get(stationId);
+        if (partId) this._restorePartStateOverlay(partId);
+      }
+    }
+    for (const stationId of activeStationIds) {
+      const partId = this.materialStationPartIds.get(stationId);
+      if (partId) this._setPartOverlay(partId, new Color3(0.1, 0.85, 0.95), 0.2);
+    }
+    this._activeStationIds = [...activeStationIds];
   }
 
   private runtimeNowMs(): number {
@@ -709,6 +808,17 @@ class BabylonScene implements SceneManager {
     }
 
     this._centerAssemblyOnFloor(renderParts);
+    const renderedPartById = new Map(renderParts.map((part) => [part.partId, part]));
+    const stationPartIds = new Map<string, string>();
+    const waypoints: MaterialFlowWaypoint[] = [];
+    for (const step of bom.steps) {
+      const bomPart = bom.parts.find((part) => part.id === step.partId);
+      const renderedPart = renderedPartById.get(step.partId);
+      if (!bomPart?.isMovable || !renderedPart || stationPartIds.has(step.stationId)) continue;
+      stationPartIds.set(step.stationId, step.partId);
+      waypoints.push({ id: step.stationId, position: renderedPart.center });
+    }
+    this.configureMaterialFlow(waypoints, stationPartIds);
     this.configureRuntimeAnimations(runtimeNodes);
     this.startRuntimeAnimations();
     const placements = computeTwoStatePlacement(renderParts);
@@ -1012,6 +1122,18 @@ class BabylonRuntime implements RuntimeAnimationController {
 
   get boundNodeCount(): number {
     return this.scene.runtimeBindingCount;
+  }
+
+  get materialItemCount(): number {
+    return this.scene.materialItemCount;
+  }
+
+  get materialCompletedUnits(): number {
+    return this.scene.materialCompletedUnits;
+  }
+
+  get activeStationIds(): readonly string[] {
+    return this.scene.activeStationIds;
   }
 
   start(): boolean {

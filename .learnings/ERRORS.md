@@ -4,6 +4,34 @@ Command failures and integration errors.
 
 > 记录工具链/算法/环境层面的真实踩坑（含已修复），避免重复排查。格式遵循 `.agent/skills/self-improving-agent`。
 
+## [ERR-20260904-045] material_flow_patch_path
+
+**Logged**: 2026-09-04T17:30:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+物料流转补丁中的一个绝对路径缺少 `MyResume`，导致整组补丁校验失败且未写入文件。
+
+### Error
+```text
+Failed to read file: No such file or directory
+```
+
+### Context
+- `apply_patch` 在校验阶段失败，项目内容未发生变化。
+
+### Suggested Fix
+统一使用当前仓库的绝对路径再应用补丁。
+
+### Metadata
+- Reproducible: no
+- Related Files: apps/sim-platform/src/engine/material-flow.ts
+- Tags: tooling, patch, path
+
+---
+
 ## [ERR-20260904-043] domain_empty_test_suite
 
 **Logged**: 2026-09-04T17:15:00+08:00
@@ -62,6 +90,34 @@ No test files found, exiting with code 1
 - Reproducible: yes
 - Related Files: apps/sim-platform/vite.config.ts
 - Tags: vitest, path, frontend
+
+---
+
+## [ERR-20260904-044] runtime_inspection_workdir
+
+**Logged**: 2026-09-04T17:25:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+读取运行态代码时误用了不存在的工作目录，命令在进程创建阶段失败。
+
+### Error
+```text
+CreateProcess: No such file or directory
+```
+
+### Context
+- 读取命令的 `workdir` 拼写错误，未修改项目文件。
+
+### Suggested Fix
+复用仓库根目录绝对路径执行读取命令。
+
+### Metadata
+- Reproducible: no
+- Related Files: apps/sim-platform/src/engine/babylon.ts
+- Tags: tooling, workdir
 
 ---
 

@@ -64,7 +64,7 @@ Vue3 业务组件层（views/stores/components）   ← 只依赖 SimEngine 公�
 |------|------|------------|
 | 实时装配 | 自动/手动/回放三模式，约束贴合用 slerp 平滑过渡 | `assembly.ts` |
 | 实时干涉 | 拖拽装配时的实时碰撞检测，命中即高亮/拦截 | `clearance-core` |
-| 节拍可视 | 传送带/机械臂节拍动画、瓶颈高亮 | `rhythm.ts` |
+| 产线运行态 | GLB 设备运动节点、物料沿 BOM 工位路径流转、当前工位状态联动 | `rhythm.ts` + SimEngine runtime |
 
 ## 3. 干涉算法：前后端协同（本工程最具含金量的部分）
 

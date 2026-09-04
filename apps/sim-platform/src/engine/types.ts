@@ -156,6 +156,12 @@ export interface RuntimeAnimationController {
   pause(): boolean;
   /** 清除运行态时间并恢复 GLB 初始位姿 */
   reset(): void;
+  /** 当前随产线传送路径运动的物料件数 */
+  readonly materialItemCount: number;
+  /** 物料流转已完成件数 */
+  readonly materialCompletedUnits: number;
+  /** 当前有物料经过的工位 id */
+  readonly activeStationIds: readonly string[];
 }
 
 /** 交互拾取/拖拽（手动装配入口） */

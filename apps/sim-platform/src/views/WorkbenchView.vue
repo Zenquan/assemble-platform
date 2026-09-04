@@ -34,6 +34,9 @@ const animProgress = ref(0); // 动画进度 seq（S2 播放态）
 const isAnimPlaying = ref(false);
 const animTotal = ref(0);
 const runtimeNodeCount = ref(0);
+const runtimeMaterialCount = ref(0);
+const runtimeCompletedUnits = ref(0);
+const runtimeActiveStationCount = ref(0);
 const isRuntimePlaying = ref(false);
 // S3 · 手动拖拽实时状态（拖拽中零件 / 干涉拦截 / 可落位提示）
 const dragText = ref('');
@@ -70,6 +73,9 @@ async function loadWorkbench(nextLineId: string) {
   animTotal.value = 0;
   isAnimPlaying.value = false;
   runtimeNodeCount.value = 0;
+  runtimeMaterialCount.value = 0;
+  runtimeCompletedUnits.value = 0;
+  runtimeActiveStationCount.value = 0;
   isRuntimePlaying.value = false;
   let eng: SimEngine | null = null;
   try {
@@ -210,6 +216,9 @@ function refreshRuntimeState() {
   const eng = engine.value;
   if (!eng) return;
   runtimeNodeCount.value = eng.runtime.boundNodeCount;
+  runtimeMaterialCount.value = eng.runtime.materialItemCount;
+  runtimeCompletedUnits.value = eng.runtime.materialCompletedUnits;
+  runtimeActiveStationCount.value = eng.runtime.activeStationIds.length;
   isRuntimePlaying.value = eng.runtime.playing;
 }
 
@@ -334,12 +343,14 @@ async function loadTakt(version: number, ln: ProductionLine) {
               <span aria-hidden="true">⌖</span> 定位初始视角
             </button>
             <div class="runtimebar">
-              <span class="runtime-label">设备运行态</span>
+              <span class="runtime-label">设备运行态 · 物料 {{ runtimeMaterialCount }} 件</span>
               <span class="runtime-count">{{ runtimeNodeCount }} 个运动节点</span>
+              <span class="runtime-count">活跃工位 {{ runtimeActiveStationCount }}</span>
+              <span class="runtime-count">完成 {{ runtimeCompletedUnits }} 件</span>
               <span class="runtime-status" :class="{ live: isRuntimePlaying }"><i class="dot"></i>{{ isRuntimePlaying ? '运行中' : '已暂停' }}</span>
-              <button class="runtime-btn" :disabled="isRuntimePlaying || runtimeNodeCount === 0" @click="startRuntime">▶ 启动</button>
+              <button class="runtime-btn" :disabled="isRuntimePlaying || (runtimeNodeCount === 0 && runtimeMaterialCount === 0)" @click="startRuntime">▶ 启动</button>
               <button class="runtime-btn" :disabled="!isRuntimePlaying" @click="pauseRuntime">⏸ 暂停</button>
-              <button class="runtime-btn" :disabled="runtimeNodeCount === 0" @click="resetRuntime">↺ 复位</button>
+              <button class="runtime-btn" :disabled="runtimeNodeCount === 0 && runtimeMaterialCount === 0" @click="resetRuntime">↺ 复位</button>
             </div>
             <div class="s1bar">
               <span class="s1count">已贴合 <b>{{ assembledCount }}</b> / {{ totalParts }}</span>
