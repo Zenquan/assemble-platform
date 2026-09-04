@@ -4,6 +4,37 @@ Command failures and integration errors.
 
 > 记录工具链/算法/环境层面的真实踩坑（含已修复），避免重复排查。格式遵循 `.agent/skills/self-improving-agent`。
 
+## [ERR-20260904-038] dev_script_bind_eperm
+
+**Logged**: 2026-09-04T16:20:30+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+沙箱内运行一键开发编排时禁止服务绑定本机端口。
+
+### Error
+```text
+listen EPERM: operation not permitted 127.0.0.1:7101
+```
+
+### Context
+- Command: `env -u NODE_OPTIONS node scripts/dev.mjs`
+- 服务代码尚未启动，失败发生在端口探测 `listen` 阶段。
+- 脚本单测、语法检查和 takt-svc 定向测试均已通过。
+
+### Suggested Fix
+联调需要本机进程权限时申请允许绑定本地开发端口；不改变应用逻辑绕过该限制。
+
+### Resolution
+已申请本机权限完成 `scripts/dev.mjs` 启动验证，服务端口均可复用且健康检查通过。
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/dev.mjs
+- Tags: sandbox, dev-server, port-bind
+
 ---
 
 ## [ERR-20260904-035] blender_headless_metal_crash

@@ -49,7 +49,7 @@ pnpm --filter @assemble/clearance-core test
 pnpm dev               # = node scripts/dev.mjs（自包含 Node 编排，不依赖 pnpm）
 pnpm dev:all           # = node scripts/dev.mjs --all（全量：5 个后端 + vite）
 #  Ctrl+C 会统一清理所有子进程；已占用的端口自动复用不重复起。
-# 先决条件：后端 dist 已构建（脚本在缺产物时报错引导 build）。
+# 启动前脚本会检查后端源码与 dist 是否同步，缺失或过期时自动构建；端口已占用则复用已有进程。
 # 精简模式包含工作台依赖的 assembly:7101/model:7103，并保留 interference:7102/takt:7104；
 # --all 额外起 auth:7105。主机与端口可通过 ASSEMBLE_DEV_HOST、*_SVC_PORT、VITE_DEV_PORT 覆盖。
 
