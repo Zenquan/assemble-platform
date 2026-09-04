@@ -80,4 +80,5 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 export const http = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body: unknown) => request<T>(path, { method: 'POST', body }),
+  patch: <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body }),
 };

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router';
+
 // 顶部品牌栏 —— 复用于产线选择页与装配工作台。
 // props.title/subtitle 可覆盖；无则回落到平台默认品牌。
 // engineOnline：引擎在线状态（默认 true = 在线，绿光晕）
@@ -10,6 +12,7 @@ const props = withDefaults(
   }>(),
   { engineOnline: true },
 );
+const router = useRouter();
 </script>
 
 <template>
@@ -24,8 +27,8 @@ const props = withDefaults(
     </span>
     <div class="hbtns">
       <slot name="actions">
-        <button class="hbtn" type="button" title="本轮未接入">导入模型</button>
-        <button class="hbtn prim" type="button" title="本轮未接入">＋ 新建产线</button>
+        <button class="hbtn" type="button" @click="router.push({ name: 'line-config' })">导入模型</button>
+        <button class="hbtn prim" type="button" @click="router.push({ name: 'line-config', query: { new: '1' } })">＋ 新建产线</button>
       </slot>
     </div>
   </header>

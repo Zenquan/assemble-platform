@@ -18,3 +18,15 @@ export async function fetchLine(id: string): Promise<ProductionLine> {
 export async function fetchLineBom(id: string): Promise<AssemblyBom> {
   return http.get<AssemblyBom>(`/lines/${encodeURIComponent(id)}/bom`);
 }
+
+export type LineWriteInput = Omit<ProductionLine, 'createdAt' | 'updatedAt'>;
+
+/** 保存一条产线配置；BOM 会由 assembly-svc 按最新工位配置重新生成。 */
+export async function updateLine(id: string, input: Partial<LineWriteInput>): Promise<ProductionLine> {
+  return http.patch<ProductionLine>(`/lines/${encodeURIComponent(id)}`, input);
+}
+
+/** 创建一条产线配置。 */
+export async function createLine(input: LineWriteInput): Promise<ProductionLine> {
+  return http.post<ProductionLine>('/lines', input);
+}
