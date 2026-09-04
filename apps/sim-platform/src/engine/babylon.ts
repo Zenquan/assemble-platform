@@ -337,25 +337,28 @@ class BabylonScene implements SceneManager {
   private _buildFloorGrid(): void {
     const scene = this.scene;
     if (!scene) return;
-    const S = 28; // 半幅（与零件布局 ~24×24 匹配，避免空旷感）
-    const step = 2.8;
+    const S = 18; // 半幅：围绕设备保留克制边界，避免平台吞没工作区
+    const step = 3.6;
     const mat = new StandardMaterial('gridline', scene);
-    mat.diffuseColor = new Color3(0.11, 0.16, 0.26);
-    mat.alpha = 0.9;
+    mat.diffuseColor = new Color3(0.065, 0.085, 0.11);
+    mat.specularColor = Color3.Black();
+    mat.alpha = 0.72;
     // 用 CreateGround 做底板，暗色
     MeshBuilder.CreateGround('floor', { width: S * 2, height: S * 2 }, scene).material = mat;
     // 网格线：在 XZ 平面按 step 铺 CreateLines
     for (let i = -S; i <= S; i += step) {
       const lineMat = new StandardMaterial(`gl${i}`, scene);
-      lineMat.diffuseColor = new Color3(0.13, 0.2, 0.32);
-      lineMat.emissiveColor = new Color3(0.06, 0.1, 0.17);
-      lineMat.alpha = 0.5;
+      lineMat.diffuseColor = new Color3(0.09, 0.12, 0.15);
+      lineMat.emissiveColor = new Color3(0.025, 0.035, 0.045);
+      lineMat.alpha = 0.22;
       const pointsA = [new Vector3(i, 0.01, -S), new Vector3(i, 0.01, S)];
       const pointsB = [new Vector3(-S, 0.01, i), new Vector3(S, 0.01, i)];
       const la = MeshBuilder.CreateLines(`glA${i}`, { points: pointsA }, scene);
       const lb = MeshBuilder.CreateLines(`glB${i}`, { points: pointsB }, scene);
       la.color = lineMat.diffuseColor;
       lb.color = lineMat.diffuseColor;
+      la.alpha = 0.22;
+      lb.alpha = 0.22;
     }
   }
 
