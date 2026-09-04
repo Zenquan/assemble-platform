@@ -8,6 +8,7 @@ export type CompressionStrategy = 'draco' | 'meshopt' | 'none';
 /** 当前平台内置 GLB 资产清单：domain/model-svc/sim-platform 共享，禁止各端重复维护。 */
 export const MODEL_ASSET_IDS = [
   'conveyor',
+  'transfer-conveyor',
   'feeder',
   'vision-module',
   'gantry-arm',
