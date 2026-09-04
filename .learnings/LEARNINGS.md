@@ -8,6 +8,17 @@ Corrections, insights, and knowledge gaps captured during development.
 
 ---
 
+## LRN-20260904-021
+
+- **Category**: correction
+- **Status**: pending
+- **Context**: 净菜线瓶颈节拍为 `6.8s` 时，服务将 `529.4 件/时` 向上取整为 `530 P/H`，页面因此显示未达产。
+- **Insight**: 自动推导的目标产能不能高于瓶颈理论产能；没有独立业务目标时应向下取整，避免制造虚假的超负荷。
+- **Action**: takt-svc 默认目标改为 `floor(3600 / bottleneckTakt)`，并用 `6.8s` 回归测试锁定 `529 P/H` 与达产状态。
+- **Related Files**: services/takt-svc/src/taktCore.ts, services/takt-svc/test/app.test.ts
+
+---
+
 ## LRN-20260904-001
 
 - **Category**: best_practice
