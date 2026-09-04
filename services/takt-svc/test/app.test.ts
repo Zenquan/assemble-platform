@@ -13,7 +13,7 @@ function fetchForAssembly(calls: string[]): typeof fetch {
           id: 'line-a',
           stations: [
             { id: 'station-a', taktSeconds: 4 },
-            { id: 'station-b', taktSeconds: 6 },
+            { id: 'station-b', taktSeconds: 6.8 },
           ],
         },
       }), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -49,10 +49,10 @@ describe('POST /takt/simulate', () => {
     expect(calls).toEqual(['http://assembly.test/lines/line-a']);
     expect(body.data).toMatchObject({
       lineId: 'line-a',
-      targetUnitsPerHour: 600,
+      targetUnitsPerHour: 529,
       availability: 1,
-      cycleTimeSeconds: 6,
-      theoreticalThroughputPerHour: 600,
+      cycleTimeSeconds: 6.8,
+      theoreticalThroughputPerHour: 529.4117647058823,
     });
     await app.close();
   });

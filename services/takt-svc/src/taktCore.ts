@@ -15,7 +15,7 @@ export function computeTakt(req: TaktSimRequest): TaktBottleneckResult {
   if (req.stations.length === 0) throw new Error('产线没有可计算节拍的工位');
   const availability = Math.max(0.01, Math.min(1, req.availability ?? 1));
   const bottleneck = Math.max(...req.stations.map((station) => station.taktSeconds));
-  const targetUnitsPerHour = req.targetUnitsPerHour ?? Math.ceil(3600 / Math.max(bottleneck, 0.001));
+  const targetUnitsPerHour = req.targetUnitsPerHour ?? Math.max(1, Math.floor(3600 / Math.max(bottleneck, 0.001)));
   // 有效可用秒/小时
   const effSecondsPerHour = 3600 * availability;
 
