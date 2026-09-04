@@ -8,29 +8,41 @@
  */
 import { fileURLToPath, URL } from 'node:url';
 import vue from '@vitejs/plugin-vue';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 
-export default defineConfig({
-  plugins: [vue()],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@assemble/domain': fileURLToPath(new URL('../../packages/domain/src/index.ts', import.meta.url)),
-      '@assemble/clearance-core': fileURLToPath(new URL('../../packages/clearance-core/src/index.ts', import.meta.url)),
-      '@assemble/sim-utils': fileURLToPath(new URL('../../packages/sim-utils/src/index.ts', import.meta.url)),
+const DEFAULT_DEV_HOST = '127.0.0.1';
+const DEFAULT_DEV_PORT = 5173;
+
+function port(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export default defineConfig(({ mode }) => {
+  const env = { ...loadEnv(mode, process.cwd(), ''), ...process.env };
+  return {
+    plugins: [vue()],
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+        '@assemble/domain': fileURLToPath(new URL('../../packages/domain/src/index.ts', import.meta.url)),
+        '@assemble/clearance-core': fileURLToPath(new URL('../../packages/clearance-core/src/index.ts', import.meta.url)),
+        '@assemble/sim-utils': fileURLToPath(new URL('../../packages/sim-utils/src/index.ts', import.meta.url)),
+      },
     },
-  },
-  server: {
-    host: '127.0.0.1',
-    port: 5173,
-    proxy: {
-      '/lines': { target: 'http://127.0.0.1:7101', changeOrigin: true },
-      '/interference': { target: 'http://127.0.0.1:7102', changeOrigin: true },
-      '/takt': { target: 'http://127.0.0.1:7104', changeOrigin: true },
+    server: {
+      host: env['VITE_DEV_HOST'] ?? DEFAULT_DEV_HOST,
+      port: port(env['VITE_DEV_PORT'], DEFAULT_DEV_PORT),
+      proxy: {
+        '/lines': { target: env['VITE_ASSEMBLY_TARGET'] ?? 'http://127.0.0.1:7101', changeOrigin: true },
+        '/interference': { target: env['VITE_INTERFERENCE_TARGET'] ?? 'http://127.0.0.1:7102', changeOrigin: true },
+        '/takt': { target: env['VITE_TAKT_TARGET'] ?? 'http://127.0.0.1:7104', changeOrigin: true },
+        '/model': { target: env['VITE_MODEL_TARGET'] ?? 'http://127.0.0.1:7103', changeOrigin: true },
+      },
     },
-  },
-  test: {
-    environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/test/**/*.test.ts'],
-  },
+    test: {
+      environment: 'node',
+      include: ['src/**/*.test.ts', 'src/**/test/**/*.test.ts'],
+    },
+  };
 });

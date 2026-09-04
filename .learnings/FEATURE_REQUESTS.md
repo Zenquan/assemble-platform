@@ -159,3 +159,65 @@ large（拆 4 切片，各自 small~medium，见下）
 - Frequency: first_time
 - Related Features: WorkbenchView, SimEngine facade, babylon.ts, noop.ts, clearance-core
 - Branch (later): feat/0.3.0-<slice>（每切片可独立合 main 保留分支）
+
+---
+
+## [FEAT-20260903-004] dynamic_line_bom_glb_and_hardcode_audit
+
+**Logged**: 2026-09-03T19:20:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: domain / assembly-svc / model-svc / sim-platform / tooling
+
+### Requested Capability
+删除装配工作台中由 `MeshBuilder.CreateBox` 和 `buildSyntheticBoxes/buildSyntheticBom` 生成的可见模拟盒子；改为所选流水线从后端取得对应 BOM，BOM 零件以 model-svc 返回的 GLB 渲染，装配树、步骤、动画和工位分组随流水线动态变化；同时审计全仓生产代码与工程脚本中的硬编码并治理高风险项。
+
+### User Context
+当前 `BabylonAssets.loadLine()` 仍忽略传入 BOM，在前端按 `line.kind` 合成盒体和 BOM；`groupStepsByStation()` 用 round-robin 猜测步骤归属工位，因此不同流水线没有真实独立的装配定义。已有未提交改动开始把工位设备布局迁移到 `Station.deviceKind/position/facingDeg`，本需求需沿该方向继续并保留已有成果。
+
+### Complexity Estimate
+large
+
+### Suggested Implementation
+- `@assemble/domain` 补 BOM 步骤工位归属与模型资产契约。
+- assembly-svc 提供按 `lineId` 查询的 BOM 端点并维护各产线种子 BOM。
+- sim-platform 同时拉取 line+BOM，SimEngine 用真实 GLB 建可见零件；仅保留不可见碰撞/拾取代理。
+- BOM 树按后端 `stationId` 分组，不再 round-robin。
+- 审计并处理运行时业务/环境硬编码；测试夹具、种子数据和有明确含义的图形学阈值分类保留并记录理由。
+
+### Metadata
+- Frequency: first_time
+- Related Features: model-svc, assembly-svc, SimEngine, BOM tree, hardcode audit
+- Resolution: Implemented on `feat/0.4.0-glb-asset-pipeline`; commit recorded by Git history.
+
+---
+
+## [FEAT-20260904-005] freshcut_industry_digital_twins
+
+**Logged**: 2026-09-04T02:10:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: domain / assembly-svc / model-svc / Blender / Web3D / docs
+**Closed At**: 2026-09-04
+
+### Requested Capability
+把当前过于简单的通用设备模型升级为果蔬/净菜行业真实可信的加工线；允许参考公开厂商资料，首批完整制作净菜加工线，并通过 Blender 生成后端下发的 GLB。
+
+### User Context
+现有模型由少量 cube/cylinder/cone 合并成单 mesh，只能验证 GLB 链路，缺少食品设备结构、真实比例、材质层次、行业细节和可动节点，无法体现生鲜供应链场景。
+
+### Complexity Estimate
+large
+
+### Suggested Implementation
+- 建立净菜设备尺寸、坐标、节点、材质和面数规范。
+- 生成提升上料、气泡清洗、人工挑选、切配、振动沥水、称重包装、金检七台分层 GLB。
+- 扩展共享资产契约和 model-svc 白名单，assembly-svc 净菜 seed 改为七工位。
+- 量测 GLB，并在工作台验证整线布局、BOM 和可见质量。
+
+### Metadata
+- Frequency: first_time
+- Related Features: fresh-cut line, Blender, model-svc, assembly BOM, Babylon
+- Resolution: 七台分层 GLB、七工位后端 BOM、世界包围盒/运动节点量测、整线与单机浏览器验收均已完成。
+
+---

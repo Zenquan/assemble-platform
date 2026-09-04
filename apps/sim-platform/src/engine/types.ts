@@ -105,14 +105,13 @@ export interface SceneManager {
   setRendering(on: boolean): void;
 }
 
-/** 模型资产加载（对应 ModelSvc 的前端消费侧；0.2 无真 glTF，按 line 合成 OBB 占位盒） */
+/** 模型资产加载（BOM 给出资产 id，由 ModelSvc 返回真实 GLB） */
 export interface AssetManager {
   /**
-   * 加载一条产线的装配资产（构建零件几何），成功返回零件 id 列表。
-   * bom 可选：0.2.x 无 BOM 端点时仅凭 line 合成确定性 OBB 占位盒；
-   * 0.3.x 接入真 BOM/glTF 管线后传 bom 渲染真实几何。
+   * 加载一条产线的装配资产，成功返回零件 id 列表。
+   * 可见几何只能来自 BOM 指向的后端 GLB；实现不得生成可见占位盒。
    */
-  loadLine(line: ProductionLine, bom?: AssemblyBom): Promise<readonly string[]>;
+  loadLine(line: ProductionLine, bom: AssemblyBom): Promise<readonly string[]>;
   /** 卸载当前产线资源，释放内存 */
   dispose(): void;
   /** 当前已加载零件总数 */
@@ -141,6 +140,20 @@ export interface DragLiveState {
     | 'blocked' // 拖拽中且当前干涉（拦截）
     | 'landed' // 本次成功贴合
     | 'snapped-back'; // 本次未能落位，回散落位
+}
+
+/** GLB `extras.motion` 节点的运行态动画控制。 */
+export interface RuntimeAnimationController {
+  /** 当前是否在逐帧采样运行态位姿 */
+  readonly playing: boolean;
+  /** 已从当前产线 GLB 绑定的运动节点数 */
+  readonly boundNodeCount: number;
+  /** 启动运行态动画；没有运动节点时返回 false */
+  start(): boolean;
+  /** 暂停并保持当前设备位姿 */
+  pause(): boolean;
+  /** 清除运行态时间并恢复 GLB 初始位姿 */
+  reset(): void;
 }
 
 /** 交互拾取/拖拽（手动装配入口） */
@@ -212,8 +225,8 @@ export interface SimEngine {
   /** 当前渲染后端标识 */
   readonly backend: 'noop' | 'babylon';
 
-  /** 初始化（挂载视口 + 启动渲染循环）。container 缺省时组件渲染占位，不报错。 */
-  init(opts: { container?: HTMLElement; line?: ProductionLine }): EngineHealth;
+  /** 初始化（装载后端 BOM + 挂载视口 + 加载 GLB）；资产失败时拒绝，不做可见盒子降级。 */
+  init(opts: { container?: HTMLElement; line: ProductionLine; bom: AssemblyBom }): Promise<EngineHealth>;
   /** 销毁并释放全部资源（切页/卸载时必调，避免泄漏） */
   dispose(): void;
   /** 读取引擎健康快照（顶栏徽标 / 性能监视） */
@@ -224,6 +237,7 @@ export interface SimEngine {
   readonly interaction: InteractionManager;
   readonly assembly: AssemblyController;
   readonly clearance: ClearanceController;
+  readonly runtime: RuntimeAnimationController;
 
   /**
    * S1 · 把渲染同步到装配状态机的 `assembledPartIds`：

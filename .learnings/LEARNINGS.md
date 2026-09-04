@@ -8,6 +8,23 @@ Corrections, insights, and knowledge gaps captured during development.
 
 ---
 
+## LRN-20260904-001
+
+- **Category**: best_practice
+- **Status**: resolved
+- **Context**: Babylon glTF loader 将 Blender 导出的节点自定义属性放在不同版本的 `metadata.gltf.extras` 或 `metadata.extras` 路径中。
+- **Insight**: 读取 GLB 运行态语义时应兼容这两层包装，并只接受白名单运动类型；未识别的节点跳过，不能影响整线资产加载。
+- **Action**: 运行态绑定集中在 Babylon 门面，纯运动采样放在无引擎模块并用假时钟测试。
+
+## LRN-20260904-002
+
+- **Category**: best_practice
+- **Status**: resolved
+- **Context**: 测试夹具用 `undefined` 表达“无流水线基座”，但 TypeScript/JavaScript 默认参数会把它变成默认 `conveyor`。
+- **Insight**: 可选配置测试必须使用明确的空值哨兵（本仓使用 `null`），避免默认参数让测试数据悄悄改变。
+- **Action**: assembly-svc BOM 测试改用 `null` 表达无基座，并验证真实净菜设备组合。
+
+
 ## [LRN-20260902-001] best_practice
 
 **Logged**: 2026-09-02T22:00:00+08:00
@@ -479,3 +496,124 @@ S4 E2E 启动 `chromium.launch({headless:true})` 直接报「Executable doesn't 
 - Related Files: /tmp/shot-s4-bomtakt.mjs, apps/sim-platform/vite.config.ts, scripts/dev.mjs, apps/sim-platform/src/engine/babylon.ts
 - Tags: e2e, playwright, executablePath, default-state, resetForPlay
 - Pattern-Key: s4.e2e_pin_browser
+
+---
+
+## [LRN-20260903-015] best_practice
+
+**Logged**: 2026-09-03T18:30:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: agent-skills / workflow
+
+### Summary
+项目技能应由一个主流程集中路由，并在每个条件技能中反向声明上游流程、协作技能和学习回流，避免新增技能存在于目录中却未真正进入开发流程。
+
+### Details
+原流程仍声明“三 skill”，但仓库已新增 `senior-web3d-engineer`，导致专业技能只能靠人工记忆触发。本次扩展为五技能分层：workflow/grill/self-improving 为基础层，fullstack/Web3D 为条件执行层；跨端 3D 同时加载两个专业技能。主流程、AGENTS、docs 导航和每个 skill 均建立双向引用。
+
+### Suggested Action
+后续新增项目级 skill 时，同一改动内完成：目录创建与校验、workflow 路由表、AGENTS 触发规则、docs 导航、相关 skill 反向链接；禁止只把 SKILL.md 丢进 `.agent/skills/`。
+
+### Metadata
+- Source: best_practice
+- Related Files: .agent/skills/*/SKILL.md, AGENTS.md, docs/README.md
+- Tags: skills, orchestration, routing, project-workflow
+- Pattern-Key: workflow.skill_bidirectional_routing
+
+---
+
+## [LRN-20260903-016] correction
+
+**Logged**: 2026-09-03T18:45:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: docs / agent-skills / workflow
+
+### Summary
+新增和编排项目 Skill 时，必须保留 `docs/` 作为工程标准事实源；Skill 只负责路由与执行，不能让技能说明取代架构、代码风格、测试、版本和 Git 标准。
+
+### Details
+用户明确纠正“docs 里的标准还是需要的”。五技能流程虽然已有必读文档列表，但职责优先级表达不够强，容易被理解为 Skill 已吸收并替代文档。现已在 `AGENTS.md`、主流程、fullstack skill 与 docs 导航中统一声明：发生差异时以 `docs/` 校正 Skill，并同步修复失配。
+
+### Suggested Action
+后续 Skill 只提炼执行步骤和触发路由，稳定工程规范继续维护在 `docs/`；任何 Skill 修改都检查是否保留文档入口、事实源定位和冲突处理规则。
+
+### Metadata
+- Source: user_feedback
+- Related Files: AGENTS.md, docs/README.md, .agent/skills/assemble-platform-workflow/SKILL.md, .agent/skills/senior-fullstack-engineer/SKILL.md
+- Tags: docs, standards, skills, source-of-truth
+- Pattern-Key: workflow.docs_remain_canonical
+
+---
+
+## [LRN-20260904-017] best_practice
+
+**Logged**: 2026-09-04T00:25:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: frontend / backend / docs
+
+### Summary
+多产线 Web3D 的可见模型、装配步骤和 BOM 树必须共享后端 BOM；透明代理只承载交互，不能演化成第二套视觉数据源。
+
+### Details
+旧实现同时维护前端合成盒子、设备布景 layout 与装配状态机 BOM，产线切换后容易出现画面、步骤和树不一致。本轮收敛为 assembly-svc 生成 `AssemblyBom`，model-svc 下发 GLB，Babylon 按真实 bbox 建不可见代理并同步位姿，BOM 树直接消费 `AssemblyStep.stationId`。GLB 失败直接报错，不做可见盒子降级。
+
+### Suggested Action
+后续扩展资产或产线时只修改 domain/assembly-svc/model-svc 事实源；Web3D 侧保持通用加载和交互逻辑，并用至少两条流水线做视觉对照验收。
+
+### Metadata
+- Source: best_practice
+- Related Files: docs/ARCHITECTURE.md, apps/sim-platform/src/engine/babylon.ts, services/assembly-svc/src/repositories/index.ts
+- Tags: glb, bom, station-id, invisible-proxy, single-source
+- Pattern-Key: web3d.backend_bom_single_source
+
+---
+
+## [LRN-20260904-018] correction
+
+**Logged**: 2026-09-04T02:12:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: frontend / backend / docs
+
+### Summary
+平台设备视觉语义应聚焦果蔬/净菜供应链，不能继续用通用机械臂和抽象装箱台代表净菜加工。
+
+### Details
+用户确认业务范围以果蔬/净菜为主，允许参考公开资料，并同意先完整制作净菜加工线。资产清单、BOM 工位名、材质与机械细节都应围绕食品加工卫生设计，而不是泛工业设备。
+
+### Suggested Action
+净菜线优先使用不锈钢、食品级输送带、清洗水槽、排水、卫生机架、防水电控和检测设备等行业特征；通用资产只用于其它产线。
+
+### Metadata
+- Source: user_feedback
+- Related Files: docs/FRESHCUT_ASSET_SPEC.md, services/assembly-svc/src/repositories/index.ts
+- Tags: fresh-cut, produce, food-processing, correction
+
+---
+
+## [LRN-20260904-019] best_practice
+
+**Logged**: 2026-09-04T04:05:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: frontend / Web3D / tests
+
+### Summary
+长产线和设备级聚焦必须按视口宽高比选择更小的水平/垂直半视场角计算相机距离。
+
+### Details
+旧实现用固定 `maxR * 2.6` 和聚焦半径 40，在窄而高的工作台 canvas 中会裁掉整线端点，点选单机也无法看到设备细节。现将包围球距离统一为 `radius / sin(min(verticalHalfFov, horizontalHalfFov))`，再施加语义化留白和最小半径；整线可完整入框，BOM 点选可近距离检查清洗槽、喷淋、电控等结构。
+
+### Suggested Action
+任何响应式 Web3D framing 都同时验证横屏与窄屏；整线取景和单体聚焦复用同一纯函数，只用不同的最小距离与留白参数。
+
+### Metadata
+- Source: browser_validation
+- Related Files: apps/sim-platform/src/engine/framing.ts, apps/sim-platform/src/engine/babylon.ts, apps/sim-platform/src/engine/test/framing.test.ts
+- Tags: camera, framing, fov, aspect-ratio, glb
+- Pattern-Key: web3d.aspect_aware_camera_fit
+
+---

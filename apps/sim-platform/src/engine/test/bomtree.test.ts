@@ -2,11 +2,10 @@
  * S4 · BOM 树纯逻辑单测（无 Babylon / WebGL，node 环境可跑）
  *
  * 覆盖 bomtree.ts：
- *   1. `groupStepsByStation` round-robin 归组：step seq i → stations[i % n]，
- *      组内/组间顺序确定（可复现快照）。
+ *   1. `groupStepsByStation` 按 step.stationId 归组，组内/组间顺序确定。
  *   2. `deriveBomTreeState` 状态标注：done（已装配 / step<current）/ current（==current）
  *      / pending（>current），工位 doneCount、选中零件透传、allDone 判定。
- *   3. 防御：孤儿步骤（BOM 里零件缺失）跳过；空 stations 兜底不崩。
+ *   3. 防御：孤儿零件/未知工位步骤跳过；空 stations 返回空。
  *   4. 基座（isMovable=false）标记 isBase，非可动。
  */
 import { describe, expect, it } from 'vitest';
@@ -29,18 +28,24 @@ function makeBom(n = 6): AssemblyBom {
     parts.push({
       id: `L-${String(i).padStart(3, '0')}`,
       name: `部件 ${i + 1}`,
-      assetId: `L-${i}`,
+      assetId: 'feeder',
       localPosition: [0, 0, 0],
       localRotation: { x: 0, y: 0, z: 0, w: 1 },
       isMovable: i !== 0,
     });
-    steps.push({ seq: i, partId: `L-${String(i).padStart(3, '0')}`, constraintIds: [], durationSeconds: 1 });
+    steps.push({
+      seq: i,
+      partId: `L-${String(i).padStart(3, '0')}`,
+      stationId: stations[i % stations.length]!.id,
+      constraintIds: [],
+      durationSeconds: 1,
+    });
   }
   return { lineId: 'L', parts, constraints: [], steps };
 }
 
-describe('S4 · groupStepsByStation round-robin 归组', () => {
-  it('step seq i 归到 stations[i % n]，组内按 seq 升序', () => {
+describe('S4 · groupStepsByStation 后端工位归组', () => {
+  it('按 step.stationId 归组，组内按 seq 升序', () => {
     const bom = makeBom(6);
     const assigned = groupStepsByStation(bom, stations);
     // seq0→st-a, seq1→st-b, seq2→st-c, seq3→st-a, seq4→st-b, seq5→st-c
@@ -63,17 +68,20 @@ describe('S4 · groupStepsByStation round-robin 归组', () => {
 
   it('孤儿步骤（BOM 缺零件）被跳过，不崩溃', () => {
     const bom = makeBom(3);
-    bom.steps.push({ seq: 99, partId: 'missing-part', constraintIds: [], durationSeconds: 1 });
+    bom.steps.push({ seq: 99, partId: 'missing-part', stationId: 'st-a', constraintIds: [], durationSeconds: 1 });
     const assigned = groupStepsByStation(bom, stations);
     expect(assigned.some((a) => a.step.partId === 'missing-part')).toBe(false);
   });
 
-  it('空工位兜底：单件也不崩（%1 全归唯一工位）', () => {
+  it('未知工位步骤被跳过，不猜测到其它工位', () => {
     const bom = makeBom(2);
-    const one: Station[] = [{ id: 'st-only', lineId: 'L', seq: 1, name: '唯一', taktSeconds: 1 }];
-    const assigned = groupStepsByStation(bom, one);
-    expect(assigned.length).toBe(2);
-    expect(assigned.every((a) => a.station.id === 'st-only')).toBe(true);
+    bom.steps[0]!.stationId = 'missing-station';
+    const assigned = groupStepsByStation(bom, stations);
+    expect(assigned.map((a) => a.step.seq)).toEqual([1]);
+  });
+
+  it('空工位返回空结果', () => {
+    expect(groupStepsByStation(makeBom(2), [])).toEqual([]);
   });
 });
 

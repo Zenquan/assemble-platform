@@ -5,6 +5,24 @@
 /** 压缩策略：体积敏感用 draco，动态反复加载用 meshopt */
 export type CompressionStrategy = 'draco' | 'meshopt' | 'none';
 
+/** 当前平台内置 GLB 资产清单：domain/model-svc/sim-platform 共享，禁止各端重复维护。 */
+export const MODEL_ASSET_IDS = [
+  'conveyor',
+  'feeder',
+  'vision-module',
+  'gantry-arm',
+  'box-pack',
+  'infeed-elevator',
+  'bubble-washer',
+  'inspection-conveyor',
+  'vegetable-cutter',
+  'vibratory-dewaterer',
+  'weigh-packer',
+  'metal-detector',
+] as const;
+
+export type ModelAssetId = (typeof MODEL_ASSET_IDS)[number];
+
 export interface ModelAssetVersion {
   /** 内容寻址指纹（hash），作为 CDN/对象存储路径与缓存 key */
   id: string;

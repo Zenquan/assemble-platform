@@ -1,21 +1,14 @@
 <script setup lang="ts">
 /**
- * 装配工作台（design 稿页面 B）—— 0.2.0 出口：Babylon 最小真渲染。
- *
- * 0.2.0 范围（FEAT-20260903-002，grill-me 确认「最小真渲染」）：
- *   - 视口由真 Babylon（经 SimEngine 门面工厂取到）挂 WebGL canvas；
- *   - 真拉取所选产线(/lines/:id)，引擎把其零件按确定性布局渲成 OBB 盒体占位
- *     + 网格/坐标轴 + ArcRotateCamera（可旋转缩放），HUD 显示产线名与引擎实时。
- *   - 不做（归 0.3.x）：三模式真装配 / 实时干涉拖拽 / BOM 树 / 节拍面板。
+ * 装配工作台：所选产线、后端 BOM、GLB 装配、BOM 树与动画共享同一数据源。
  *
  * 红线保持：本组件**不 import '@babylonjs/core'**，只经 createSimEngine() 返回的
- * 窄接口（SimEngine/EngineHealth）。WebGL 不可用（无头/预览降级）时工厂回落
- * Noop，视口显示占位说明，不报错。
+ * 窄接口。可见装配件只来自 model-svc GLB；加载失败显示错误，不生成可见盒子。
  */
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
-import { fetchLine } from '@/api/lines';
+import { fetchLine, fetchLineBom } from '@/api/lines';
 import { fetchTaktSimulation } from '@/api/takt';
 import type { ProductionLine } from '@assemble/domain';
 import { createSimEngine, type SimEngine } from '@/engine';
@@ -24,8 +17,11 @@ import { deriveTaktPanel, recommendTargetPerHour, type TaktPanelModel } from '@/
 import BomTreePanel from '@/components/BomTreePanel.vue';
 import TaktPanel from '@/components/TaktPanel.vue';
 
+const UI_STATE_POLL_INTERVAL_MS = 120;
+const TAKT_DEMO_AVAILABILITY = 0.85;
+
 const route = useRoute();
-const lineId = String(route.params.lineId ?? '');
+const lineId = ref(String(route.params.lineId ?? ''));
 const canvasHost = ref<HTMLDivElement | null>(null);
 const engine = ref<SimEngine | null>(null);
 const line = ref<ProductionLine | null>(null);
@@ -38,6 +34,8 @@ const totalParts = ref(0);
 const animProgress = ref(0); // 动画进度 seq（S2 播放态）
 const isAnimPlaying = ref(false);
 const animTotal = ref(0);
+const runtimeNodeCount = ref(0);
+const isRuntimePlaying = ref(false);
 // S3 · 手动拖拽实时状态（拖拽中零件 / 干涉拦截 / 可落位提示）
 const dragText = ref('');
 // S4 · BOM 树 + 节拍面板
@@ -48,41 +46,81 @@ const taktState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle');
 const taktError = ref('');
 
 let unmounted = false;
+let loadVersion = 0;
 
-onMounted(async () => {
+async function loadWorkbench(nextLineId: string) {
   if (!canvasHost.value || unmounted) return;
+  const version = ++loadVersion;
+  lineId.value = nextLineId;
+  engine.value?.dispose();
+  engine.value = null;
+  line.value = null;
+  backend.value = 'noop';
+  engineState.value = '初始化…';
+  stepText.value = '';
+  loadError.value = '';
+  selectedPartId.value = '';
+  dragText.value = '';
+  bomTree.value = null;
+  taktModel.value = null;
+  taktState.value = 'idle';
+  taktError.value = '';
+  assembledCount.value = 0;
+  totalParts.value = 0;
+  animProgress.value = 0;
+  animTotal.value = 0;
+  isAnimPlaying.value = false;
+  runtimeNodeCount.value = 0;
+  isRuntimePlaying.value = false;
+  let eng: SimEngine | null = null;
   try {
-    line.value = await fetchLine(lineId);
+    const [loadedLine, bom] = await Promise.all([
+      fetchLine(nextLineId),
+      fetchLineBom(nextLineId),
+    ]);
+    if (unmounted || version !== loadVersion) return;
+    line.value = loadedLine;
+    eng = createSimEngine();
+    engine.value = eng;
+    backend.value = eng.backend;
+    (window as unknown as { __sim?: SimEngine }).__sim = eng;
+    const health = await eng.init({ container: canvasHost.value, line: loadedLine, bom });
+    if (unmounted || version !== loadVersion) {
+      eng.dispose();
+      return;
+    }
+    engineState.value = health.ok
+      ? (eng.backend === 'babylon' ? '引擎实时' : '引擎占位(Noop)')
+      : '引擎离线';
+    const assemblyState = eng.syncAssemblyState();
+    assembledCount.value = assemblyState.seated;
+    totalParts.value = assemblyState.seated + assemblyState.scattered;
+    refreshAnimState();
+    refreshRuntimeState();
+    refreshBomTree();
+    stepText.value = eng.backend === 'babylon'
+      ? `已加载 ${health.totalParts} 个 GLB 零件 · 手动拖拽下一件装配（滚轮缩放 / 左键旋转）`
+      : '当前环境无 WebGL，已回落 Noop 占位；请在浏览器中打开以启用 3D 渲染';
+    void loadTakt(version, loadedLine);
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : '产线加载失败';
-    return;
+    eng?.dispose();
+    if (version !== loadVersion) return;
+    engine.value = null;
+    engineState.value = '引擎离线';
+    loadError.value = e instanceof Error ? e.message : '产线或 GLB 装配加载失败';
   }
-  if (unmounted) return;
-  const eng = createSimEngine();
-  engine.value = eng;
-  backend.value = eng.backend;
-  // 调试/E2E 钩子：暴露引擎实例供浏览器自动化读取几何/驱动拖拽（无害，浏览器态生效）
-  (window as unknown as { __sim?: SimEngine }).__sim = eng;
-  const health = eng.init({ container: canvasHost.value, line: line.value ?? undefined });
-  engineState.value = health.ok
-    ? (eng.backend === 'babylon' ? '引擎实时' : '引擎占位(Noop)')
-    : '引擎离线';
-  // S4 · 节拍面板：与渲染后端无关，产线就绪即可拉节拍仿真
-  void loadTakt();
-  if (eng.backend === 'babylon') {
-    // 真 WebGL：引擎内 loadLine 已把零件盒体建入场景
-    stepText.value = `已加载 ${health.totalParts} 个零件 · 手动拖拽下一件装配（滚轮缩放 / 左键旋转 / 按住琥珀件拖拽）`;
-    // S1：等引擎完成 BOM 装载与首帧后刷新分态计数 + S4 BOM 树
-    window.setTimeout(() => {
-      const s = eng.syncAssemblyState();
-      assembledCount.value = s.seated;
-      totalParts.value = s.seated + s.scattered;
-      refreshBomTree();
-    }, 120);
-  } else {
-    stepText.value = '当前环境无 WebGL，已回落 Noop 占位；请在浏览器中打开以启用 3D 渲染';
-  }
+}
+
+onMounted(() => {
+  void loadWorkbench(String(route.params.lineId ?? ''));
 });
+
+watch(
+  () => String(route.params.lineId ?? ''),
+  (nextLineId) => {
+    if (canvasHost.value && nextLineId !== lineId.value) void loadWorkbench(nextLineId);
+  },
+);
 
 /** S1 · 装配下一件（严格按工艺步骤序），并同步分态渲染 */
 function assembleNext() {
@@ -133,6 +171,27 @@ function pauseAuto() {
   refreshAnimState();
 }
 
+function startRuntime() {
+  const eng = engine.value;
+  if (!eng) return;
+  eng.runtime.start();
+  refreshRuntimeState();
+}
+
+function pauseRuntime() {
+  const eng = engine.value;
+  if (!eng) return;
+  eng.runtime.pause();
+  refreshRuntimeState();
+}
+
+function resetRuntime() {
+  const eng = engine.value;
+  if (!eng) return;
+  eng.runtime.reset();
+  refreshRuntimeState();
+}
+
 /** 刷新动画播放态与已贴合计数（巴比仑后端由 render loop 内部推进，UI 轮询展示） */
 function refreshAnimState() {
   const eng = engine.value;
@@ -148,8 +207,16 @@ function refreshAnimState() {
   assembledCount.value = seated;
 }
 
+function refreshRuntimeState() {
+  const eng = engine.value;
+  if (!eng) return;
+  runtimeNodeCount.value = eng.runtime.boundNodeCount;
+  isRuntimePlaying.value = eng.runtime.playing;
+}
+
 onBeforeUnmount(() => {
   unmounted = true;
+  loadVersion += 1;
   window.clearInterval(pollTimer);
   engine.value?.dispose();
   engine.value = null;
@@ -160,9 +227,10 @@ onMounted(() => {
   // 轮询刷新动画进度（播放由引擎 render loop 驱动，Vue 无帧 hook）
   pollTimer = window.setInterval(() => {
     if (!unmounted) refreshAnimState();
+    if (!unmounted) refreshRuntimeState();
     if (!unmounted) refreshDragState();
     if (!unmounted) refreshBomTree();
-  }, 120);
+  }, UI_STATE_POLL_INTERVAL_MS);
 });
 
 /** S3 · 读取手动拖拽会话状态并映射为 HUD 文案（引擎内部 pointer 拖拽驱动） */
@@ -210,10 +278,10 @@ function selectPart(partId: string) {
   refreshBomTree();
 }
 
-/** S4 · 拉取节拍仿真（一次）：目标产能取瓶颈工位小时速率，开动率 0.85 供演示可读 */
-async function loadTakt() {
-  const ln = line.value;
-  if (!ln || ln.stations.length === 0) {
+/** S4 · 拉取节拍仿真（一次）：目标产能取瓶颈工位小时速率。 */
+async function loadTakt(version: number, ln: ProductionLine) {
+  if (ln.stations.length === 0) {
+    if (version !== loadVersion) return;
     taktState.value = 'idle';
     return;
   }
@@ -224,15 +292,17 @@ async function loadTakt() {
       lineId: ln.id,
       stations: ln.stations,
       targetUnitsPerHour: target,
-      availability: 0.85,
+      availability: TAKT_DEMO_AVAILABILITY,
     });
+    if (version !== loadVersion) return;
     taktModel.value = deriveTaktPanel(
-      { lineId: ln.id, targetUnitsPerHour: target, availability: 0.85 },
+      { lineId: ln.id, targetUnitsPerHour: target, availability: TAKT_DEMO_AVAILABILITY },
       res,
       ln.stations,
     );
     taktState.value = 'ready';
   } catch (e) {
+    if (version !== loadVersion) return;
     taktState.value = 'error';
     taktError.value = e instanceof Error ? e.message : '节拍服务不可用';
   }
@@ -245,7 +315,7 @@ async function loadTakt() {
       <header class="wb-head">
         <div>
           <div class="wb-name">产线 {{ line?.name ?? lineId }} · 装配工作台</div>
-          <div class="wb-sub">SIMULATION WORKBENCH · 0.3 BOM树+节拍面板(S4)</div>
+          <div class="wb-sub">SIMULATION WORKBENCH · 0.4 动态 BOM + GLB 装配</div>
         </div>
         <span class="engline" :class="backend"><i class="dot"></i>{{ engineState }}</span>
       </header>
@@ -260,6 +330,14 @@ async function loadTakt() {
           <template v-else>
             <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（BOM 树联动 · 当前步骤高亮）</div>
             <div class="hud-bottom">{{ stepText }}</div>
+            <div class="runtimebar">
+              <span class="runtime-label">设备运行态</span>
+              <span class="runtime-count">{{ runtimeNodeCount }} 个运动节点</span>
+              <span class="runtime-status" :class="{ live: isRuntimePlaying }"><i class="dot"></i>{{ isRuntimePlaying ? '运行中' : '已暂停' }}</span>
+              <button class="runtime-btn" :disabled="isRuntimePlaying || runtimeNodeCount === 0" @click="startRuntime">▶ 启动</button>
+              <button class="runtime-btn" :disabled="!isRuntimePlaying" @click="pauseRuntime">⏸ 暂停</button>
+              <button class="runtime-btn" :disabled="runtimeNodeCount === 0" @click="resetRuntime">↺ 复位</button>
+            </div>
             <div class="s1bar">
               <span class="s1count">已贴合 <b>{{ assembledCount }}</b> / {{ totalParts }}</span>
               <span v-if="animTotal > 0" class="s1prog">动画 {{ animProgress }}/{{ animTotal }}{{ isAnimPlaying ? ' · 播放中' : '' }}</span>
@@ -404,7 +482,7 @@ async function loadTakt() {
 }
 .s1bar {
   position: absolute;
-  top: 46px;
+  top: 88px;
   left: 12px;
   display: inline-flex;
   flex-wrap: wrap;
@@ -413,6 +491,66 @@ async function loadTakt() {
   max-width: 96%;
   z-index: 3;
   font-size: 11px;
+}
+.runtimebar {
+  position: absolute;
+  top: 46px;
+  left: 12px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  max-width: 96%;
+  z-index: 3;
+  font-size: 11px;
+}
+.runtime-label,
+.runtime-count,
+.runtime-status {
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: rgba(10, 20, 32, 0.72);
+  border: 1px solid var(--line-3);
+  color: var(--mute);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.runtime-label {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+.runtime-status.live {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.35);
+}
+.runtime-status .dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--ghost);
+}
+.runtime-status.live .dot {
+  background: #34d399;
+  box-shadow: 0 0 7px rgba(52, 211, 153, 0.75);
+}
+.runtime-btn {
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--line-3);
+  background: rgba(13, 22, 38, 0.75);
+  color: var(--ink);
+  font-size: 11px;
+  padding: 5px 9px;
+  border-radius: 6px;
+}
+.runtime-btn:hover:not(:disabled) {
+  border-color: #fbbf24;
+  color: #fbbf24;
+}
+.runtime-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .s1count {
   color: var(--ink);

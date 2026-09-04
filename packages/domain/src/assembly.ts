@@ -1,4 +1,5 @@
 import type { Vec3, Quat } from './geometry.js';
+import type { ModelAssetId } from './model.js';
 
 /** 产线类型 —— 与简历口径一致（平台复用于三类产线） */
 export type ProductionLineKind = 'sorting' | 'fresh-cut' | 'cold-chain';
@@ -8,6 +9,8 @@ export interface ProductionLine {
   /** 对外名称，如「三号分拣线」 */
   name: string;
   kind: ProductionLineKind;
+  /** 可选整线基座资产；设备自带输送段的工艺线可省略 */
+  baseAssetId?: ModelAssetId;
   /** 该产线下的工位（节拍仿真的最小单元） */
   stations: Station[];
   /** 是否启用；停用线不可在平台打开仿真 */
@@ -28,6 +31,21 @@ export interface Station {
   taktSeconds: number;
   /** 是否瓶颈（由节拍服务计算后回写） */
   isBottleneck?: boolean;
+  /**
+   * 工位所对应的设备资产 id，与 model-svc 白名单对齐。
+   * 由产线配置填实；缺省视为该工位没有独立可见设备。
+   * assembly-svc 依此生成该工位的 BOM 零件，不再由前端按 seq 猜测。
+   */
+  deviceKind?: ModelAssetId;
+  /**
+   * 工位物理锚点位置（米，Y up）。后端 BOM 把设备 GLB 落在此坐标上。
+   * 缺省时由 seq 按默认工位间距推出。
+   */
+  position?: Vec3;
+  /**
+   * 设备朝向（绕 Y 轴旋转，度）。缺省 90。
+   */
+  facingDeg?: number;
 }
 
 /** 约束类型 —— 与方案 4.2 对齐 */
@@ -59,8 +77,8 @@ export interface AssemblyPart {
   id: string;
   name: string;
   /** 来源 glTF 节点名 / 资源 id */
-  assetId: string;
-  /** 初始/基准姿态 */
+  assetId: ModelAssetId;
+  /** 初始/基准姿态；GLB 以包围盒底面中心对齐此位置 */
   localPosition: Vec3;
   localRotation: Quat;
   /** 是否为可动装配件 */
@@ -74,6 +92,8 @@ export interface AssemblyStep {
   /** 步骤序号 */
   seq: number;
   partId: string;
+  /** 所属工位；BOM 树与工艺视图按此字段分组，禁止前端猜测 */
+  stationId: string;
   /** 该步骤应用到的约束 */
   constraintIds: string[];
   /** 本步骤基准耗时（秒），用于自动装配动画时长 */

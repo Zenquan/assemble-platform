@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 一键起 dev 环境（精简：assembly-svc + interference-svc + takt-svc + vite 前端）。
+ * 一键起 dev 环境（精简：assembly + interference + model + takt + vite）。
  *
  * 背景：sim-platform 的 vite dev 代理把 `/lines` → 7101、`/interference` → 7102、`/takt` → 7104，
  * 若后端未起，浏览器会报 `[vite] http proxy error: ECONNREFUSED 127.0.0.1:7101`。
@@ -8,13 +8,13 @@
  *
  * 特性：
  *  - 自包含 Node 编排，不依赖 pnpm / concurrently（本机 corepack 环境无全局 pnpm）。
- *  - 前置端口探测：7101/7102/5173 若已被监听则直接复用，不重复 spawn。
- *  - 就绪轮询：两个后端探 /healthz、前端探首页，全部就绪才提示访问。
+ *  - 主机、端口与 Vite 代理目标均支持环境变量覆盖。
+ *  - 就绪轮询：所选后端探 /healthz、前端探首页，全部就绪才提示访问。
  *  - Ctrl+C（SIGINT）或任一子进程异常退出时，统一 kill 其余子进程。
  *
  * 用法（仓库根）：
- *   node scripts/dev.mjs            精简模式：assembly + interference + takt + vite
- *   node scripts/dev.mjs --all      全量模式：5 个后端 + vite（auth/model 一并起）
+ *   node scripts/dev.mjs            精简模式：assembly + interference + model + takt + vite
+ *   node scripts/dev.mjs --all      全量模式：5 个后端 + vite（额外启动 auth）
  *   # 或经 npm/pnpm run dev（见根 package.json scripts.dev，dev:all 走 --all）
  */
 import { spawn } from 'node:child_process';
@@ -25,14 +25,21 @@ import { dirname, join } from 'node:path';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const NODE = process.execPath;
+const DEV_HOST = process.env['ASSEMBLE_DEV_HOST'] ?? '127.0.0.1';
+const ORIGIN_HOST = process.env['ASSEMBLE_DEV_ORIGIN_HOST'] ?? (DEV_HOST === '0.0.0.0' ? '127.0.0.1' : DEV_HOST);
 const children = new Set();
 const tag = (name, line) => process.stdout.write(`[${name}] ${line}\n`);
+const origin = (port) => `http://${ORIGIN_HOST}:${port}`;
+const configuredPort = (name, fallback) => {
+  const parsed = Number(process.env[name]);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
 
 /* 判断某端口是否已被占用。
  * 探测原理：在本机对该端口 listen —— bind 成功(触发 listening) = 端口空闲；
  * 抛 EADDRINUSE(error) = 已被占用。 */
 function isPortOpen(host, port, timeoutMs = 800) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const sock = createServer();
     let settled = false;
     const timer = setTimeout(() => {
@@ -41,12 +48,12 @@ function isPortOpen(host, port, timeoutMs = 800) {
         sock.close(() => resolve(false));
       }
     }, timeoutMs);
-    sock.once('error', () => {
-      // listen 抛错（如 EADDRINUSE）→ 端口已被占用
+    sock.once('error', (error) => {
       if (!settled) {
         settled = true;
         clearTimeout(timer);
-        resolve(true);
+        if (error.code === 'EADDRINUSE') resolve(true);
+        else reject(error);
       }
     });
     sock.listen({ host, port }, () => {
@@ -74,10 +81,10 @@ async function httpOk(url, timeoutMs = 400) {
 }
 
 /* spawn 一个子进程，stdout/stderr 加 [tag] 前缀 */
-function up(name, cmd, args, cwd) {
+function up(name, cmd, args, cwd, extraEnv = {}) {
   const p = spawn(cmd, args, {
     cwd,
-    env: { ...process.env, NODE_OPTIONS: '' },
+    env: { ...process.env, ...extraEnv, NODE_OPTIONS: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   children.add(p);
@@ -129,21 +136,24 @@ async function waitAll(urls, name, ms = 30000) {
 
 /* 全部 5 个 HTTP 后端（端口以 services/<svc>/src/server.ts 为准）：
  *   assembly:7101  interference:7102  model:7103  takt:7104  auth:7105
- * 精简模式起 CORE 三个（vite 代理 /lines->7101、/interference->7102、/takt->7104 只连它们）；
- * --all 模式全起 5 个（auth/model 前端暂不直连，供后端自治/联调用）。 */
+ * 精简模式起工作台依赖的 CORE 四个；--all 模式额外启动 auth-svc。 */
 const ALL_SERVICES = [
-  { name: 'assembly-svc', dir: join(ROOT, 'services/assembly-svc'), port: 7101, health: 'http://127.0.0.1:7101/healthz' },
-  { name: 'interference-svc', dir: join(ROOT, 'services/interference-svc'), port: 7102, health: 'http://127.0.0.1:7102/healthz' },
-  { name: 'model-svc', dir: join(ROOT, 'services/model-svc'), port: 7103, health: 'http://127.0.0.1:7103/healthz' },
-  { name: 'takt-svc', dir: join(ROOT, 'services/takt-svc'), port: 7104, health: 'http://127.0.0.1:7104/healthz' },
-  { name: 'auth-svc', dir: join(ROOT, 'services/auth-svc'), port: 7105, health: 'http://127.0.0.1:7105/healthz' },
-];
-const CORE = new Set(['assembly-svc', 'interference-svc', 'takt-svc']);
+  ['assembly-svc', 'ASSEMBLY_SVC_PORT', 7101],
+  ['interference-svc', 'INTERFERENCE_SVC_PORT', 7102],
+  ['model-svc', 'MODEL_SVC_PORT', 7103],
+  ['takt-svc', 'TAKT_SVC_PORT', 7104],
+  ['auth-svc', 'AUTH_SVC_PORT', 7105],
+].map(([name, envName, fallback]) => {
+  const port = configuredPort(envName, fallback);
+  return { name, dir: join(ROOT, `services/${name}`), port, health: `${origin(port)}/healthz` };
+});
+const CORE = new Set(['assembly-svc', 'interference-svc', 'model-svc', 'takt-svc']);
 const SERVICES = process.argv.includes('--all')
   ? ALL_SERVICES
   : ALL_SERVICES.filter((s) => CORE.has(s.name));
-const VITE = { name: 'vite', dir: join(ROOT, 'apps/sim-platform'), port: 5173, health: 'http://127.0.0.1:5173/' };
-const MODE = process.argv.includes('--all') ? '全量(5 服务)' : '精简(assembly+interference+takt)';
+const VITE_PORT = configuredPort('VITE_DEV_PORT', 5173);
+const VITE = { name: 'vite', dir: join(ROOT, 'apps/sim-platform'), port: VITE_PORT, health: `${origin(VITE_PORT)}/` };
+const MODE = process.argv.includes('--all') ? '全量(5 服务)' : '精简(assembly+interference+model+takt)';
 
 async function main() {
   // 1) 后端服务：产物需已 build（dist/server.js），端口空闲才起
@@ -155,10 +165,10 @@ async function main() {
       process.exitCode = 1;
       continue;
     }
-    if (await isPortOpen('127.0.0.1', svc.port)) {
+    if (await isPortOpen(DEV_HOST, svc.port)) {
       tag(svc.name, `端口 ${svc.port} 已被占用，跳过启动（直接复用）`);
     } else {
-      up(svc.name, NODE, ['dist/server.js'], svc.dir);
+      up(svc.name, NODE, ['dist/server.js'], svc.dir, { HOST: DEV_HOST, PORT: String(svc.port) });
       tag(svc.name, `启动中… (node dist/server.js @${svc.port})`);
     }
     svcUp.push(svc);
@@ -169,10 +179,18 @@ async function main() {
   if (!existsSync(viteBin)) {
     tag(VITE.name, `vite 缺失: ${viteBin} —— 请先安装依赖（pnpm install）`);
     process.exitCode = 1;
-  } else if (await isPortOpen('127.0.0.1', VITE.port)) {
+  } else if (await isPortOpen(DEV_HOST, VITE.port)) {
     tag(VITE.name, `端口 ${VITE.port} 已被占用，跳过启动（直接复用）`);
   } else {
-    up(VITE.name, NODE, [viteBin], VITE.dir);
+    const serviceByName = new Map(ALL_SERVICES.map((service) => [service.name, service]));
+    up(VITE.name, NODE, [viteBin], VITE.dir, {
+      VITE_DEV_HOST: DEV_HOST,
+      VITE_DEV_PORT: String(VITE.port),
+      VITE_ASSEMBLY_TARGET: origin(serviceByName.get('assembly-svc').port),
+      VITE_INTERFERENCE_TARGET: origin(serviceByName.get('interference-svc').port),
+      VITE_MODEL_TARGET: origin(serviceByName.get('model-svc').port),
+      VITE_TAKT_TARGET: origin(serviceByName.get('takt-svc').port),
+    });
     tag(VITE.name, `启动中… (vite dev @${VITE.port})`);
   }
 
@@ -186,9 +204,9 @@ async function main() {
     tag('main', '══════════════════════════════════════════════');
     tag('main', `  产线 3D 装配仿真 · dev 环境已就绪（${MODE}）`);
     tag('main', '');
-    tag('main', '  前端          http://localhost:5173');
+    tag('main', `  前端          ${VITE.health}`);
     for (const s of SERVICES) {
-      tag('main', `  ${s.name.padEnd(16)} http://127.0.0.1:${s.port}`);
+      tag('main', `  ${s.name.padEnd(16)} ${origin(s.port)}`);
     }
     tag('main', '');
     tag('main', '  浏览器打开上述前端地址即可（Ctrl+C 停止并清理子进程）');

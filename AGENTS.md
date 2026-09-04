@@ -4,11 +4,16 @@
 
 ## 你是谁、要遵守什么
 
-本仓库遵循「文档驱动 + 小步可发布」的开发哲学，且有一套**三 skill 自洽流程**（主流程 + 两个强制环节）。任何功能/修复/里程碑任务，**先加载流程技能**再动手：
+本仓库遵循「文档驱动 + 小步可发布」的开发哲学，并以**五 skill 协作流程**运行（三个流程基础技能 + 两个按任务路由的专业技能）。任何功能/修复/里程碑任务，**先加载流程技能**再动手：
+
+> **职责边界**：`docs/` 是架构、版本、代码风格、测试、Git 与设计标准的工程事实源；`.agent/skills/` 负责把这些标准编排进实际工作。Skill 不复制、不降级、也不替代 `docs/` 标准，发生差异时先以 `docs/` 校正 Skill，并同步修复失配。
 
 - 加载 `.agent/skills/assemble-platform-workflow` 项目流程技能 —— 它规定 Phase 0→4（需求澄清 → 文档/契约 → Workbuddy 深色科技设计稿 → 小步实现/提交）与提交规范。
 - **需求澄清（Phase 0，强制）**：需求边界不清/新需求/跨层改动，加载 `.agent/skills/grill-me` 按 GRILL 五问追问，产出并得到确认的「需求共识」后才写码。
 - **学习记录（贯穿全程，强制）**：遇到错误、用户纠正、知识缺口、API 坑、跨包踩坑 → 按 `.agent/skills/self-improving-agent` **即时**记入 `.learnings/`（团队共享、随提交入库）；每阶段/里程碑收尾 review + promote 重要约定到 `docs/` 或本文件。
+- **全栈执行（条件强制）**：涉及 Vue + API、Fastify 服务、`@assemble/domain` 契约、Vite 代理/服务编排，或改动横跨 `apps/services/packages` 两层以上 → 加载 `.agent/skills/senior-fullstack-engineer`。
+- **Web3D 执行（条件强制）**：涉及 Babylon、glTF/GLB、渲染、材质/光照、相机/包围盒或 Web3D 性能 → 加载 `.agent/skills/senior-web3d-engineer`。
+- **跨端 3D**：模型服务下发 GLB、实时干涉等任务同时加载两个专业技能；具体组合见主流程 skill §0.1。
 
 **`.learnings/` 三件套**：`LEARNINGS.md`（纠正/洞见/知识缺口/最佳实践）、`ERRORS.md`（命令/算法失败）、`FEATURE_REQUESTS.md`（用户待建能力）。格式与 ID 规则见 self-improving-agent SKILL.md。
 
@@ -40,13 +45,13 @@ pnpm test              # packages 单测全量
 pnpm typecheck         # 全量类型检查
 pnpm --filter @assemble/clearance-core test
 
-# 一键起 dev（默认精简：assembly-svc:7101 + interference-svc:7102 + vite:5173）
+# 一键起 dev（默认精简：assembly + interference + model + takt + vite）
 pnpm dev               # = node scripts/dev.mjs（自包含 Node 编排，不依赖 pnpm）
 pnpm dev:all           # = node scripts/dev.mjs --all（全量：5 个后端 + vite）
 #  Ctrl+C 会统一清理所有子进程；已占用的端口自动复用不重复起。
 # 先决条件：后端 dist 已构建（脚本在缺产物时报错引导 build）。
-# 精简模式 vite 代理实际只连 7101+7102；--all 额外起 model:7103/takt:7104/auth:7105
-# 供后端自治/全链路联调（前端暂不直连这三个）。
+# 精简模式包含工作台依赖的 assembly:7101/model:7103，并保留 interference:7102/takt:7104；
+# --all 额外起 auth:7105。主机与端口可通过 ASSEMBLE_DEV_HOST、*_SVC_PORT、VITE_DEV_PORT 覆盖。
 
 # ── 后端服务启动/构建速查 ──────────────────────────────
 # 5 个后端服务，各自独立（cwd 进服务目录）：

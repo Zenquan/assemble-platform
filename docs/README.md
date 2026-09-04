@@ -11,8 +11,23 @@
 | `GIT_GUIDE.md` | Git 分支模型 / Conventional Commits / PR / tag 发版规则 | 每次提交/开分支前对照 |
 | `TESTING.md` | 测试策略：分层/类型/性能基准门禁/提交门禁 | 动手改核心算法前必读 |
 | `sim-platform-design.md` | sim-platform 关键页（产线选择/装配工作台）**深色科技扁平**设计稿说明 + 配色令牌（高保真稿见 `apps/sim-platform/design/sim-platform-tech-mockup.html`） | 0.2.x 落地前端组件前必读 |
+| `FRESHCUT_ASSET_SPEC.md` | 果蔬/净菜加工线设备清单、尺寸、坐标、节点、材质与浏览器预算 | 新增或重做净菜设备 GLB 前必读 |
 
 > 根目录 `CHANGELOG.md` 记录版本变更历史（Keep a Changelog，发布流程详见 `VERSIONING.md`）。
+
+## 协作技能导航
+
+本目录中的架构、版本、代码风格、测试、Git 与设计文档是工程标准事实源。项目技能统一由 `.agent/skills/assemble-platform-workflow/SKILL.md` 编排，用于落实这些标准，不取代文档本身：
+
+| Skill | 定位 | 何时加载 |
+|-------|------|----------|
+| `assemble-platform-workflow` | Phase 0→4 主流程 | 所有功能、修复、评审、里程碑任务 |
+| `grill-me` | 需求共识 | 新需求、边界不清、跨层改动 |
+| `self-improving-agent` | 学习/错误/纠正沉淀 | 全程常驻，事件发生即记录 |
+| `senior-fullstack-engineer` | 契约、服务、前端接入、联调 | API 或跨 apps/services/packages 改动 |
+| `senior-web3d-engineer` | Babylon、GLB、图形学与视觉验收 | Web3D 渲染与资产任务 |
+
+GLB 后端下发、实时干涉等跨端 3D 任务同时加载两个 senior 技能。
 
 ## 文档间关系
 

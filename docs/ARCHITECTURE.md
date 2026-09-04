@@ -110,6 +110,31 @@ AuthSvc ─► Repository<AuditLogEntry> + JWT 校验
 - 模型资产：`ModelAssetVersion`（内容寻址指纹，压缩策略 `draco/meshopt`）
 - 权限：`AuthPrincipal`（OIDC sub + 角色 + 权限点 + ABAC 产线范围）
 
+### 5.1 流水线驱动的 BOM 与 GLB 装配链路
+
+0.4.x 起，工作台禁止在前端按 `line.kind` 合成盒体或临时 BOM。所选流水线的装配定义必须走同一条真实数据链：
+
+```
+GET /lines/:lineId
+GET /lines/:lineId/bom
+        │
+        ▼
+AssemblyBom(parts + steps.stationId)
+        │ assetId
+        ├──► model-svc /model/glb/:assetId.glb ──► Babylon 可见模型
+        ├──► AssemblyController ──► 装配步骤/动画/拖拽
+        └──► BomTree ──► 按后端 stationId 分组
+```
+
+强制约定：
+
+1. `assembly-svc` 是流水线与 BOM 关系的事实源；前端不得生成业务 BOM。
+2. `model-svc` 是 GLB 文件的事实源；前端不得复制 GLB 到 `public/` 或用可见盒体降级。
+3. Babylon 可保留不可见的拾取/碰撞代理，但代理只承载交互和 OBB，不得作为视觉模型显示。
+4. BOM 加载失败或 GLB 缺失必须进入可观察错误态，不得悄悄回退到合成模型。
+5. BOM 树使用 `AssemblyStep.stationId`，不得按步骤序号 round-robin 猜测工位。
+6. `ProductionLine.baseAssetId` 只用于确有贯穿基座的产线；净菜等设备自带输送段的工艺线省略该字段，避免重复可见输送带。
+
 ## 6. 工程约定与目录规约
 
 | 项 | 约定 |

@@ -3,6 +3,26 @@
 > 版本策略见 `docs/VERSIONING.md`。变更归类源自 Conventional Commits（`docs/GIT_GUIDE.md`）。本文件放工程根。
 > 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，按 `## [x.y.z] - yyyy-MM-dd` 分组。
 
+## [Unreleased]
+
+### Added
+
+- assembly-svc 按流水线返回真实 BOM，工作台按 BOM 从 model-svc 加载 GLB。
+- 全仓生产代码与工程脚本硬编码审计及治理标准。
+- 果蔬/净菜加工线数字样机规范与七台行业设备资产管线。
+- 七台净菜设备的 GLB `extras.motion` 运行态动画绑定与无 WebGL 时序测试。
+
+### Changed
+
+- BOM 树按后端 `stationId` 分组并随流水线动态切换。
+- 净菜预处理线改为提升上料、气泡清洗、人工挑选、切配、振动沥水、称重包装和金检七工位。
+- Babylon 整线与 BOM 单机取景按视口宽高比适配，窄视口不再裁切设备。
+- 设备运行态动画由 GLB 节点声明驱动，支持输送、旋转、振动、开合、推杆等动作，并自动随工作台启动。
+
+### Removed
+
+- 前端合成 BOM、按产线类型生成的可见盒体装配模型及 GLB 失败盒体降级。
+
 ## [0.1.0] - 2026-09-01
 
 Monorepo 技术验证（M1）基线：领域契约 + 干涉算法 + 数学库 + 降级仓储 + 五服务骨架代码。

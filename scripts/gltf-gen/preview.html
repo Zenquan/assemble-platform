@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>GLTF 资产预览</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#16171a;font-family:-apple-system,"PingFang SC",sans-serif}
+  #stage{width:100vw;height:100vh;display:block}
+  #cap{position:fixed;left:14px;top:12px;color:#cfd3da;font-size:13px;letter-spacing:.3px;background:rgba(0,0,0,.45);padding:6px 11px;border-radius:6px;pointer-events:none}
+  #hint{position:fixed;right:14px;bottom:12px;color:#7d8490;font-size:11px}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="cap">—</div>
+<div id="hint">拖拽旋转 · 滚轮缩放</div>
+<script type="importmap">
+{"imports":{
+  "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+const glbName = new URLSearchParams(location.search).get("m") || "vision-module.glb";
+const src = "assets/" + glbName;
+document.getElementById("cap").textContent = glbName;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x16171a);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2a30, 0.9));
+const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(6,10,8); scene.add(key);
+const rim = new THREE.DirectionalLight(0xbfe0ff, 0.5); rim.position.set(-6,4,-6); scene.add(rim);
+scene.add(new THREE.GridHelper(6, 24, 0x3a3f48, 0x24272d));
+
+const cam = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.05, 300);
+cam.position.set(3.6,-2.6,4.2);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.getElementById("stage").appendChild(renderer.domElement);
+const ctl = new OrbitControls(cam, renderer.domElement);
+ctl.target.set(0,1,0); ctl.update();
+
+new GLTFLoader().load(src, (g) => {
+  const root = g.scene;
+  // center & frame
+  const box = new THREE.Box3().setFromObject(root);
+  const c = box.getCenter(new THREE.Vector3());
+  root.position.sub(c);
+  box.setFromObject(root);
+  const r = box.getSize(new THREE.Vector3()).length()*0.9;
+  cam.position.set(r*0.9,-r*0.65,r*1.05);
+  ctl.target.set(0,(box.max.y-box.min.y)/2,0);
+  ctl.update();
+  scene.add(root);
+}, undefined, (e)=>console.error(e));
+
+function loop(){ requestAnimationFrame(loop); ctl.update(); renderer.render(scene,cam); }
+loop();
+addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+</script>
+</body>
+</html>
