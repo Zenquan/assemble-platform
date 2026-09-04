@@ -648,3 +648,26 @@ S4 E2E 启动 `chromium.launch({headless:true})` 直接报「Executable doesn't 
 - Pattern-Key: web3d.aspect_aware_camera_fit
 
 ---
+
+## [LRN-20260904-020] correction
+
+**Logged**: 2026-09-04T15:35:00+08:00
+**Priority**: high
+**Status**: pending
+**Area**: frontend / Web3D
+
+### Summary
+“初始化视角”必须恢复加载完成时的相机基准，不能只重新计算当前镜头的距离。
+
+### Details
+用户反馈点击初始化视角没有明显效果。现有实现虽然重新设置了整线包围半径，但没有持久化初始相机目标与轨道姿态；在当前镜头已经自动适配时，重复计算会看起来像按钮没有生效。Babylon ArcRotateCamera 的 beta 也应按极角使用 acos 换算。
+
+### Suggested Action
+真实 GLB 加载完成后记录目标点、包围半径、alpha、beta；初始化视角操作恢复这些基准，并按当前视口宽高比重新计算半径。
+
+### Metadata
+- Source: user_feedback
+- Related Files: apps/sim-platform/src/engine/babylon.ts, apps/sim-platform/src/views/WorkbenchView.vue
+- Tags: camera, framing, reset, babylon
+
+---

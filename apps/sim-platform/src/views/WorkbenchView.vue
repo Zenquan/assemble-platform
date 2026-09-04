@@ -330,8 +330,8 @@ async function loadTakt(version: number, ln: ProductionLine) {
           <template v-else>
             <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（BOM 树联动 · 当前步骤高亮）</div>
             <div class="hud-bottom">{{ stepText }}</div>
-            <button class="view-reset-btn" type="button" title="定位到初始化最佳视角" @click="frameAssembly">
-              <span aria-hidden="true">⌖</span> 初始视角
+            <button class="view-reset-btn" type="button" title="定位到初始化最佳视角" aria-label="定位到初始化最佳视角" @click.stop="frameAssembly">
+              <span aria-hidden="true">⌖</span> 定位初始视角
             </button>
             <div class="runtimebar">
               <span class="runtime-label">设备运行态</span>

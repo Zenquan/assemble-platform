@@ -131,6 +131,13 @@ interface RuntimeNodeBinding {
   baseScale: Vector3;
 }
 
+interface AssemblyViewBaseline {
+  target: Vector3;
+  boundingRadius: number;
+  alpha: number;
+  beta: number;
+}
+
 function asRecord(value: unknown): RecordValue | null {
   return value !== null && typeof value === 'object' ? (value as RecordValue) : null;
 }
@@ -205,6 +212,8 @@ class BabylonScene implements SceneManager {
   private _placements: PartPlacement[] = [];
   /** 最近一次真实 GLB 装配体的包围数据，供用户恢复初始化最佳视角。 */
   private _assemblyBounds: RenderPart[] = [];
+  /** GLB 加载完成时记录的相机基准，按钮恢复它而不是重复使用当前镜头状态。 */
+  private _assemblyViewBaseline: AssemblyViewBaseline | null = null;
   /** S3c · 射线求交用单位矩阵（createPickingRay 的 world 参数） */
   private _idMatrix = Matrix.Identity();
   /** S2 · 最近一次已知的 assembled 集合快照（供飞行覆盖退出时回落 S1 seat/scatter 判定） */
@@ -405,7 +414,7 @@ class BabylonScene implements SceneManager {
       const [px, py, pz] = p.position;
       const alpha = Math.atan2(pz - tz, px - tx);
       const radius = Math.hypot(px - tx, py - ty, pz - tz);
-      const beta = Math.asin((py - ty) / Math.max(radius, 1e-6));
+      const beta = Math.acos((py - ty) / Math.max(radius, 1e-6));
       this.camera.alpha = alpha;
       this.camera.beta = Math.min(Math.max(beta, 0.05), Math.PI - 0.05);
       this.camera.radius = radius;
@@ -483,6 +492,7 @@ class BabylonScene implements SceneManager {
     this._partOrder = [];
     this._placements = [];
     this._assemblyBounds = [];
+    this._assemblyViewBaseline = null;
     this.runtimeBindings.clear();
     this.runtimePlayer = new RuntimeMotionPlayer([]);
   }
@@ -722,6 +732,14 @@ class BabylonScene implements SceneManager {
       this._setPartCenter(part.partId, seat);
     }
     this._frameWholeAssembly(renderParts);
+    if (this.camera) {
+      this._assemblyViewBaseline = {
+        target: this.camera.target.clone(),
+        boundingRadius: this._assemblyBoundingRadius(renderParts, this.camera.target),
+        alpha: this.camera.alpha,
+        beta: this.camera.beta,
+      };
+    }
   }
 
   /** 将整条真实 GLB 产线的外包络中心对齐到底板原点，保持 BOM 内部相对位置不变。 */
@@ -748,9 +766,17 @@ class BabylonScene implements SceneManager {
   }
 
   frameToAssembly(): void {
-    if (!this.camera || this._assemblyBounds.length === 0) return;
-    this.setCamera('iso');
-    this._frameWholeAssembly(this._assemblyBounds);
+    const camera = this.camera;
+    const baseline = this._assemblyViewBaseline;
+    if (!camera || !baseline) return;
+    camera.alpha = baseline.alpha;
+    camera.beta = baseline.beta;
+    camera.setTarget(baseline.target);
+    camera.radius = fitSphereCameraRadius({
+      boundingRadius: baseline.boundingRadius,
+      verticalFovRadians: camera.fov,
+      aspectRatio: this.engine?.getAspectRatio(camera) ?? 1,
+    });
     this.scene?.render();
   }
 
@@ -768,19 +794,28 @@ class BabylonScene implements SceneManager {
     cx /= parts.length;
     cy /= parts.length;
     cz /= parts.length;
-    let maxR = 0;
-    for (const b of parts) {
-      const r =
-        Math.hypot(b.center[0] - cx, b.center[1] - cy, b.center[2] - cz) +
-        Math.max(b.half[0], b.half[1], b.half[2]);
-      if (r > maxR) maxR = r;
-    }
-    this.camera.setTarget(new Vector3(cx, cy, cz));
+    const target = new Vector3(cx, cy, cz);
+    const maxR = this._assemblyBoundingRadius(parts, target);
+    this.camera.setTarget(target);
     this.camera.radius = fitSphereCameraRadius({
       boundingRadius: maxR,
       verticalFovRadians: this.camera.fov,
       aspectRatio: this.engine?.getAspectRatio(this.camera) ?? 1,
     });
+  }
+
+  private _assemblyBoundingRadius(parts: readonly RenderPart[], target: Vector3): number {
+    let maxR = 0;
+    for (const part of parts) {
+      const r =
+        Math.hypot(
+          part.center[0] - target.x,
+          part.center[1] - target.y,
+          part.center[2] - target.z,
+        ) + Math.max(part.half[0], part.half[1], part.half[2]);
+      if (r > maxR) maxR = r;
+    }
+    return maxR;
   }
 
   /** S1 · 状态变化后取景：把 seat ∪ scatter 的并集质心与包围半径算进相机半径，
