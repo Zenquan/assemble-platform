@@ -16,6 +16,14 @@ Corrections, insights, and knowledge gaps captured during development.
 - **Insight**: 读取 GLB 运行态语义时应兼容这两层包装，并只接受白名单运动类型；未识别的节点跳过，不能影响整线资产加载。
 - **Action**: 运行态绑定集中在 Babylon 门面，纯运动采样放在无引擎模块并用假时钟测试。
 
+## LRN-20260904-002
+
+- **Category**: best_practice
+- **Status**: resolved
+- **Context**: 测试夹具用 `undefined` 表达“无流水线基座”，但 TypeScript/JavaScript 默认参数会把它变成默认 `conveyor`。
+- **Insight**: 可选配置测试必须使用明确的空值哨兵（本仓使用 `null`），避免默认参数让测试数据悄悄改变。
+- **Action**: assembly-svc BOM 测试改用 `null` 表达无基座，并验证真实净菜设备组合。
+
 
 ## [LRN-20260902-001] best_practice
 

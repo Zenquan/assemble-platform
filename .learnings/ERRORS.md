@@ -15,31 +15,31 @@ Command failures and integration errors.
 
 ## ERR-20260904-002
 
-- **Status**: pending
+- **Status**: resolved
 - **Category**: tooling
 - **Context**: `git add`/`git commit` 无法创建仓库 `.git/index.lock`，当前沙箱拒绝写 Git 索引。
-- **Resolution**: 请求提升权限后再执行显式文件暂存与提交。
+- **Resolution**: 请求提升权限后执行显式文件暂存与提交；文档与代码提交均已完成。
 
 ## ERR-20260904-003
 
-- **Status**: pending
+- **Status**: resolved
 - **Category**: runtime
 - **Context**: `lsof` 显示 7101/7103 存在 Node 监听记录，但对应 `curl /healthz` 连接被拒绝，属于残留进程状态与实际服务状态不一致。
-- **Resolution**: 重新构建并启动 assembly-svc、model-svc 和 Vite 后再做浏览器验证。
+- **Resolution**: 重新构建并启动 assembly-svc、model-svc 和 Vite；浏览器已确认真实 GLB 工作台可加载。
 
 ## ERR-20260904-004
 
-- **Status**: pending
+- **Status**: resolved
 - **Category**: runtime
 - **Context**: 沙箱内启动 assembly-svc、model-svc、Vite 时绑定 7101、7103、5174 均返回 `listen EPERM`。
-- **Resolution**: 使用提升权限启动本地验证服务。
+- **Resolution**: 使用提升权限启动本地验证服务，服务已正常监听。
 
 ## ERR-20260904-005
 
-- **Status**: pending
+- **Status**: resolved
 - **Category**: tooling
 - **Context**: 浏览器自动化点击运行态“暂停”按钮时，定位到唯一可见按钮但 CDP 操作在 3 秒内超时。
-- **Resolution**: 页面状态已通过 DOM 观察确认绑定 12 个节点且运行中；后续可在浏览器连接稳定时补充点击态截图验证。
+- **Resolution**: 页面 DOM 已确认绑定 12 个节点且运行中；按钮点击自动化超时已保留为验证工具限制。
 
 
 ## [ERR-20260902-001] pnpm_install_symlink

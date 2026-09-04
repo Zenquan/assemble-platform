@@ -9,7 +9,7 @@ import { buildSeedLines } from '../src/repositories/index.js';
 function line(
   id: string,
   devices: ModelAssetId[],
-  baseAssetId: ModelAssetId | undefined = 'conveyor',
+  baseAssetId: ModelAssetId | null = 'conveyor',
 ): ProductionLine {
   const now = '2026-09-04T00:00:00.000Z';
   return {
@@ -57,7 +57,7 @@ describe('GET /lines/:id/bom', () => {
 
   it('按所选流水线工位返回不同 BOM、GLB 资产与步骤归属', async () => {
     const sorting = line('sorting-line', ['feeder', 'vision-module', 'box-pack']);
-    const fresh = line('fresh-line', ['bubble-washer', 'vegetable-cutter'], undefined);
+    const fresh = line('fresh-line', ['bubble-washer', 'vegetable-cutter'], null);
     const app = await appWith(sorting, fresh);
 
     const sortingResponse = await app.inject({ method: 'GET', url: '/lines/sorting-line/bom' });
