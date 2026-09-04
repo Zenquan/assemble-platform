@@ -752,7 +752,8 @@ class BabylonScene implements SceneManager {
     if (n === 0) return;
     cx /= n; cy /= n; cz /= n;
     for (const [id, mesh] of this.meshes) {
-      const halfExtents = this.halfSize.get(id) ?? [0.8, 0.8, 0.8];
+      const halfExtents = this.halfSize.get(id);
+      if (!halfExtents) continue;
       const half = Math.max(halfExtents[0], halfExtents[1], halfExtents[2]);
       const dx = Math.abs(mesh.position.x - cx) + half;
       const dy = Math.abs(mesh.position.y - cy) + half;
