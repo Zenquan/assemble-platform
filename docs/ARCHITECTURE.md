@@ -94,6 +94,7 @@ Vue3 业务组件层（views/stores/components）   ← 只依赖 SimEngine 公�
 ```
 AssemblySvc ──► Repository<ProductionLine>      ← 介质=内存/文件(当前)
 InterferenceSvc ─► Repository<InterferenceReport>/Job
+TaktSvc ──► Repository<TaktConfig> + Repository<TaktObservation>
 ...
 AuthSvc ─► Repository<AuditLogEntry> + JWT 校验
 ```
@@ -106,7 +107,9 @@ AuthSvc ─► Repository<AuditLogEntry> + JWT 校验
 - `AssemblyBom`（装配 BOM）= `AssemblyPart[]`（零件树）+ `Constraint[]`（约束表）+ `AssemblyStep[]`（工艺步骤）
 - `Constraint` 类型：`coincident / coplanar / concentric / distance`（对齐方案 4.2）
 - 干涉产物：`InterferenceReport`（含 `hits`、`elapsedMs`、`broadCullRatio` 等质量指标）
-- 节拍产物：`TaktBottleneckResult`（瓶颈工位 / 理论产能 / 各工位负荷）
+- 节拍配置：`TaktConfig`（目标产能 / 计划开动率 / 配置更新时间与来源）
+- 节拍观测：`TaktObservation`（MES/PLC 观测窗口 / 完成件数 / 实际平均节拍）
+- 节拍产物：`TaktBottleneckResult`（瓶颈工位 / 理论产能 / 各工位负荷 / 后端实际产出）
 - 模型资产：`ModelAssetVersion`（内容寻址指纹，压缩策略 `draco/meshopt`）
 - 权限：`AuthPrincipal`（OIDC sub + 角色 + 权限点 + ABAC 产线范围）
 

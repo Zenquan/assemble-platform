@@ -12,7 +12,7 @@
 | `assembly.ts` | 装配域：`ProductionLine / Station / AssemblyBom / AssemblyPart / Constraint / AssemblyStep / AssemblyMode` |
 | `interference.ts` | 干涉产物 `InterferenceReport` 与质量指标 |
 | `model.ts` | 模型资产 `ModelAssetVersion`（内容寻址 + 压缩策略） |
-| `rhythm.ts` | 节拍 `TaktBottleneckResult`（瓶颈工位 / 理论产能 / 工位负荷） |
+| `rhythm.ts` | 节拍 `TaktConfig` / `TaktObservation` / `TaktBottleneckResult`（配置、实际产出、瓶颈与工位负荷） |
 | `identity.ts` | 权限 `AuthPrincipal`（OIDC sub + 角色 + 权限点 + ABAC 产线范围） |
 
 ## 关键聚合关系

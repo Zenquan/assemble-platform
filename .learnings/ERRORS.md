@@ -4,6 +4,35 @@ Command failures and integration errors.
 
 > 记录工具链/算法/环境层面的真实踩坑（含已修复），避免重复排查。格式遵循 `.agent/skills/self-improving-agent`。
 
+## [ERR-20260904-039] git_index_lock_permission
+
+**Logged**: 2026-09-04T00:00:00+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: tooling
+
+### Summary
+沙箱允许修改工作区文件，但禁止 Git 创建 `.git/index.lock`，导致提交命令失败。
+
+### Error
+```text
+fatal: Unable to create '.git/index.lock': Operation not permitted
+```
+
+### Context
+- Command: `git add ... && git commit ...`
+- 契约与文档已完成类型检查，失败发生在 Git 写索引阶段。
+
+### Suggested Fix
+申请允许写入当前仓库 `.git` 的权限后重试同一提交。
+
+### Metadata
+- Reproducible: yes
+- Related Files: packages/domain/src/rhythm.ts, docs/ARCHITECTURE.md
+- Tags: git, sandbox, permissions
+
+---
+
 ## [ERR-20260904-038] dev_script_bind_eperm
 
 **Logged**: 2026-09-04T16:20:30+08:00
