@@ -7,6 +7,7 @@
 
 ### Added
 
+- assembly-svc 新增叶菜净菜清洗线与根茎净菜切配线，两条路线复用真实设备 GLB 和卫生转运段。
 - 产线契约新增设备占用长度与转运资产配置字段，为多条果蔬/净菜工艺线复用同一套 BOM 排布算法做准备。
 - 节拍领域契约新增后端配置 `TaktConfig` 与现场观测 `TaktObservation`，结果携带实际产出快照及数据来源。
 - assembly-svc 按流水线返回真实 BOM，工作台按 BOM 从 model-svc 加载 GLB。
