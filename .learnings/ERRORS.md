@@ -6,6 +6,66 @@ Command failures and integration errors.
 
 ---
 
+## [ERR-20260904-035] blender_headless_metal_crash
+
+**Logged**: 2026-09-04T12:12:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+Blender 4.4 后台生成转运输送 GLB 时在 Metal 后端初始化阶段发生原生崩溃。
+
+### Error
+```text
+Segmentation fault: 11
+gpu::MTLBackend::metal_is_supported
+```
+
+### Context
+- Command: `Blender -b --python scripts/gltf-gen/gen_device.py -- transfer-conveyor --out ...`
+- Python generator had not started; no asset file was written.
+
+### Suggested Fix
+在本机以允许 Metal 初始化的本地进程权限运行 Blender headless；该版本不支持 OpenGL GPU backend 参数。
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/gltf-gen/gen_device.py
+- Tags: blender, gltf, headless, metal
+- Resolution: 已提升本机进程权限成功生成 `transfer-conveyor.glb`。
+
+---
+
+## [ERR-20260904-036] gltf_generator_out_flag
+
+**Logged**: 2026-09-04T12:14:30+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+`gen_device.py` 的帮助文档使用 `--out`，但参数解析把它误当成输出目录。
+
+### Error
+```text
+[gen] wrote --out/transfer-conveyor.glb
+```
+
+### Context
+Blender 成功运行，但命令 `device --out <dir>` 生成到了仓库根目录的 `--out/` 临时目录，而不是 model-svc 资产目录。
+
+### Suggested Fix
+让生成器同时正确解析文档中的 `--out <dir>` 形式，并在 gen-all 中统一使用该形式。
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/gltf-gen/gen_device.py, scripts/gltf-gen/gen-all.sh
+- Tags: blender, gltf, cli
+- Resolution: `gen_device.py` 已支持 `--out <dir>`，并由 `gen-all.sh` 使用正确参数生成资产。
+
+---
+
 ## [ERR-20260904-032] takt_optional_target_residual
 
 **Logged**: 2026-09-04T11:36:00+08:00
@@ -89,6 +149,36 @@ Object literal may only specify known properties, and 'availability' does not ex
 - Related Files: packages/domain/src/rhythm.ts, services/takt-svc/src/taktCore.ts
 - Resolution: 已先构建 domain，再通过 `f57fab3` 完成 takt-svc 消费端类型检查。
 
+
+## [ERR-20260904-034] git_index_write_requires_approval
+
+**Logged**: 2026-09-04T12:10:30+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+本轮转运输送段提交时，沙箱再次拒绝创建 `.git/index.lock`。
+
+### Error
+```text
+fatal: Unable to create '/Users/zenquan/ZCodeProject/MyResume/assemble-platform/.git/index.lock': Operation not permitted
+```
+
+### Context
+- 已完成 domain 资产契约改动并准备暂存。
+- 源码工作区可写，但 Git 索引目录需要提升权限。
+
+### Suggested Fix
+用户已要求小步提交时，对本次 `git add` / `git commit` 请求提升本地权限。
+
+### Metadata
+- Reproducible: yes
+- Related Files: .git/index
+- See Also: ERR-20260904-030, ERR-20260904-002
+- Resolution: 已提升本地 Git 写权限完成 `7eafe8d`、`0febce3`、`9f12d47` 三个小步提交。
+
+---
 
 ## [ERR-20260904-030] git_index_write_requires_approval
 
