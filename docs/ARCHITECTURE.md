@@ -135,6 +135,8 @@ AssemblyBom(parts + steps.stationId)
 5. BOM 树使用 `AssemblyStep.stationId`，不得按步骤序号 round-robin 猜测工位。
 6. `ProductionLine.baseAssetId` 只用于确有贯穿基座的产线；净菜等设备自带输送段的工艺线省略该字段，避免重复可见输送带。
 
+7. 入口离线预检只接收 `lineId`；`interference-svc` 通过服务间 HTTP 从 `assembly-svc` 读取产线与 BOM，零件数不得由前端估算或由 `lineKind` 合成。
+
 ## 6. 工程约定与目录规约
 
 | 项 | 约定 |

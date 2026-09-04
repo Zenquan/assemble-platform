@@ -6,6 +6,90 @@ Command failures and integration errors.
 
 ---
 
+## [ERR-20260904-032] takt_optional_target_residual
+
+**Logged**: 2026-09-04T11:36:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+节拍接口迁移为只接收 `lineId` 后，核心负荷计算仍引用可选的旧目标字段，导致消费者类型检查失败。
+
+### Error
+```text
+src/taktCore.ts(32,43): error TS18048: 'req.targetUnitsPerHour' is possibly 'undefined'.
+```
+
+### Context
+目标产能已在服务端由瓶颈工位节拍归一化，但循环计算没有统一使用归一化后的局部值。
+
+### Suggested Fix
+跨层契约删改后，搜索旧字段的所有读写点，并用服务端归一化值完成后续计算。
+
+### Metadata
+- Reproducible: yes
+- Related Files: services/takt-svc/src/taktCore.ts
+
+---
+
+## [ERR-20260904-033] domain_package_without_tests
+
+**Logged**: 2026-09-04T11:43:00+08:00
+**Priority**: low
+**Status**: pending
+**Area**: tests
+
+### Summary
+全仓测试在 `@assemble/domain` 包因没有测试文件退出，未进入后续 workspace 包。
+
+### Error
+```text
+@assemble/domain@0.1.0 test: No test files found, exiting with code 1
+```
+
+### Context
+本次改动已通过 domain 构建和所有受影响服务/前端定向测试；该失败属于仓库现有测试配置限制。
+
+### Suggested Fix
+为无测试的契约包配置允许空测试集，或补充领域契约测试后再恢复全仓测试门禁。
+
+### Metadata
+- Reproducible: yes
+- Related Files: packages/domain/package.json, packages/domain/src
+
+---
+
+## [ERR-20260904-031] workspace_domain_stale_build
+
+**Logged**: 2026-09-04T11:22:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+跨包契约新增字段后，takt-svc 类型检查先解析到了旧的 domain 构建产物。
+
+### Error
+```text
+Object literal may only specify known properties, and 'availability' does not exist in type 'TaktBottleneckResult'.
+```
+
+### Context
+服务包的 workspace 依赖未直接映射到 domain 源码，需先构建共享 domain 再检查消费者。
+
+### Suggested Fix
+修改 `packages/domain` 契约后，先构建 domain，再运行受影响服务的 typecheck/test。
+
+### Resolution
+已先构建 domain，再通过 `f57fab3` 完成 takt-svc 消费端类型检查。
+
+### Metadata
+- Reproducible: yes
+- Related Files: packages/domain/src/rhythm.ts, services/takt-svc/src/taktCore.ts
+- Resolution: 已先构建 domain，再通过 `f57fab3` 完成 takt-svc 消费端类型检查。
+
+
 ## [ERR-20260904-030] git_index_write_requires_approval
 
 **Logged**: 2026-09-04T11:04:30+08:00

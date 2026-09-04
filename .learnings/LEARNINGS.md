@@ -32,6 +32,15 @@ Corrections, insights, and knowledge gaps captured during development.
 - **Insight**: 设备 GLB 的真实包络与工位中心坐标必须一起规划；仅按工艺序号或早期演示坐标摆放，会把相邻设备的转运间隙放大成不真实的断线。
 - **Action**: 净菜线中心坐标按真实 GLB 长度累加，并固定小额卫生/转运间隙；测试校验相邻包络不超过目标间隙。
 
+## LRN-20260904-004
+
+- **Category**: best_practice
+- **Status**: pending
+- **Context**: 前端产线卡片曾用工位数估算零部件数、用固定值注入节拍开动率，干涉预检接口也接收 `lineKind/partCount`。
+- **Insight**: 业务指标必须来自后端领域结果；前端只传业务标识并展示服务返回值，视觉布局和测试替身参数另行隔离。
+- **Action**: 预检改为按 `lineId` 由 interference-svc 读取 assembly-svc BOM，节拍由 takt-svc 按 assembly-svc 工位计算并返回目标与实际 availability，移除前端估算零件数、节拍目标和伪进度条。
+- **Resolution**: 已由 `bc9acf3`、`f57fab3` 固化干涉与节拍两条真实后端链路。
+
 
 ## [LRN-20260902-001] best_practice
 
