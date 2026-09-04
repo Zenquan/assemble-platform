@@ -358,13 +358,13 @@ async function loadTakt(version: number, ln: ProductionLine) {
 .wb-page {
   min-height: 100vh;
   background: var(--app-bg);
-  padding: 20px;
+  padding: 16px;
   display: flex;
   justify-content: center;
 }
 .wb-panel {
   width: 100%;
-  max-width: 1180px;
+  max-width: 1680px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--bg);
@@ -413,8 +413,8 @@ async function loadTakt(version: number, ln: ProductionLine) {
 }
 .wb-body {
   display: grid;
-  grid-template-columns: 200px 1fr 240px;
-  min-height: 560px;
+  grid-template-columns: minmax(176px, 18vw) minmax(0, 1fr) minmax(208px, 21vw);
+  min-height: min(720px, calc(100vh - 112px));
 }
 .left,
 .right {
@@ -441,7 +441,7 @@ async function loadTakt(version: number, ln: ProductionLine) {
 .viewport {
   position: relative;
   background: #0a1420;
-  min-height: 560px;
+  min-height: min(720px, calc(100vh - 112px));
 }
 .viewport canvas {
   width: 100% !important;
@@ -623,9 +623,43 @@ async function loadTakt(version: number, ln: ProductionLine) {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 560px;
+  min-height: min(720px, calc(100vh - 112px));
 }
 .vhint.err {
   color: var(--red);
+}
+
+@media (max-width: 900px) {
+  .wb-page {
+    padding: 10px;
+  }
+  .wb-body {
+    grid-template-columns: minmax(160px, 1fr) minmax(0, 2fr);
+    min-height: 620px;
+  }
+  .right {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--line-3);
+  }
+  .viewport,
+  .vhint {
+    min-height: 620px;
+  }
+}
+
+@media (max-width: 620px) {
+  .wb-body {
+    display: flex;
+    flex-direction: column;
+  }
+  .left,
+  .right {
+    max-height: 260px;
+  }
+  .viewport,
+  .vhint {
+    min-height: 520px;
+  }
 }
 </style>
