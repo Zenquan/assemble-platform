@@ -17,14 +17,15 @@
  *   node scripts/dev.mjs --all      全量模式：5 个后端 + vite（额外启动 auth）
  *   # 或经 npm/pnpm run dev（见根 package.json scripts.dev，dev:all 走 --all）
  */
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const NODE = process.execPath;
+const TSC = join(ROOT, 'node_modules/.bin/tsc');
 const DEV_HOST = process.env['ASSEMBLE_DEV_HOST'] ?? '127.0.0.1';
 const ORIGIN_HOST = process.env['ASSEMBLE_DEV_ORIGIN_HOST'] ?? (DEV_HOST === '0.0.0.0' ? '127.0.0.1' : DEV_HOST);
 const children = new Set();
@@ -34,6 +35,43 @@ const configuredPort = (name, fallback) => {
   const parsed = Number(process.env[name]);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 };
+
+function latestSourceMtime(sourceDir) {
+  if (!existsSync(sourceDir)) return 0;
+  let latest = 0;
+  for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
+    const entryPath = join(sourceDir, entry.name);
+    if (entry.isDirectory()) {
+      latest = Math.max(latest, latestSourceMtime(entryPath));
+    } else if (entry.name.endsWith('.ts')) {
+      latest = Math.max(latest, statSync(entryPath).mtimeMs);
+    }
+  }
+  return latest;
+}
+
+export function serviceNeedsBuild(sourceDir, distFile) {
+  if (!existsSync(distFile)) return true;
+  return latestSourceMtime(sourceDir) > statSync(distFile).mtimeMs;
+}
+
+function buildService(service) {
+  tag(service.name, '检测到源码更新，正在构建服务产物…');
+  const result = spawnSync(NODE, [TSC, '-p', join(service.dir, 'tsconfig.json')], {
+    cwd: ROOT,
+    env: { ...process.env, NODE_OPTIONS: '' },
+    encoding: 'utf8',
+  });
+  for (const output of [result.stdout, result.stderr]) {
+    if (output) output.split('\n').filter(Boolean).forEach((line) => tag(service.name, line));
+  }
+  if (result.status !== 0) {
+    tag(service.name, `构建失败，跳过启动 (code=${result.status ?? 'unknown'})`);
+    return false;
+  }
+  tag(service.name, '服务产物已更新');
+  return true;
+}
 
 /* 判断某端口是否已被占用。
  * 探测原理：在本机对该端口 listen —— bind 成功(触发 listening) = 端口空闲；
@@ -157,12 +195,11 @@ const VITE = { name: 'vite', dir: join(ROOT, 'apps/sim-platform'), port: VITE_PO
 const MODE = process.argv.includes('--all') ? '全量(5 服务)' : '精简(assembly+interference+model+takt)';
 
 async function main() {
-  // 1) 后端服务：产物需已 build（dist/server.js），端口空闲才起
+  // 1) 后端服务：先确保 dist/server.js 与源码同步，再按端口状态启动
   const svcUp = [];
   for (const svc of SERVICES) {
     const distFile = join(svc.dir, 'dist/server.js');
-    if (!existsSync(distFile)) {
-      tag(svc.name, `产物缺失: ${distFile} —— 请先在 ${svc.dir} 执行构建（pnpm --filter ${svc.name} build）`);
+    if (serviceNeedsBuild(join(svc.dir, 'src'), distFile) && !buildService(svc)) {
       process.exitCode = 1;
       continue;
     }
@@ -226,16 +263,18 @@ async function main() {
   }
 }
 
-process.on('SIGINT', () => {
-  tag('main', '收到 Ctrl+C，正在清理子进程…');
-  killAll(0);
-});
-process.on('SIGTERM', () => {
-  tag('main', '收到 SIGTERM，正在清理子进程…');
-  killAll(0);
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.on('SIGINT', () => {
+    tag('main', '收到 Ctrl+C，正在清理子进程…');
+    killAll(0);
+  });
+  process.on('SIGTERM', () => {
+    tag('main', '收到 SIGTERM，正在清理子进程…');
+    killAll(0);
+  });
 
-main().catch((e) => {
-  tag('main', `启动失败: ${e.message}`);
-  killAll(1);
-});
+  main().catch((e) => {
+    tag('main', `启动失败: ${e.message}`);
+    killAll(1);
+  });
+}
