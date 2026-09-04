@@ -136,4 +136,27 @@ describe('GET /lines/:id/bom', () => {
 
     await app.close();
   });
+
+  it('拒绝无效的工位节拍和未注册设备资产', async () => {
+    const app = await appWith();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/lines',
+      payload: {
+        id: 'invalid-line',
+        name: '无效产线',
+        kind: 'fresh-cut',
+        enabled: true,
+        modelVersion: 'test',
+        stations: [{
+          id: 'invalid-station', lineId: 'invalid-line', seq: 1, name: '工位',
+          taktSeconds: 0, deviceKind: 'unknown-device',
+        }],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ ok: false, code: 'VALIDATION_FAILED' });
+    await app.close();
+  });
 });

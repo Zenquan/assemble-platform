@@ -1,7 +1,39 @@
-import type { ProductionLine } from '@assemble/domain';
+import { MODEL_ASSET_IDS, type ProductionLine } from '@assemble/domain';
 import { err, ok } from '@assemble/http';
 import type { FastifyInstance } from 'fastify';
 import { buildBomForLine, type AssemblyRepos } from '../repositories/index.js';
+
+function validateLine(line: ProductionLine): string | null {
+  if (!line.name || !line.kind || !Array.isArray(line.stations)) {
+    return '产线缺少 name/kind/stations';
+  }
+  if (line.baseAssetId && !(MODEL_ASSET_IDS as readonly string[]).includes(line.baseAssetId)) {
+    return `产线基座资产 ${line.baseAssetId} 不存在`;
+  }
+  if (line.transferAssetId && !(MODEL_ASSET_IDS as readonly string[]).includes(line.transferAssetId)) {
+    return `转运资产 ${line.transferAssetId} 不存在`;
+  }
+  const stationIds = new Set<string>();
+  for (const station of line.stations) {
+    if (!station.id || station.lineId !== line.id || stationIds.has(station.id)) {
+      return `工位 ${station.id || '未命名'} 的 id/lineId 重复或不匹配`;
+    }
+    if (!Number.isInteger(station.seq) || station.seq < 1 || !Number.isFinite(station.taktSeconds) || station.taktSeconds <= 0) {
+      return `工位 ${station.id} 的 seq/taktSeconds 无效`;
+    }
+    if (station.deviceKind && !(MODEL_ASSET_IDS as readonly string[]).includes(station.deviceKind)) {
+      return `工位 ${station.id} 的设备资产不存在`;
+    }
+    if (station.footprintLengthMeters !== undefined && (!Number.isFinite(station.footprintLengthMeters) || station.footprintLengthMeters <= 0)) {
+      return `工位 ${station.id} 的 footprintLengthMeters 无效`;
+    }
+    stationIds.add(station.id);
+  }
+  if (line.transferGapMeters !== undefined && (!Number.isFinite(line.transferGapMeters) || line.transferGapMeters < 0)) {
+    return 'transferGapMeters 不能为负数';
+  }
+  return null;
+}
 
 export function registerLineRoutes(app: FastifyInstance, repos: AssemblyRepos): void {
   app.get('/lines', async () => {
@@ -35,9 +67,10 @@ export function registerLineRoutes(app: FastifyInstance, repos: AssemblyRepos): 
         createdAt: now,
         updatedAt: now,
       };
-      if (!line.name || !line.kind || !Array.isArray(line.stations)) {
+      const validationError = validateLine(line);
+      if (validationError) {
         return reply.status(400).send(
-          err('VALIDATION_FAILED', '产线缺少 name/kind/stations'),
+          err('VALIDATION_FAILED', validationError),
         );
       }
       const saved = await repos.lines.upsert(line);
@@ -53,6 +86,10 @@ export function registerLineRoutes(app: FastifyInstance, repos: AssemblyRepos): 
         return reply.status(404).send(err('NOT_FOUND', `产线 ${req.params.id} 不存在`));
       }
       const next: ProductionLine = { ...cur, ...req.body, id: cur.id, updatedAt: new Date().toISOString() };
+      const validationError = validateLine(next);
+      if (validationError) {
+        return reply.status(400).send(err('VALIDATION_FAILED', validationError));
+      }
       const saved = await repos.lines.upsert(next);
       return ok(saved);
     },
