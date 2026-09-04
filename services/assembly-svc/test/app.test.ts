@@ -55,12 +55,25 @@ describe('GET /lines/:id/bom', () => {
     ]);
   });
 
-  it('净菜 BOM 按 GLB 外包络紧凑排布，仅保留卫生转运间隙', () => {
+  it('净菜 BOM 按 GLB 外包络排布，并用固定转运段填满设备间隙', () => {
     const freshcut = buildSeedLines().find((item) => item.id === 'line-freshcut-01');
     expect(freshcut).toBeDefined();
-    const positions = buildBomForLine(freshcut!).parts.map((part) => part.localPosition[0]);
-    const expected = [-1.745, 2.37, 6.605, 9.835, 12.71, 15.415, 17.77];
-    positions.forEach((position, index) => expect(position).toBeCloseTo(expected[index] ?? 0, 3));
+    const bom = buildBomForLine(freshcut!);
+    const devices = bom.parts.filter((part) => part.isMovable);
+    const transfers = bom.parts.filter((part) => part.assetId === 'transfer-conveyor');
+    const expectedDevicePositions = [-1.745, 3.05, 7.965, 11.875, 15.43, 18.815, 21.85];
+    const expectedTransferPositions = [0.4, 5.7, 10.23, 13.52, 17.34, 20.29];
+
+    expect(devices).toHaveLength(7);
+    expect(transfers).toHaveLength(6);
+    devices.forEach((part, index) =>
+      expect(part.localPosition[0]).toBeCloseTo(expectedDevicePositions[index] ?? 0, 3),
+    );
+    transfers.forEach((part, index) =>
+      expect(part.localPosition[0]).toBeCloseTo(expectedTransferPositions[index] ?? 0, 3),
+    );
+    expect(transfers.every((part) => part.isMovable === false)).toBe(true);
+    expect(bom.steps).toHaveLength(7);
   });
 
   it('按所选流水线工位返回不同 BOM、GLB 资产与步骤归属', async () => {

@@ -9,7 +9,7 @@ const DEFAULT_FACING_DEGREES = 90;
 const MIN_ASSEMBLY_DURATION_SECONDS = 0.6;
 const MAX_ASSEMBLY_DURATION_SECONDS = 2.5;
 const TAKT_TO_ANIMATION_RATIO = 3;
-const FRESHCUT_TRANSFER_GAP_METERS = 0.12;
+const FRESHCUT_TRANSFER_LENGTH_METERS = 0.8;
 const FRESHCUT_FOOTPRINT_LENGTHS: Record<string, number> = {
   'infeed-elevator': 3.49,
   'bubble-washer': 4.50,
@@ -142,7 +142,7 @@ function compactFreshcutPositions(stations: readonly Station[]): Map<string, Vec
   for (const [index, station] of stations.entries()) {
     const length = FRESHCUT_FOOTPRINT_LENGTHS[station.deviceKind ?? ''] ?? 3;
     if (index === 0) cursor = -length / 2;
-    else cursor += previousLength / 2 + length / 2 + FRESHCUT_TRANSFER_GAP_METERS;
+    else cursor += previousLength / 2 + length / 2 + FRESHCUT_TRANSFER_LENGTH_METERS;
     positions.set(station.id, [cursor, 0, 0]);
     previousLength = length;
   }
@@ -211,6 +211,31 @@ export function buildBomForLine(line: ProductionLine): AssemblyBom {
       durationSeconds: durationFromTakt(station.taktSeconds),
       description: `安装${station.name}设备`,
     });
+  }
+
+  if (line.kind === 'fresh-cut') {
+    for (let index = 1; index < stations.length; index += 1) {
+      const previous = stations[index - 1];
+      const current = stations[index];
+      const previousPosition = positions[index - 1];
+      const currentPosition = positions[index];
+      if (!previous || !current || !previousPosition || !currentPosition) continue;
+      if (!previous.deviceKind || !current.deviceKind) continue;
+      const previousLength = FRESHCUT_FOOTPRINT_LENGTHS[previous.deviceKind] ?? 3;
+      const currentLength = FRESHCUT_FOOTPRINT_LENGTHS[current.deviceKind] ?? 3;
+      parts.push({
+        id: `${line.id}-transfer-${previous.id}-${current.id}`,
+        name: `${previous.name}至${current.name}卫生输送段`,
+        assetId: 'transfer-conveyor',
+        localPosition: [
+          (previousPosition[0] + previousLength / 2 + currentPosition[0] - currentLength / 2) / 2,
+          0,
+          (previousPosition[2] + currentPosition[2]) / 2,
+        ],
+        localRotation: IDENTITY_ROTATION,
+        isMovable: false,
+      });
+    }
   }
 
   return { lineId: line.id, parts, constraints: [], steps };
