@@ -6,6 +6,21 @@ Command failures and integration errors.
 
 ---
 
+## ERR-20260904-001
+
+- **Status**: resolved
+- **Category**: tooling
+- **Context**: 运行 `measure_glb.mjs` 时将 `services/model-svc/assets/glb/*.glb` 路径通配展开后传入，脚本实际要求资产名，因此拼出了重复路径并报 `ENOENT`。
+- **Resolution**: 先读取脚本参数约定，再按资产名逐个量测。
+
+## ERR-20260904-002
+
+- **Status**: pending
+- **Category**: tooling
+- **Context**: `git add`/`git commit` 无法创建仓库 `.git/index.lock`，当前沙箱拒绝写 Git 索引。
+- **Resolution**: 请求提升权限后再执行显式文件暂存与提交。
+
+
 ## [ERR-20260902-001] pnpm_install_symlink
 
 **Logged**: 2026-09-02T22:00:00+08:00

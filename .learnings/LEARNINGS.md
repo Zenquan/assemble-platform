@@ -8,6 +8,15 @@ Corrections, insights, and knowledge gaps captured during development.
 
 ---
 
+## LRN-20260904-001
+
+- **Category**: best_practice
+- **Status**: resolved
+- **Context**: Babylon glTF loader 将 Blender 导出的节点自定义属性放在不同版本的 `metadata.gltf.extras` 或 `metadata.extras` 路径中。
+- **Insight**: 读取 GLB 运行态语义时应兼容这两层包装，并只接受白名单运动类型；未识别的节点跳过，不能影响整线资产加载。
+- **Action**: 运行态绑定集中在 Babylon 门面，纯运动采样放在无引擎模块并用假时钟测试。
+
+
 ## [LRN-20260902-001] best_practice
 
 **Logged**: 2026-09-02T22:00:00+08:00
