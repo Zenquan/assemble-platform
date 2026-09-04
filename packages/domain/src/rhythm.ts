@@ -28,6 +28,8 @@ export interface TaktSimulationInput {
 export interface TaktBottleneckResult {
   lineId: string;
   targetUnitsPerHour: number;
+  /** 节拍服务实际采用的时间开动率（0.01-1） */
+  availability: number;
   /** 产线理论单件 CT（瓶颈工位节拍 = 最大工位 CT） */
   cycleTimeSeconds: number;
   /** 理论小时产能 = 3600 / cycleTimeSeconds * availability */

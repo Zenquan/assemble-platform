@@ -2,19 +2,14 @@
  * S4 · 节拍面板纯逻辑单测（无 HTTP / 无 DOM，node 环境可跑）
  *
  * 覆盖 taktpanel.ts：
- *   1. `recommendTargetPerHour`：取瓶颈工位小时速率向上取整；空/零 takt 兜底。
- *   2. `deriveTaktPanel`：瓶颈标注 + 工位负荷分级（ok/busy/overload）+ 达产 summary。
- *   3. 负荷分级边界：load<=0.9 → ok；0.9<=load<=1 → busy；>1 → overload。
- *   4. 工位名缺省回退 stationId；meetsTarget 直接透传。
+ *   1. `deriveTaktPanel`：服务端目标、开动率、瓶颈和工位负荷映射。
+ *   2. 负荷分级边界：load<0.9 → ok；0.9<=load<=1 → busy；>1 → overload。
+ *   3. 工位名缺省回退 stationId；meetsTarget 直接透传。
  */
 import { describe, expect, it } from 'vitest';
 
 import type { Station, TaktBottleneckResult } from '@assemble/domain';
-import {
-  deriveTaktPanel,
-  recommendTargetPerHour,
-  type TaktPanelModel,
-} from '@/engine/taktpanel';
+import { deriveTaktPanel, type TaktPanelModel } from '@/engine/taktpanel';
 
 const stations: Station[] = [
   { id: 'st-a', lineId: 'L', seq: 1, name: '上料', taktSeconds: 3.2 },
@@ -26,6 +21,7 @@ function makeResult(partial: Partial<TaktBottleneckResult> = {}): TaktBottleneck
   return {
     lineId: 'L',
     targetUnitsPerHour: 60,
+    availability: 0.85,
     cycleTimeSeconds: 3.8,
     theoreticalThroughputPerHour: 947,
     meetsTarget: true,
@@ -40,28 +36,16 @@ function makeResult(partial: Partial<TaktBottleneckResult> = {}): TaktBottleneck
   };
 }
 
-describe('S4 · recommendTargetPerHour', () => {
-  it('取最大 CT 工位的小时速率向上取整', () => {
-    // maxTakt=3.8 → 3600/3.8=947.37 → 948
-    expect(recommendTargetPerHour(stations)).toBe(948);
-  });
-  it('全部 takt<=0 → 兜底 60', () => {
-    const bad: Station[] = [{ id: 'x', lineId: 'L', seq: 1, name: 'x', taktSeconds: 0 }];
-    expect(recommendTargetPerHour(bad)).toBe(60);
-  });
-  it('空工位 → 兜底 60', () => {
-    expect(recommendTargetPerHour([])).toBe(60);
-  });
-});
-
 describe('S4 · deriveTaktPanel 视图模型', () => {
   it('负荷分级 + 瓶颈标注正确映射', () => {
     const model: TaktPanelModel = deriveTaktPanel(
-      { lineId: 'L', targetUnitsPerHour: 60, availability: 0.85 },
+      { lineId: 'L' },
       makeResult(),
       stations,
     );
     expect(model.lineId).toBe('L');
+    expect(model.targetUnitsPerHour).toBe(60);
+    expect(model.availability).toBe(0.85);
     expect(model.bottleneckStationId).toBe('st-c');
     expect(model.bottleneckStationName).toBe('装箱');
     const byId = new Map(model.stationLoads.map((s) => [s.stationId, s]));
@@ -73,12 +57,12 @@ describe('S4 · deriveTaktPanel 视图模型', () => {
   });
 
   it('达产 → summary 含「达产」；未达产 → summary 含「未达产 + 瓶颈名」', () => {
-    const ok = deriveTaktPanel({ lineId: 'L', targetUnitsPerHour: 60, availability: 1 }, makeResult(), stations);
+    const ok = deriveTaktPanel({ lineId: 'L' }, makeResult(), stations);
     expect(ok.meetsTarget).toBe(true);
     expect(ok.summary).toContain('达产');
 
     const notOk = deriveTaktPanel(
-      { lineId: 'L', targetUnitsPerHour: 60, availability: 0.85 },
+      { lineId: 'L' },
       makeResult({ theoreticalThroughputPerHour: 947, meetsTarget: false }),
       stations,
     );
@@ -89,7 +73,7 @@ describe('S4 · deriveTaktPanel 视图模型', () => {
 
   it('工位名缺省回退 stationId（找不到匹配）', () => {
     const model = deriveTaktPanel(
-      { lineId: 'L', targetUnitsPerHour: 60, availability: 1 },
+      { lineId: 'L' },
       makeResult(),
       [], // 无工位
     );
@@ -106,7 +90,7 @@ describe('S4 · deriveTaktPanel 视图模型', () => {
         { stationId: 'st-c', load: 1.0001 },
       ],
     });
-    const model = deriveTaktPanel({ lineId: 'L', targetUnitsPerHour: 60, availability: 1 }, res, stations);
+    const model = deriveTaktPanel({ lineId: 'L' }, res, stations);
     const byId = new Map(model.stationLoads.map((s) => [s.stationId, s]));
     expect(byId.get('st-a')!.loadClass).toBe('ok');
     expect(byId.get('st-b')!.loadClass).toBe('busy');

@@ -13,12 +13,11 @@ import { fetchTaktSimulation } from '@/api/takt';
 import type { ProductionLine } from '@assemble/domain';
 import { createSimEngine, type SimEngine } from '@/engine';
 import { deriveBomTreeState, stationsOf, type BomTreeModel } from '@/engine/bomtree';
-import { deriveTaktPanel, recommendTargetPerHour, type TaktPanelModel } from '@/engine/taktpanel';
+import { deriveTaktPanel, type TaktPanelModel } from '@/engine/taktpanel';
 import BomTreePanel from '@/components/BomTreePanel.vue';
 import TaktPanel from '@/components/TaktPanel.vue';
 
 const UI_STATE_POLL_INTERVAL_MS = 120;
-const TAKT_DEMO_AVAILABILITY = 0.85;
 
 const route = useRoute();
 const lineId = ref(String(route.params.lineId ?? ''));
@@ -287,16 +286,12 @@ async function loadTakt(version: number, ln: ProductionLine) {
   }
   taktState.value = 'loading';
   try {
-    const target = recommendTargetPerHour(ln.stations);
     const res = await fetchTaktSimulation({
       lineId: ln.id,
-      stations: ln.stations,
-      targetUnitsPerHour: target,
-      availability: TAKT_DEMO_AVAILABILITY,
     });
     if (version !== loadVersion) return;
     taktModel.value = deriveTaktPanel(
-      { lineId: ln.id, targetUnitsPerHour: target, availability: TAKT_DEMO_AVAILABILITY },
+      { lineId: ln.id },
       res,
       ln.stations,
     );

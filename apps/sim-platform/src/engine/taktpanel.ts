@@ -21,7 +21,7 @@ export interface TaktStationLoad {
   /** 工位显示名（缺省回退 id） */
   name: string;
   /** 理论节拍（秒/件） */
-  taktSeconds: number;
+  taktSeconds: number | null;
   /** 负荷（实际需求节拍占用，>1 超负荷） */
   load: number;
   /** 是否瓶颈工位（由 takt 服务判定） */
@@ -59,36 +59,24 @@ function loadClassOf(load: number): TaktStationLoad['loadClass'] {
 }
 
 /**
- * 建议的目标小时产能（件/时）：取瓶颈工位（最大 CT）对应的小时速率向上取整。
- * 让演示产线的节拍面板落在"瓶颈处逼近/超负荷、可对照是否达产"的可读区间，
- * 而非极低目标导致全绿无信息量。纯函数、可单测。
- */
-export function recommendTargetPerHour(stations: readonly Station[]): number {
-  const maxTakt = stations.reduce((m, s) => Math.max(m, s.taktSeconds), 0);
-  if (maxTakt <= 0) return 60;
-  return Math.ceil(3600 / maxTakt);
-}
-
-/**
  * 由 takt 结果 + 产线工位推导节拍面板模型。纯函数、可单测。
  *
- * @param reqInfo 请求时用的 lineId/targetUnitsPerHour/availability（复用于展示）
+ * @param reqInfo 请求时用的 lineId
  * @param result  takt-svc 返回的 TaktBottleneckResult
  * @param stations 产线工位（取显示名；无匹配则用 stationId）
  */
 export function deriveTaktPanel(
-  reqInfo: { lineId: string; targetUnitsPerHour: number; availability: number },
+  reqInfo: { lineId: string },
   result: TaktBottleneckResult,
   stations: readonly Station[],
 ): TaktPanelModel {
-  const nameOf = (id: string) => stations.find((s) => s.id === id)?.name ?? id;
   const stationLoads: TaktStationLoad[] = result.stationLoads.map((l) => {
     const st = stations.find((s) => s.id === l.stationId);
     const isBottleneck = l.stationId === result.bottleneckStationId;
     return {
       stationId: l.stationId,
       name: st?.name ?? l.stationId,
-      taktSeconds: st?.taktSeconds ?? 0,
+      taktSeconds: st?.taktSeconds ?? null,
       load: l.load,
       isBottleneck,
       loadClass: loadClassOf(l.load),
@@ -98,13 +86,13 @@ export function deriveTaktPanel(
   const bn = stations.find((s) => s.id === result.bottleneckStationId);
   const meetsTarget = result.meetsTarget;
   const summary = meetsTarget
-    ? `理论产能 ${result.theoreticalThroughputPerHour.toFixed(1)} 件/时 ≥ 目标 ${reqInfo.targetUnitsPerHour} · 达产`
-    : `理论产能 ${result.theoreticalThroughputPerHour.toFixed(1)} 件/时 < 目标 ${reqInfo.targetUnitsPerHour} · 未达产（瓶颈 ${bn?.name ?? result.bottleneckStationId} ${result.bottleneckTaktSeconds}s）`;
+    ? `理论产能 ${result.theoreticalThroughputPerHour.toFixed(1)} 件/时 ≥ 目标 ${result.targetUnitsPerHour} · 达产`
+    : `理论产能 ${result.theoreticalThroughputPerHour.toFixed(1)} 件/时 < 目标 ${result.targetUnitsPerHour} · 未达产（瓶颈 ${bn?.name ?? result.bottleneckStationId} ${result.bottleneckTaktSeconds}s）`;
 
   return {
     lineId: reqInfo.lineId,
-    targetUnitsPerHour: reqInfo.targetUnitsPerHour,
-    availability: reqInfo.availability,
+    targetUnitsPerHour: result.targetUnitsPerHour,
+    availability: result.availability,
     cycleTimeSeconds: result.cycleTimeSeconds,
     theoreticalThroughputPerHour: result.theoreticalThroughputPerHour,
     meetsTarget,
