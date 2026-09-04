@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
+import type { TaktConfig, TaktObservation } from '@assemble/domain';
+import { createMemoryRepo } from '@assemble/storage';
 import { buildApp } from '../src/app.js';
+import type { TaktRepos } from '../src/repositories/index.js';
+
+function makeRepos(): TaktRepos {
+  const configs = createMemoryRepo<TaktConfig>();
+  const observations = createMemoryRepo<TaktObservation>();
+  return { configs, observations, ready: Promise.resolve() };
+}
 
 function fetchForAssembly(calls: string[]): typeof fetch {
   return async (input) => {
@@ -53,6 +62,66 @@ describe('POST /takt/simulate', () => {
       availability: 1,
       cycleTimeSeconds: 6.8,
       theoreticalThroughputPerHour: 529.4117647058823,
+      configSource: 'derived',
+    });
+    await app.close();
+  });
+
+  it('从后端配置和 MES 观测返回目标、实际产量与实际平均节拍', async () => {
+    const repos = makeRepos();
+    await repos.configs.upsert({
+      id: 'config-line-a',
+      lineId: 'line-a',
+      targetUnitsPerHour: 500,
+      availability: 0.92,
+      source: 'configuration',
+      updatedAt: '2026-09-04T08:00:00.000Z',
+    });
+    await repos.observations.upsert({
+      id: 'observation-line-a',
+      lineId: 'line-a',
+      windowSeconds: 1800,
+      completedUnits: 210,
+      actualTaktSeconds: 8.5,
+      source: 'mes',
+      observedAt: '2026-09-04T08:30:00.000Z',
+    });
+    const app = buildApp({
+      assemblyBaseUrl: 'http://assembly.test',
+      fetchImpl: fetchForAssembly([]),
+      repos,
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/takt/simulate',
+      payload: { lineId: 'line-a', availability: 0.1, targetUnitsPerHour: 1 },
+    });
+    const body = response.json<{
+      data: {
+        targetUnitsPerHour: number;
+        availability: number;
+        configSource: string;
+        actual: {
+          completedUnits: number;
+          actualTaktSeconds: number;
+          actualThroughputPerHour: number;
+          source: string;
+        };
+      };
+    }>();
+
+    expect(response.statusCode).toBe(200);
+    expect(body.data).toMatchObject({
+      targetUnitsPerHour: 500,
+      availability: 0.92,
+      configSource: 'configuration',
+      actual: {
+        completedUnits: 210,
+        actualTaktSeconds: 8.5,
+        actualThroughputPerHour: 420,
+        source: 'mes',
+      },
     });
     await app.close();
   });

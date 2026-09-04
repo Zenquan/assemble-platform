@@ -1,5 +1,6 @@
 import { err, ok } from '@assemble/http';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { createTaktRepos, type TaktRepos } from './repositories/index.js';
 import { computeTakt } from './taktCore.js';
 
 interface Envelope<T> {
@@ -16,6 +17,7 @@ interface AssemblyLine {
 export interface TaktAppDeps {
   assemblyBaseUrl?: string;
   fetchImpl?: typeof fetch;
+  repos?: TaktRepos;
 }
 
 async function fetchAssemblyLine(
@@ -38,6 +40,7 @@ export function buildApp(deps: TaktAppDeps = {}): FastifyInstance {
   const app = Fastify({ logger: true });
   const assemblyBaseUrl = deps.assemblyBaseUrl ?? process.env['ASSEMBLY_SVC_URL'] ?? 'http://127.0.0.1:7101';
   const fetchImpl = deps.fetchImpl ?? fetch;
+  const repos = deps.repos ?? createTaktRepos();
 
   app.get('/healthz', async () => ({
     status: 'ok',
@@ -45,12 +48,26 @@ export function buildApp(deps: TaktAppDeps = {}): FastifyInstance {
     time: new Date().toISOString(),
   }));
 
-  app.post<{ Body: { lineId?: string; availability?: number } }>('/takt/simulate', async (req, reply) => {
+  app.post<{
+    Body: { lineId?: string; targetUnitsPerHour?: number; availability?: number };
+  }>('/takt/simulate', async (req, reply) => {
     const lineId = req.body?.lineId;
     if (!lineId) return reply.status(400).send(err('VALIDATION_FAILED', '缺少 lineId'));
     try {
       const line = await fetchAssemblyLine(lineId, assemblyBaseUrl, fetchImpl);
-      return ok(computeTakt({ lineId, stations: line.stations, availability: req.body?.availability ?? 1 }));
+      await repos.ready;
+      const config = (await repos.configs.list()).find((item) => item.lineId === lineId);
+      const observations = (await repos.observations.list()).filter(
+        (observation) => observation.lineId === lineId,
+      );
+      return ok(computeTakt({
+        lineId,
+        stations: line.stations,
+        targetUnitsPerHour: config?.targetUnitsPerHour ?? req.body?.targetUnitsPerHour,
+        availability: config?.availability ?? req.body?.availability,
+        configSource: config?.source,
+        observations,
+      }));
     } catch (error) {
       const message = error instanceof Error ? error.message : '无法读取 assembly-svc 产线';
       return reply.status(502).send(err('DEPENDENCY_UNAVAILABLE', message));

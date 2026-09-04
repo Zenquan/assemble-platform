@@ -33,6 +33,38 @@ fatal: Unable to create '.git/index.lock': Operation not permitted
 
 ---
 
+## [ERR-20260904-040] takt_config_lookup_key
+
+**Logged**: 2026-09-04T17:07:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: backend
+
+### Summary
+节拍配置仓储首次按 `id` 查询，无法命中使用独立配置主键的 `lineId`。
+
+### Error
+```text
+测试期望 configuration/500/0.92，服务实际返回 derived/1/0.1
+```
+
+### Context
+- `POST /takt/simulate` 集成测试注入配置 `id=config-line-a`、`lineId=line-a`。
+- `Repository<T>` 仅提供主键 `get(id)`，业务路由需要按 `lineId` 定位配置。
+
+### Suggested Fix
+使用 `list().find(item => item.lineId === lineId)`，后续接真库时为 `lineId` 增加索引查询。
+
+### Resolution
+路由改为按 `lineId` 查询仓储列表，并补回归测试。
+
+### Metadata
+- Reproducible: yes
+- Related Files: services/takt-svc/src/app.ts, services/takt-svc/test/app.test.ts
+- Tags: repository, lookup, takt
+
+---
+
 ## [ERR-20260904-038] dev_script_bind_eperm
 
 **Logged**: 2026-09-04T16:20:30+08:00

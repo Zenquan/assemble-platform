@@ -1,10 +1,17 @@
-import type { TaktBottleneckResult, Station } from '@assemble/domain';
+import type {
+  Station,
+  TaktBottleneckResult,
+  TaktDataSource,
+  TaktObservation,
+} from '@assemble/domain';
 
 export interface TaktSimRequest {
   lineId: string;
   stations: ReadonlyArray<Pick<Station, 'id' | 'taktSeconds'>>;
   targetUnitsPerHour?: number;
-  availability: number;
+  availability?: number;
+  configSource?: TaktDataSource;
+  observations?: ReadonlyArray<TaktObservation>;
 }
 
 /**
@@ -35,7 +42,8 @@ export function computeTakt(req: TaktSimRequest): TaktBottleneckResult {
   const cycleTimeSeconds = bottleneckTakt;
   const theoreticalThroughputPerHour = effSecondsPerHour / cycleTimeSeconds;
 
-  return {
+  const outputObservation = req.observations?.at(-1);
+  const result: TaktBottleneckResult = {
     lineId: req.lineId,
     targetUnitsPerHour,
     availability,
@@ -45,5 +53,18 @@ export function computeTakt(req: TaktSimRequest): TaktBottleneckResult {
     bottleneckStationId: bottleneckId,
     bottleneckTaktSeconds: bottleneckTakt,
     stationLoads,
+    configSource: req.configSource ?? 'derived',
   };
+  if (outputObservation) {
+    result.actual = {
+      windowSeconds: outputObservation.windowSeconds,
+      completedUnits: outputObservation.completedUnits,
+      actualTaktSeconds: outputObservation.actualTaktSeconds,
+      actualThroughputPerHour:
+        (outputObservation.completedUnits / outputObservation.windowSeconds) * 3600,
+      source: outputObservation.source,
+      observedAt: outputObservation.observedAt,
+    };
+  }
+  return result;
 }
