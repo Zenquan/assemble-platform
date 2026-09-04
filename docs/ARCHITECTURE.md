@@ -140,6 +140,7 @@ AssemblyBom(parts + steps.stationId)
 
 7. BOM 中可包含 `isMovable=false` 的固定设施（如设备间转运输送段）；这类零件由 `assembly-svc` 按相邻设备边界动态生成，不创建装配步骤，但必须走同一条 model-svc GLB 链路。
 8. 入口离线预检只接收 `lineId`；`interference-svc` 通过服务间 HTTP 从 `assembly-svc` 读取产线与 BOM，零件数不得由前端估算或由 `lineKind` 合成。
+9. 产线紧凑排布由 `Station.footprintLengthMeters`、`ProductionLine.transferAssetId` 和 `transferGapMeters` 配置驱动；BOM 算法不得按 `line.kind` 分支猜设备尺寸或转运段。
 
 ## 6. 工程约定与目录规约
 

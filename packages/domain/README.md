@@ -17,7 +17,7 @@
 
 ## 关键聚合关系
 
-- `ProductionLine` 1—n `Station`（工位 = 节拍单元）
+- `ProductionLine` 1—n `Station`（工位 = 节拍单元；设备长度与转运策略由产线数据配置）
 - `AssemblyBom` = `AssemblyPart[]` + `Constraint[]` + `AssemblyStep[]`
 - `Constraint.type` ∈ `coincident | coplanar | concentric | distance`
 
