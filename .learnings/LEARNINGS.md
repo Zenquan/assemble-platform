@@ -42,6 +42,20 @@ Corrections, insights, and knowledge gaps captured during development.
 - **Resolution**: 已由 `bc9acf3`、`f57fab3` 固化干涉与节拍两条真实后端链路。
 
 
+## LRN-20260904-005
+
+- **Category**: correction
+- **Status**: resolved
+- **Context**: 用户检查 `transfer-conveyor.glb` 后指出模型只有滚筒和机架，页面无法辨认出传送带带面。
+- **Insight**: 传送带资产不能只用深色薄片表达食品带；从端视角和无 IBL 渲染环境看，带面必须使用非金属食品级颜色，并与滚筒顶部形成连续高度关系。
+- **Action**: 资产源增加可见的食品级青蓝带面、回程带，并将侧护栏调整到带面边缘；重新生成 GLB 后量测包络并做浏览器视觉确认。
+- **Metadata**:
+  - Source: user_feedback
+  - Related Files: scripts/gltf-gen/gen_device.py, services/model-svc/assets/glb/transfer-conveyor.glb
+  - Tags: glb, conveyor, material, web3d
+  - Resolution: 已由 `56c976a` 修复带面材质与回程带，并由 `7988bd0` 增加模型版本缓存隔离。
+
+
 ## [LRN-20260902-001] best_practice
 
 **Logged**: 2026-09-02T22:00:00+08:00

@@ -37,6 +37,36 @@ gpu::MTLBackend::metal_is_supported
 
 ---
 
+## [ERR-20260904-037] blender_headless_metal_crash_retry
+
+**Logged**: 2026-09-04T12:42:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+重新导出带面版本时，Blender 4.4 再次在 Metal 后端初始化阶段原生崩溃。
+
+### Error
+```text
+Segmentation fault: 11
+gpu::MTLBackend::metal_is_supported
+```
+
+### Context
+旧的 `transfer-conveyor.glb` 未被覆盖，生成脚本尚未开始执行。
+
+### Suggested Fix
+使用 `--factory-startup` 或可用的本机 Blender 图形后端启动参数后重试。
+
+### Metadata
+- Reproducible: intermittent
+- Related Files: scripts/gltf-gen/gen_device.py
+- Tags: blender, gltf, headless, metal
+- Resolution: 重试后 Blender 成功导出带面版本 `transfer-conveyor.glb`，并通过 GLB 包络量测。
+
+---
+
 ## [ERR-20260904-036] gltf_generator_out_flag
 
 **Logged**: 2026-09-04T12:14:30+08:00

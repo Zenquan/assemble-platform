@@ -21,6 +21,7 @@
 - 设备运行态动画由 GLB 节点声明驱动，支持输送、旋转、振动、开合、推杆等动作，并自动随工作台启动。
 - 净菜线工位改按 GLB 实测长度紧凑排布，设备间仅保留卫生转运间隙。
 - 净菜线设备间由 assembly-svc 按相邻设备边界动态插入固定 `transfer-conveyor`，通过 model-svc 加载真实 GLB，避免设备之间出现裸露空隙。
+- `transfer-conveyor.glb` 增加可见食品级带面与回程带，侧护栏抬升至滚筒带面高度；前端 GLB 地址按 `modelVersion` 缓存隔离。
 - 节拍面板的目标产能、开动率和负荷改为展示 takt-svc 基于 assembly-svc 工位计算的结果，移除前端演示注入。
 
 ### Removed
