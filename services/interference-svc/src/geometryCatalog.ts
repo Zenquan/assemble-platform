@@ -2,9 +2,9 @@ import type { OBB } from '@assemble/domain';
 import { obbFromCenterHalfExtents } from '@assemble/clearance-core';
 
 /**
- * 演示用几何目录：为给定产线类型合成一组零件的 OBB（世界系）。
+ * 当前离线算法夹具：为 BOM 零件数量生成确定性 OBB（世界系）。
  * 真实系统中 OBB 由模型管线的装配约束表/实例化结果生成后入库，
- * 这里以确定性伪随机产出，用于验证「服务端离线批量干涉预检」整条链路。
+ * 真实模型包络接入前，保留该夹具验证「服务端离线批量干涉预检」整条链路；零件数量由真实 BOM 提供。
  *
  * 布局策略与单测一致：分段密集、段间稀疏，让 BVH broad phase 体现剔除价值。
  *

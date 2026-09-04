@@ -24,17 +24,18 @@ const badge = computed(() => {
   if (h === 'disabled') return { text: '停用', tone: 'mute', cls: 'mute' };
   if (props.entry.status === 'loading') return { text: '预检中…', tone: 'amber', cls: 'amber' };
   if (props.entry.status === 'error') return { text: '预检异常', tone: 'amber', cls: 'amber' };
-  const hit = props.entry.report?.hitCount ?? 0;
+  const hit = props.entry.report?.hitCount;
+  if (props.entry.status === 'idle') return { text: '待预检', tone: 'amber', cls: 'amber' };
   if (h === 'ready' || hit === 0) return { text: '就绪 · 无干涉', tone: 'green', cls: 'green' };
-  return { text: `待检修 · ${hit} 干涉`, tone: 'amber', cls: 'amber' };
+  return { text: `待检修 · ${hit ?? '—'} 干涉`, tone: 'amber', cls: 'amber' };
 });
 
 const report = computed<InterferenceReport | null>(() =>
   props.entry.status === 'ok' ? props.entry.report : null,
 );
-/** 零部件数：预检报告优先，否则按工位估算占位 */
-const partCount = computed(() => report.value?.totalPartCount ?? props.entry.line.stations.length * 60);
-const interference = computed(() => report.value?.hitCount ?? 0);
+/** 零部件数只展示后端预检报告，未返回时保持加载态。 */
+const partCount = computed(() => report.value?.totalPartCount ?? null);
+const interference = computed(() => report.value?.hitCount ?? null);
 const elapsedMs = computed(() => report.value?.elapsedMs ?? null);
 /** 节拍 = 工位最大理论节拍（作为产线标准节拍展示，源自 Station.taktSeconds） */
 const maxTakt = computed(() =>
@@ -42,12 +43,6 @@ const maxTakt = computed(() =>
 );
 /** 就绪/可进入 */
 const canEnter = computed(() => props.entry.health === 'ready');
-/** 进度条宽度（示意装载度，随预检结果归一） */
-const progressWidth = computed(() => {
-  const stations = props.entry.line.stations.length;
-  const base = Math.min(100, 40 + stations * 12);
-  return `${Math.round(base)}%`;
-});
 
 function onPrimary(): void {
   if (props.entry.health === 'disabled') return;
@@ -75,13 +70,13 @@ function onPrimary(): void {
       <div class="kpis">
         <div class="kpi">
           <div class="lb"><i class="ic"></i>零部件</div>
-          <div class="num mono">{{ partCount }}</div>
+          <div class="num mono">{{ partCount ?? '—' }}</div>
         </div>
-        <div class="kpi" :class="interference > 0 ? 'danger' : 'good'">
+        <div class="kpi" :class="interference !== null && interference > 0 ? 'danger' : 'good'">
           <div class="lb"><i class="ic"></i>干涉预检</div>
           <div class="num mono">
             <template v-if="entry.status === 'loading'">…</template>
-            <template v-else>{{ interference }}</template>
+            <template v-else>{{ interference ?? '—' }}</template>
           </div>
         </div>
         <div class="kpi">
@@ -92,7 +87,6 @@ function onPrimary(): void {
           </div>
         </div>
       </div>
-      <div class="track"><i class="fill" :style="{ width: progressWidth }"></i></div>
     </div>
 
     <footer class="card-foot">

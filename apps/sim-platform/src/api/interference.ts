@@ -7,13 +7,9 @@
 import type { InterferenceReport } from '@assemble/domain';
 import { http } from './http.js';
 
-/** 对某产线跑一次离线整线预检；partCount 缺省取后端默认（200） */
-export async function runOfflinePrecheck(
-  lineKind: string,
-  partCount?: number,
-): Promise<InterferenceReport> {
+/** 对某产线跑一次离线整线预检；干涉服务内部读取真实 assembly-svc BOM。 */
+export async function runOfflinePrecheck(lineId: string): Promise<InterferenceReport> {
   return http.post<InterferenceReport>('/interference/offline', {
-    lineKind,
-    partCount,
+    lineId,
   });
 }

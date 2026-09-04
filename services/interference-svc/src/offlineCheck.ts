@@ -13,6 +13,7 @@ export interface OfflineCheckResult {
  * 对应方案 3.3「服务端离线批量」（数千零件组合校验不压垮浏览器）。
  */
 export function runOfflineCheck(params: {
+  lineId: string;
   lineKind: string;
   partCount: number;
 }): OfflineCheckResult {
@@ -22,7 +23,7 @@ export function runOfflineCheck(params: {
   const res = detector.runFull();
   const report: InterferenceReport = {
     reportId: `off-${Date.now()}`,
-    lineId: params.lineKind,
+    lineId: params.lineId,
     source: 'offline',
     totalPartCount: res.totalPartCount,
     pairsChecked: res.pairsChecked,

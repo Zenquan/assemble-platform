@@ -151,6 +151,7 @@ const CORE = new Set(['assembly-svc', 'interference-svc', 'model-svc', 'takt-svc
 const SERVICES = process.argv.includes('--all')
   ? ALL_SERVICES
   : ALL_SERVICES.filter((s) => CORE.has(s.name));
+const serviceByName = new Map(ALL_SERVICES.map((service) => [service.name, service]));
 const VITE_PORT = configuredPort('VITE_DEV_PORT', 5173);
 const VITE = { name: 'vite', dir: join(ROOT, 'apps/sim-platform'), port: VITE_PORT, health: `${origin(VITE_PORT)}/` };
 const MODE = process.argv.includes('--all') ? '全量(5 服务)' : '精简(assembly+interference+model+takt)';
@@ -168,7 +169,16 @@ async function main() {
     if (await isPortOpen(DEV_HOST, svc.port)) {
       tag(svc.name, `端口 ${svc.port} 已被占用，跳过启动（直接复用）`);
     } else {
-      up(svc.name, NODE, ['dist/server.js'], svc.dir, { HOST: DEV_HOST, PORT: String(svc.port) });
+      up(svc.name, NODE, ['dist/server.js'], svc.dir, {
+        HOST: DEV_HOST,
+        PORT: String(svc.port),
+        ...(svc.name === 'interference-svc'
+          ? { ASSEMBLY_SVC_URL: origin(serviceByName.get('assembly-svc').port) }
+          : {}),
+        ...(svc.name === 'takt-svc'
+          ? { ASSEMBLY_SVC_URL: origin(serviceByName.get('assembly-svc').port) }
+          : {}),
+      });
       tag(svc.name, `启动中… (node dist/server.js @${svc.port})`);
     }
     svcUp.push(svc);
@@ -182,7 +192,6 @@ async function main() {
   } else if (await isPortOpen(DEV_HOST, VITE.port)) {
     tag(VITE.name, `端口 ${VITE.port} 已被占用，跳过启动（直接复用）`);
   } else {
-    const serviceByName = new Map(ALL_SERVICES.map((service) => [service.name, service]));
     up(VITE.name, NODE, [viteBin], VITE.dir, {
       VITE_DEV_HOST: DEV_HOST,
       VITE_DEV_PORT: String(VITE.port),
