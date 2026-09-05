@@ -11,6 +11,10 @@ export interface ProductionLine {
   kind: ProductionLineKind;
   /** 可选整线基座资产；设备自带输送段的工艺线可省略 */
   baseAssetId?: ModelAssetId;
+  /** 相邻设备之间使用的固定转运资产；省略表示不自动生成转运段。 */
+  transferAssetId?: ModelAssetId;
+  /** 相邻设备之间的工艺转运间隙（米）。 */
+  transferGapMeters?: number;
   /** 该产线下的工位（节拍仿真的最小单元） */
   stations: Station[];
   /** 是否启用；停用线不可在平台打开仿真 */
@@ -37,6 +41,8 @@ export interface Station {
    * assembly-svc 依此生成该工位的 BOM 零件，不再由前端按 seq 猜测。
    */
   deviceKind?: ModelAssetId;
+  /** 设备沿物料流向的实际占用长度（米），用于平台化紧凑排布。 */
+  footprintLengthMeters?: number;
   /**
    * 工位物理锚点位置（米，Y up）。后端 BOM 把设备 GLB 落在此坐标上。
    * 缺省时由 seq 按默认工位间距推出。

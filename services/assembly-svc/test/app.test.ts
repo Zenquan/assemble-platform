@@ -4,7 +4,7 @@ import type { AssemblyBom, ModelAssetId, ProductionLine } from '@assemble/domain
 import { createMemoryRepo } from '@assemble/storage';
 
 import { buildApp } from '../src/app.js';
-import { buildSeedLines } from '../src/repositories/index.js';
+import { buildBomForLine, buildSeedLines } from '../src/repositories/index.js';
 
 function line(
   id: string,
@@ -44,6 +44,7 @@ describe('GET /lines/:id/bom', () => {
   it('净菜 seed 使用七个行业设备且不附加通用整线基座', () => {
     const freshcut = buildSeedLines().find((item) => item.id === 'line-freshcut-01');
     expect(freshcut?.baseAssetId).toBeUndefined();
+    expect(freshcut?.transferAssetId).toBe('transfer-conveyor');
     expect(freshcut?.stations.map((station) => station.deviceKind)).toEqual([
       'infeed-elevator',
       'bubble-washer',
@@ -53,6 +54,44 @@ describe('GET /lines/:id/bom', () => {
       'weigh-packer',
       'metal-detector',
     ]);
+  });
+
+  it('两条扩展净菜线复用真实设备资产但工艺组合不同', () => {
+    const lines = buildSeedLines();
+    const leaf = lines.find((item) => item.id === 'line-freshcut-02');
+    const root = lines.find((item) => item.id === 'line-freshcut-03');
+
+    expect(leaf?.stations.map((station) => station.deviceKind)).toEqual([
+      'infeed-elevator', 'bubble-washer', 'inspection-conveyor',
+      'vibratory-dewaterer', 'weigh-packer', 'metal-detector',
+    ]);
+    expect(root?.stations.map((station) => station.deviceKind)).toEqual([
+      'infeed-elevator', 'bubble-washer', 'vegetable-cutter',
+      'inspection-conveyor', 'weigh-packer', 'metal-detector',
+    ]);
+    expect(buildBomForLine(leaf!).parts.filter((part) => part.assetId === 'transfer-conveyor')).toHaveLength(5);
+    expect(buildBomForLine(root!).parts.filter((part) => part.assetId === 'transfer-conveyor')).toHaveLength(5);
+  });
+
+  it('净菜 BOM 按 GLB 外包络排布，并用固定转运段填满设备间隙', () => {
+    const freshcut = buildSeedLines().find((item) => item.id === 'line-freshcut-01');
+    expect(freshcut).toBeDefined();
+    const bom = buildBomForLine(freshcut!);
+    const devices = bom.parts.filter((part) => part.isMovable);
+    const transfers = bom.parts.filter((part) => part.assetId === 'transfer-conveyor');
+    const expectedDevicePositions = [-1.745, 3.05, 7.965, 11.875, 15.43, 18.815, 21.85];
+    const expectedTransferPositions = [0.4, 5.7, 10.23, 13.52, 17.34, 20.29];
+
+    expect(devices).toHaveLength(7);
+    expect(transfers).toHaveLength(6);
+    devices.forEach((part, index) =>
+      expect(part.localPosition[0]).toBeCloseTo(expectedDevicePositions[index] ?? 0, 3),
+    );
+    transfers.forEach((part, index) =>
+      expect(part.localPosition[0]).toBeCloseTo(expectedTransferPositions[index] ?? 0, 3),
+    );
+    expect(transfers.every((part) => part.isMovable === false)).toBe(true);
+    expect(bom.steps).toHaveLength(7);
   });
 
   it('按所选流水线工位返回不同 BOM、GLB 资产与步骤归属', async () => {
@@ -95,6 +134,29 @@ describe('GET /lines/:id/bom', () => {
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ ok: false, code: 'NOT_FOUND' });
 
+    await app.close();
+  });
+
+  it('拒绝无效的工位节拍和未注册设备资产', async () => {
+    const app = await appWith();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/lines',
+      payload: {
+        id: 'invalid-line',
+        name: '无效产线',
+        kind: 'fresh-cut',
+        enabled: true,
+        modelVersion: 'test',
+        stations: [{
+          id: 'invalid-station', lineId: 'invalid-line', seq: 1, name: '工位',
+          taktSeconds: 0, deviceKind: 'unknown-device',
+        }],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ ok: false, code: 'VALIDATION_FAILED' });
     await app.close();
   });
 });

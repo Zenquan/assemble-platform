@@ -14,6 +14,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/WorkbenchView.vue'),
     meta: { title: '装配工作台' },
   },
+  {
+    path: '/config',
+    name: 'line-config',
+    component: () => import('@/views/LineConfigView.vue'),
+    meta: { title: '产线配置' },
+  },
 ];
 
 export const router = createRouter({

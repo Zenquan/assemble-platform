@@ -13,12 +13,11 @@ import { fetchTaktSimulation } from '@/api/takt';
 import type { ProductionLine } from '@assemble/domain';
 import { createSimEngine, type SimEngine } from '@/engine';
 import { deriveBomTreeState, stationsOf, type BomTreeModel } from '@/engine/bomtree';
-import { deriveTaktPanel, recommendTargetPerHour, type TaktPanelModel } from '@/engine/taktpanel';
+import { deriveTaktPanel, type TaktPanelModel } from '@/engine/taktpanel';
 import BomTreePanel from '@/components/BomTreePanel.vue';
 import TaktPanel from '@/components/TaktPanel.vue';
 
 const UI_STATE_POLL_INTERVAL_MS = 120;
-const TAKT_DEMO_AVAILABILITY = 0.85;
 
 const route = useRoute();
 const lineId = ref(String(route.params.lineId ?? ''));
@@ -35,6 +34,9 @@ const animProgress = ref(0); // 动画进度 seq（S2 播放态）
 const isAnimPlaying = ref(false);
 const animTotal = ref(0);
 const runtimeNodeCount = ref(0);
+const runtimeMaterialCount = ref(0);
+const runtimeCompletedUnits = ref(0);
+const runtimeActiveStationCount = ref(0);
 const isRuntimePlaying = ref(false);
 // S3 · 手动拖拽实时状态（拖拽中零件 / 干涉拦截 / 可落位提示）
 const dragText = ref('');
@@ -71,6 +73,9 @@ async function loadWorkbench(nextLineId: string) {
   animTotal.value = 0;
   isAnimPlaying.value = false;
   runtimeNodeCount.value = 0;
+  runtimeMaterialCount.value = 0;
+  runtimeCompletedUnits.value = 0;
+  runtimeActiveStationCount.value = 0;
   isRuntimePlaying.value = false;
   let eng: SimEngine | null = null;
   try {
@@ -211,6 +216,9 @@ function refreshRuntimeState() {
   const eng = engine.value;
   if (!eng) return;
   runtimeNodeCount.value = eng.runtime.boundNodeCount;
+  runtimeMaterialCount.value = eng.runtime.materialItemCount;
+  runtimeCompletedUnits.value = eng.runtime.materialCompletedUnits;
+  runtimeActiveStationCount.value = eng.runtime.activeStationIds.length;
   isRuntimePlaying.value = eng.runtime.playing;
 }
 
@@ -278,6 +286,11 @@ function selectPart(partId: string) {
   refreshBomTree();
 }
 
+/** 恢复整条真实 GLB 产线的初始化最佳轴测视角。 */
+function frameAssembly() {
+  engine.value?.scene.frameToAssembly();
+}
+
 /** S4 · 拉取节拍仿真（一次）：目标产能取瓶颈工位小时速率。 */
 async function loadTakt(version: number, ln: ProductionLine) {
   if (ln.stations.length === 0) {
@@ -287,16 +300,12 @@ async function loadTakt(version: number, ln: ProductionLine) {
   }
   taktState.value = 'loading';
   try {
-    const target = recommendTargetPerHour(ln.stations);
     const res = await fetchTaktSimulation({
       lineId: ln.id,
-      stations: ln.stations,
-      targetUnitsPerHour: target,
-      availability: TAKT_DEMO_AVAILABILITY,
     });
     if (version !== loadVersion) return;
     taktModel.value = deriveTaktPanel(
-      { lineId: ln.id, targetUnitsPerHour: target, availability: TAKT_DEMO_AVAILABILITY },
+      { lineId: ln.id },
       res,
       ln.stations,
     );
@@ -330,13 +339,18 @@ async function loadTakt(version: number, ln: ProductionLine) {
           <template v-else>
             <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（BOM 树联动 · 当前步骤高亮）</div>
             <div class="hud-bottom">{{ stepText }}</div>
+            <button class="view-reset-btn" type="button" title="定位到初始化最佳视角" aria-label="定位到初始化最佳视角" @click.stop="frameAssembly">
+              <span aria-hidden="true">⌖</span> 定位初始视角
+            </button>
             <div class="runtimebar">
-              <span class="runtime-label">设备运行态</span>
+              <span class="runtime-label">设备运行态 · 物料 {{ runtimeMaterialCount }} 件</span>
               <span class="runtime-count">{{ runtimeNodeCount }} 个运动节点</span>
+              <span class="runtime-count">活跃工位 {{ runtimeActiveStationCount }}</span>
+              <span class="runtime-count">完成 {{ runtimeCompletedUnits }} 件</span>
               <span class="runtime-status" :class="{ live: isRuntimePlaying }"><i class="dot"></i>{{ isRuntimePlaying ? '运行中' : '已暂停' }}</span>
-              <button class="runtime-btn" :disabled="isRuntimePlaying || runtimeNodeCount === 0" @click="startRuntime">▶ 启动</button>
+              <button class="runtime-btn" :disabled="isRuntimePlaying || (runtimeNodeCount === 0 && runtimeMaterialCount === 0)" @click="startRuntime">▶ 启动</button>
               <button class="runtime-btn" :disabled="!isRuntimePlaying" @click="pauseRuntime">⏸ 暂停</button>
-              <button class="runtime-btn" :disabled="runtimeNodeCount === 0" @click="resetRuntime">↺ 复位</button>
+              <button class="runtime-btn" :disabled="runtimeNodeCount === 0 && runtimeMaterialCount === 0" @click="resetRuntime">↺ 复位</button>
             </div>
             <div class="s1bar">
               <span class="s1count">已贴合 <b>{{ assembledCount }}</b> / {{ totalParts }}</span>
@@ -363,13 +377,13 @@ async function loadTakt(version: number, ln: ProductionLine) {
 .wb-page {
   min-height: 100vh;
   background: var(--app-bg);
-  padding: 20px;
+  padding: 16px;
   display: flex;
   justify-content: center;
 }
 .wb-panel {
   width: 100%;
-  max-width: 1180px;
+  max-width: 1680px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--bg);
@@ -418,8 +432,8 @@ async function loadTakt(version: number, ln: ProductionLine) {
 }
 .wb-body {
   display: grid;
-  grid-template-columns: 200px 1fr 240px;
-  min-height: 560px;
+  grid-template-columns: minmax(176px, 18vw) minmax(0, 1fr) minmax(208px, 21vw);
+  min-height: min(720px, calc(100vh - 112px));
 }
 .left,
 .right {
@@ -446,7 +460,7 @@ async function loadTakt(version: number, ln: ProductionLine) {
 .viewport {
   position: relative;
   background: #0a1420;
-  min-height: 560px;
+  min-height: min(720px, calc(100vh - 112px));
 }
 .viewport canvas {
   width: 100% !important;
@@ -472,6 +486,30 @@ async function loadTakt(version: number, ln: ProductionLine) {
   background: rgba(10, 20, 32, 0.55);
   border: 1px solid rgba(34, 211, 238, 0.25);
   border-radius: 6px;
+}
+.view-reset-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 4;
+  pointer-events: auto;
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid rgba(94, 234, 212, 0.35);
+  background: rgba(10, 20, 32, 0.82);
+  color: #99f6e4;
+  font-size: 11px;
+  padding: 5px 9px;
+  border-radius: 6px;
+}
+.view-reset-btn span {
+  margin-right: 3px;
+  font-size: 14px;
+  line-height: 0;
+}
+.view-reset-btn:hover {
+  border-color: #5eead4;
+  background: rgba(20, 45, 55, 0.9);
 }
 .hud-bottom {
   bottom: 12px;
@@ -628,9 +666,43 @@ async function loadTakt(version: number, ln: ProductionLine) {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 560px;
+  min-height: min(720px, calc(100vh - 112px));
 }
 .vhint.err {
   color: var(--red);
+}
+
+@media (max-width: 900px) {
+  .wb-page {
+    padding: 10px;
+  }
+  .wb-body {
+    grid-template-columns: minmax(160px, 1fr) minmax(0, 2fr);
+    min-height: 620px;
+  }
+  .right {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--line-3);
+  }
+  .viewport,
+  .vhint {
+    min-height: 620px;
+  }
+}
+
+@media (max-width: 620px) {
+  .wb-body {
+    display: flex;
+    flex-direction: column;
+  }
+  .left,
+  .right {
+    max-height: 260px;
+  }
+  .viewport,
+  .vhint {
+    min-height: 520px;
+  }
 }
 </style>

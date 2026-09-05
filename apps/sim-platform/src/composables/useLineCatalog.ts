@@ -82,10 +82,8 @@ export function useLineCatalog() {
 
   async function precheckOne(entry: LineCatalogEntry): Promise<void> {
     entry.status = 'loading';
-    // 预检件数由工位数推导，使不同产线的展示可区分（真实件数应来自 BOM/模型层）
-    const partCount = Math.max(40, entry.line.stations.length * 60);
     try {
-      const report = await runOfflinePrecheck(entry.line.kind, partCount);
+      const report = await runOfflinePrecheck(entry.line.id);
       entry.report = report;
       entry.status = 'ok';
       entry.health = deriveHealth(entry.line.enabled, 'ok', report.hitCount);

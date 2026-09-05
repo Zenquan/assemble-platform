@@ -1,10 +1,17 @@
-import type { TaktBottleneckResult, Station } from '@assemble/domain';
+import type {
+  Station,
+  TaktBottleneckResult,
+  TaktDataSource,
+  TaktObservation,
+} from '@assemble/domain';
 
 export interface TaktSimRequest {
   lineId: string;
-  stations: Array<Pick<Station, 'id' | 'taktSeconds'>>;
-  targetUnitsPerHour: number;
-  availability: number;
+  stations: ReadonlyArray<Pick<Station, 'id' | 'taktSeconds'>>;
+  targetUnitsPerHour?: number;
+  availability?: number;
+  configSource?: TaktDataSource;
+  observations?: ReadonlyArray<TaktObservation>;
 }
 
 /**
@@ -12,7 +19,10 @@ export interface TaktSimRequest {
  * 负荷 = (3600/目标每小时)/理论Takt 的实际占用 —— >1 表示该工位成为瓶颈堵点。
  */
 export function computeTakt(req: TaktSimRequest): TaktBottleneckResult {
+  if (req.stations.length === 0) throw new Error('产线没有可计算节拍的工位');
   const availability = Math.max(0.01, Math.min(1, req.availability ?? 1));
+  const bottleneck = Math.max(...req.stations.map((station) => station.taktSeconds));
+  const targetUnitsPerHour = req.targetUnitsPerHour ?? Math.max(1, Math.floor(3600 / Math.max(bottleneck, 0.001)));
   // 有效可用秒/小时
   const effSecondsPerHour = 3600 * availability;
 
@@ -26,20 +36,35 @@ export function computeTakt(req: TaktSimRequest): TaktBottleneckResult {
       bottleneckId = st.id;
     }
     // 该工位每小时能产 3600/t 件；相对有效产能的利用率负荷
-    const load = t / (effSecondsPerHour / req.targetUnitsPerHour);
+    const load = t / (effSecondsPerHour / targetUnitsPerHour);
     stationLoads.push({ stationId: st.id, load });
   }
   const cycleTimeSeconds = bottleneckTakt;
   const theoreticalThroughputPerHour = effSecondsPerHour / cycleTimeSeconds;
 
-  return {
+  const outputObservation = req.observations?.at(-1);
+  const result: TaktBottleneckResult = {
     lineId: req.lineId,
-    targetUnitsPerHour: req.targetUnitsPerHour,
+    targetUnitsPerHour,
+    availability,
     cycleTimeSeconds,
     theoreticalThroughputPerHour,
-    meetsTarget: theoreticalThroughputPerHour >= req.targetUnitsPerHour,
+    meetsTarget: theoreticalThroughputPerHour >= targetUnitsPerHour,
     bottleneckStationId: bottleneckId,
     bottleneckTaktSeconds: bottleneckTakt,
     stationLoads,
+    configSource: req.configSource ?? 'derived',
   };
+  if (outputObservation) {
+    result.actual = {
+      windowSeconds: outputObservation.windowSeconds,
+      completedUnits: outputObservation.completedUnits,
+      actualTaktSeconds: outputObservation.actualTaktSeconds,
+      actualThroughputPerHour:
+        (outputObservation.completedUnits / outputObservation.windowSeconds) * 3600,
+      source: outputObservation.source,
+      observedAt: outputObservation.observedAt,
+    };
+  }
+  return result;
 }

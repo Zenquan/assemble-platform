@@ -10,6 +10,7 @@ gen_device.py — 用 Blender 后台(无头)程序化生成工业工位设备 gl
   feeder          工位1 振动盘供料器: 圆台螺旋盘 + 滑槽 + 控制盒
   gantry-arm      工位3 龙门机械臂: 立柱+横梁+滑块+垂直轴+夹爪吸盘
   conveyor        贯穿三工位输送带: 长机身 + 滚筒 + 4 组支腿 + 头尾控制盒
+  transfer-conveyor 净菜设备间卫生转运输送段: 短机身 + 食品带 + 支撑脚
   box-pack        工位3末端装箱定位台: 底座+挡框+成品箱+HMI 小屏
 
 用法:
@@ -37,6 +38,7 @@ PALETTE = {
     "accent_orange":dict(base=(0.95,0.36,0.05), metal=0.20, rough=0.45),
     "led_ring":     dict(base=(0.7,0.72,0.78),  metal=0.0,  rough=0.30, emissive=(0.9,0.95,1.0)),
     "aluminum":     dict(base=(0.55,0.57,0.60), metal=0.85, rough=0.25),
+    "food_belt":    dict(base=(0.02,0.36,0.43),  metal=0.02, rough=0.64),
     "dark_rubber":  dict(base=(0.05,0.05,0.06), metal=0.0,  rough=0.95),
 }
 
@@ -300,6 +302,27 @@ def build_conveyor() -> list[bpy.types.Object]:
     return objs
 
 
+def build_transfer_conveyor() -> list[bpy.types.Object]:
+    """净菜设备之间的短距离卫生转运输送段，长度 0.8m。"""
+    objs = []
+    length = 0.8
+    body_y0 = 0.5
+    objs.append(cube((length, 0.05, 0.24), (0, 0.28, body_y0 + 0.08), "metal_dark", "side_rail_R"))
+    objs.append(cube((length, 0.05, 0.24), (0, -0.28, body_y0 + 0.08), "metal_dark", "side_rail_L"))
+    objs.append(cube((0.06, 0.6, 0.08), (0, 0, body_y0 - 0.06), "aluminum", "cross_center"))
+    roller_offset = length / 2 - 0.18
+    for x in (-roller_offset, roller_offset):
+        objs.append(cylinder(0.18, 0.5, (x, 0, body_y0 + 0.05), "metal_mid", f"roller_{x}", axis="Y"))
+    belt_top = body_y0 + 0.22
+    objs.append(cube((length - 0.04, 0.5, 0.045), (0, 0, belt_top - 0.0225), "food_belt", "food_belt"))
+    objs.append(cube((length - 0.16, 0.44, 0.025), (0, 0, body_y0 + 0.02), "dark_rubber", "belt_return"))
+    leg_h = body_y0 - 0.09
+    for x in (-roller_offset, roller_offset):
+        for sy in (-0.32, 0.32):
+            objs.append(cube((0.06, 0.06, leg_h), (x, sy, leg_h / 2), "metal_dark", f"leg_{x}_{sy}"))
+    return objs
+
+
 def build_box_pack() -> list[bpy.types.Object]:
     """工位3末端：装箱定位台。
 
@@ -331,6 +354,7 @@ BUILDERS = {
     "feeder":       build_feeder,
     "gantry-arm":   build_gantry_arm,
     "conveyor":     build_conveyor,
+    "transfer-conveyor": build_transfer_conveyor,
     "box-pack":     build_box_pack,
 }
 
@@ -353,7 +377,14 @@ def main() -> None:
         print(__doc__)
         sys.exit(2)
     devices_arg = argv[0]
-    out = argv[1]
+    if "--out" in argv:
+        out_index = argv.index("--out")
+        if out_index + 1 >= len(argv):
+            print("[gen] --out requires a directory")
+            sys.exit(2)
+        out = argv[out_index + 1]
+    else:
+        out = argv[1]
     scale = 1.0
     if "--scale" in argv:
         scale = float(argv[argv.index("--scale") + 1])

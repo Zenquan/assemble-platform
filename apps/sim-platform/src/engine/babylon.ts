@@ -47,7 +47,7 @@ import { modelGlbUrl } from '../api/model.js';
 
 import { NoopAssembler, NoopClearance, NoopSimEngine } from './noop.js';
 import { AssemblyAnimator } from './animator.js';
-import { computeTwoStatePlacement, type PartPlacement } from './placement.js';
+import { computeTwoStatePlacement, floorCenterOffset, type PartPlacement } from './placement.js';
 import { ManualDragSession, boxObbAt, rayPlaneYIntersect, type DragGeometry } from './drag.js';
 import { fitSphereCameraRadius } from './framing.js';
 import {
@@ -56,6 +56,11 @@ import {
   type RuntimeMotionPose,
   type RuntimeMotionSpec,
 } from './runtime-motion.js';
+import {
+  MaterialFlowPlayer,
+  type MaterialFlowFrame,
+  type MaterialFlowWaypoint,
+} from './material-flow.js';
 import type {
   AssetManager,
   AssemblyController,
@@ -108,6 +113,9 @@ const CAMERA_PRESETS: Record<CameraViewId, CameraPose> = {
 const NO_IBL_MIN_ROUGHNESS = 0.7;
 const PART_FRAME_MIN_RADIUS = 8;
 const PART_FRAME_PADDING = 1.15;
+const RUNTIME_MATERIAL_MAX_ITEMS = 6;
+const RUNTIME_MATERIAL_MIN_ITEMS = 3;
+const RUNTIME_MATERIAL_CYCLE_SECONDS = 1.8;
 
 /**
  * 单一事实：一个待渲染零件的几何（含贴合基准 seat + 半轴长），供 `computeTwoStatePlacement`
@@ -129,6 +137,13 @@ interface RuntimeNodeBinding {
   baseRotation: Quaternion | null;
   baseEuler: Vector3;
   baseScale: Vector3;
+}
+
+interface AssemblyViewBaseline {
+  target: Vector3;
+  boundingRadius: number;
+  alpha: number;
+  beta: number;
 }
 
 function asRecord(value: unknown): RecordValue | null {
@@ -203,6 +218,10 @@ class BabylonScene implements SceneManager {
   private _partOrder: string[] = [];
   /** S2 · 每件 seat/scatter 纯布局（renderParts 时缓存，供 animator 构造） */
   private _placements: PartPlacement[] = [];
+  /** 最近一次真实 GLB 装配体的包围数据，供用户恢复初始化最佳视角。 */
+  private _assemblyBounds: RenderPart[] = [];
+  /** GLB 加载完成时记录的相机基准，按钮恢复它而不是重复使用当前镜头状态。 */
+  private _assemblyViewBaseline: AssemblyViewBaseline | null = null;
   /** S3c · 射线求交用单位矩阵（createPickingRay 的 world 参数） */
   private _idMatrix = Matrix.Identity();
   /** S2 · 最近一次已知的 assembled 集合快照（供飞行覆盖退出时回落 S1 seat/scatter 判定） */
@@ -211,6 +230,11 @@ class BabylonScene implements SceneManager {
   onFrame: (() => void) | null = null;
   private runtimeBindings = new Map<string, RuntimeNodeBinding>();
   private runtimePlayer = new RuntimeMotionPlayer([]);
+  private materialPlayer = new MaterialFlowPlayer([]);
+  private materialVisuals: Mesh[] = [];
+  private materialMaterial: StandardMaterial | null = null;
+  private materialStationPartIds = new Map<string, string>();
+  private _activeStationIds: readonly string[] = [];
 
   get isMounted(): boolean {
     return this.engine !== null && this.scene !== null;
@@ -314,6 +338,10 @@ class BabylonScene implements SceneManager {
 
   unmount(): void {
     this._rendering = false;
+    for (const mesh of this.materialVisuals) mesh.dispose(false, true);
+    this.materialVisuals = [];
+    this.materialMaterial?.dispose();
+    this.materialMaterial = null;
     if (this.engine) {
       this.engine.stopRenderLoop();
       this.engine.dispose();
@@ -330,6 +358,9 @@ class BabylonScene implements SceneManager {
     this.scatterPos.clear();
     this.halfSize.clear();
     this._placements = [];
+    this.materialPlayer = new MaterialFlowPlayer([]);
+    this.materialStationPartIds.clear();
+    this._activeStationIds = [];
     this.onFrame = null;
   }
 
@@ -337,25 +368,28 @@ class BabylonScene implements SceneManager {
   private _buildFloorGrid(): void {
     const scene = this.scene;
     if (!scene) return;
-    const S = 28; // 半幅（与零件布局 ~24×24 匹配，避免空旷感）
-    const step = 2.8;
+    const S = 18; // 半幅：围绕设备保留克制边界，避免平台吞没工作区
+    const step = 3.6;
     const mat = new StandardMaterial('gridline', scene);
-    mat.diffuseColor = new Color3(0.11, 0.16, 0.26);
-    mat.alpha = 0.9;
+    mat.diffuseColor = new Color3(0.065, 0.085, 0.11);
+    mat.specularColor = Color3.Black();
+    mat.alpha = 0.72;
     // 用 CreateGround 做底板，暗色
     MeshBuilder.CreateGround('floor', { width: S * 2, height: S * 2 }, scene).material = mat;
     // 网格线：在 XZ 平面按 step 铺 CreateLines
     for (let i = -S; i <= S; i += step) {
       const lineMat = new StandardMaterial(`gl${i}`, scene);
-      lineMat.diffuseColor = new Color3(0.13, 0.2, 0.32);
-      lineMat.emissiveColor = new Color3(0.06, 0.1, 0.17);
-      lineMat.alpha = 0.5;
+      lineMat.diffuseColor = new Color3(0.09, 0.12, 0.15);
+      lineMat.emissiveColor = new Color3(0.025, 0.035, 0.045);
+      lineMat.alpha = 0.22;
       const pointsA = [new Vector3(i, 0.01, -S), new Vector3(i, 0.01, S)];
       const pointsB = [new Vector3(-S, 0.01, i), new Vector3(S, 0.01, i)];
       const la = MeshBuilder.CreateLines(`glA${i}`, { points: pointsA }, scene);
       const lb = MeshBuilder.CreateLines(`glB${i}`, { points: pointsB }, scene);
       la.color = lineMat.diffuseColor;
       lb.color = lineMat.diffuseColor;
+      la.alpha = 0.22;
+      lb.alpha = 0.22;
     }
   }
 
@@ -400,7 +434,7 @@ class BabylonScene implements SceneManager {
       const [px, py, pz] = p.position;
       const alpha = Math.atan2(pz - tz, px - tx);
       const radius = Math.hypot(px - tx, py - ty, pz - tz);
-      const beta = Math.asin((py - ty) / Math.max(radius, 1e-6));
+      const beta = Math.acos((py - ty) / Math.max(radius, 1e-6));
       this.camera.alpha = alpha;
       this.camera.beta = Math.min(Math.max(beta, 0.05), Math.PI - 0.05);
       this.camera.radius = radius;
@@ -477,8 +511,17 @@ class BabylonScene implements SceneManager {
     this.halfSize.clear();
     this._partOrder = [];
     this._placements = [];
+    this._assemblyBounds = [];
+    this._assemblyViewBaseline = null;
     this.runtimeBindings.clear();
     this.runtimePlayer = new RuntimeMotionPlayer([]);
+    for (const mesh of this.materialVisuals) mesh.dispose(false, true);
+    this.materialVisuals = [];
+    this.materialMaterial?.dispose();
+    this.materialMaterial = null;
+    this.materialPlayer = new MaterialFlowPlayer([]);
+    this.materialStationPartIds.clear();
+    this._activeStationIds = [];
   }
 
   configureRuntimeAnimations(nodes: readonly TransformNode[]): void {
@@ -499,17 +542,55 @@ class BabylonScene implements SceneManager {
     this.runtimePlayer = new RuntimeMotionPlayer(specs);
   }
 
+  configureMaterialFlow(
+    waypoints: readonly MaterialFlowWaypoint[],
+    stationPartIds: ReadonlyMap<string, string>,
+  ): void {
+    this.materialStationPartIds = new Map(stationPartIds);
+    this.materialPlayer = new MaterialFlowPlayer(waypoints, {
+      itemCount: Math.min(
+        RUNTIME_MATERIAL_MAX_ITEMS,
+        Math.max(RUNTIME_MATERIAL_MIN_ITEMS, waypoints.length),
+      ),
+      cycleSeconds: Math.max(6, waypoints.length * RUNTIME_MATERIAL_CYCLE_SECONDS),
+    });
+    if (!this.scene || waypoints.length < 2) return;
+    this.materialMaterial = new StandardMaterial('material-flow', this.scene);
+    this.materialMaterial.diffuseColor = new Color3(0.22, 0.72, 0.28);
+    this.materialMaterial.emissiveColor = new Color3(0.04, 0.18, 0.05);
+    this.materialMaterial.specularColor = Color3.Black();
+    for (let index = 0; index < this.materialPlayer.itemCount; index += 1) {
+      const mesh = MeshBuilder.CreateIcoSphere(
+        `material-flow-${index + 1}`,
+        { radius: 0.16, subdivisions: 1 },
+        this.scene,
+      );
+      mesh.material = this.materialMaterial;
+      mesh.isPickable = false;
+      this.materialVisuals.push(mesh);
+    }
+    this.applyMaterialFlowFrames(this.materialPlayer.tick(this.runtimeNowMs()));
+  }
+
   startRuntimeAnimations(): boolean {
-    return this.runtimePlayer.start(this.runtimeNowMs());
+    const nowMs = this.runtimeNowMs();
+    const deviceStarted = this.runtimePlayer.start(nowMs);
+    const materialStarted = this.materialPlayer.start(nowMs);
+    return deviceStarted || materialStarted;
   }
 
   pauseRuntimeAnimations(): boolean {
-    return this.runtimePlayer.pause(this.runtimeNowMs());
+    const nowMs = this.runtimeNowMs();
+    const devicePaused = this.runtimePlayer.pause(nowMs);
+    const materialPaused = this.materialPlayer.pause(nowMs);
+    return devicePaused || materialPaused;
   }
 
   resetRuntimeAnimations(): void {
     this.runtimePlayer.reset();
+    this.materialPlayer.reset();
     for (const binding of this.runtimeBindings.values()) this.restoreRuntimeNode(binding);
+    this.applyMaterialFlowFrames(this.materialPlayer.tick(this.runtimeNowMs()));
   }
 
   tickRuntimeAnimations(): void {
@@ -517,14 +598,48 @@ class BabylonScene implements SceneManager {
       const binding = this.runtimeBindings.get(frame.nodeId);
       if (binding) this.applyRuntimePose(binding, frame.pose);
     }
+    this.applyMaterialFlowFrames(this.materialPlayer.tick(this.runtimeNowMs()));
   }
 
   get runtimePlaying(): boolean {
-    return this.runtimePlayer.playing;
+    return this.runtimePlayer.playing || this.materialPlayer.playing;
   }
 
   get runtimeBindingCount(): number {
     return this.runtimePlayer.bindingCount;
+  }
+
+  get materialItemCount(): number {
+    return this.materialPlayer.itemCount;
+  }
+
+  get materialCompletedUnits(): number {
+    return this.materialPlayer.completedUnits;
+  }
+
+  get activeStationIds(): readonly string[] {
+    return this._activeStationIds;
+  }
+
+  private applyMaterialFlowFrames(
+    frames: readonly MaterialFlowFrame[],
+  ): void {
+    const activeStationIds = new Set(frames.map((frame) => frame.stationId).filter(Boolean));
+    for (const [index, mesh] of this.materialVisuals.entries()) {
+      const frame = frames[index];
+      if (frame) mesh.position.set(frame.position[0], frame.position[1] + 0.25, frame.position[2]);
+    }
+    for (const stationId of this._activeStationIds) {
+      if (!activeStationIds.has(stationId)) {
+        const partId = this.materialStationPartIds.get(stationId);
+        if (partId) this._restorePartStateOverlay(partId);
+      }
+    }
+    for (const stationId of activeStationIds) {
+      const partId = this.materialStationPartIds.get(stationId);
+      if (partId) this._setPartOverlay(partId, new Color3(0.1, 0.85, 0.95), 0.2);
+    }
+    this._activeStationIds = [...activeStationIds];
   }
 
   private runtimeNowMs(): number {
@@ -601,7 +716,7 @@ class BabylonScene implements SceneManager {
    * 按后端 BOM 加载真实 GLB。GLB 是唯一可见零件；透明 box 仅承载拾取与 OBB。
    * 任一资产失败即清理本轮已加载内容并抛错，不回退到可见模拟盒。
    */
-  async renderParts(bom: AssemblyBom): Promise<void> {
+  async renderParts(bom: AssemblyBom, modelVersion: string): Promise<void> {
     const scene = this.scene;
     if (!scene) throw new Error('Babylon 场景尚未挂载');
     this._clearParts();
@@ -610,7 +725,11 @@ class BabylonScene implements SceneManager {
     const runtimeNodes: TransformNode[] = [];
     try {
       for (const part of bom.parts) {
-        const container = await SceneLoader.LoadAssetContainerAsync('', modelGlbUrl(part.assetId), scene);
+        const container = await SceneLoader.LoadAssetContainerAsync(
+          '',
+          modelGlbUrl(part.assetId, modelVersion),
+          scene,
+        );
         const visualRoot = new TransformNode(`visual-${part.id}`, scene);
         const contentRoot = new TransformNode(`content-${part.id}`, scene);
         contentRoot.parent = visualRoot;
@@ -688,9 +807,26 @@ class BabylonScene implements SceneManager {
       throw error instanceof Error ? error : new Error('GLB 装配资产加载失败');
     }
 
+    this._centerAssemblyOnFloor(renderParts);
+    const renderedPartById = new Map(renderParts.map((part) => [part.partId, part]));
+    const stationPartIds = new Map<string, string>();
+    const waypoints: MaterialFlowWaypoint[] = [];
+    for (const step of bom.steps) {
+      const bomPart = bom.parts.find((part) => part.id === step.partId);
+      const renderedPart = renderedPartById.get(step.partId);
+      if (!bomPart?.isMovable || !renderedPart || stationPartIds.has(step.stationId)) continue;
+      stationPartIds.set(step.stationId, step.partId);
+      waypoints.push({ id: step.stationId, position: renderedPart.center });
+    }
+    this.configureMaterialFlow(waypoints, stationPartIds);
     this.configureRuntimeAnimations(runtimeNodes);
     this.startRuntimeAnimations();
     const placements = computeTwoStatePlacement(renderParts);
+    this._assemblyBounds = renderParts.map((part) => ({
+      partId: part.partId,
+      center: [...part.center] as Vec3,
+      half: [...part.half] as Vec3,
+    }));
     this._placements = placements;
     this._partOrder = renderParts.map((part) => part.partId);
     for (const [index, placement] of placements.entries()) {
@@ -706,6 +842,52 @@ class BabylonScene implements SceneManager {
       this._setPartCenter(part.partId, seat);
     }
     this._frameWholeAssembly(renderParts);
+    if (this.camera) {
+      this._assemblyViewBaseline = {
+        target: this.camera.target.clone(),
+        boundingRadius: this._assemblyBoundingRadius(renderParts, this.camera.target),
+        alpha: this.camera.alpha,
+        beta: this.camera.beta,
+      };
+    }
+  }
+
+  /** 将整条真实 GLB 产线的外包络中心对齐到底板原点，保持 BOM 内部相对位置不变。 */
+  private _centerAssemblyOnFloor(parts: RenderPart[]): void {
+    const offset = floorCenterOffset(parts);
+    if (offset[0] === 0 && offset[2] === 0) return;
+    for (const part of parts) {
+      part.center = [
+        part.center[0] - offset[0],
+        part.center[1],
+        part.center[2] - offset[2],
+      ];
+      const proxy = this.meshes.get(part.partId);
+      if (proxy) {
+        proxy.position.x -= offset[0];
+        proxy.position.z -= offset[2];
+      }
+      const visualRoot = this.visualRoots.get(part.partId);
+      if (visualRoot) {
+        visualRoot.position.x -= offset[0];
+        visualRoot.position.z -= offset[2];
+      }
+    }
+  }
+
+  frameToAssembly(): void {
+    const camera = this.camera;
+    const baseline = this._assemblyViewBaseline;
+    if (!camera || !baseline) return;
+    camera.alpha = baseline.alpha;
+    camera.beta = baseline.beta;
+    camera.setTarget(baseline.target);
+    camera.radius = fitSphereCameraRadius({
+      boundingRadius: baseline.boundingRadius,
+      verticalFovRadians: camera.fov,
+      aspectRatio: this.engine?.getAspectRatio(camera) ?? 1,
+    });
+    this.scene?.render();
   }
 
   /** 把相机取景到装配体（质心 + 包围半径 → 半径取景公式，见 LRN-005） */
@@ -722,19 +904,28 @@ class BabylonScene implements SceneManager {
     cx /= parts.length;
     cy /= parts.length;
     cz /= parts.length;
-    let maxR = 0;
-    for (const b of parts) {
-      const r =
-        Math.hypot(b.center[0] - cx, b.center[1] - cy, b.center[2] - cz) +
-        Math.max(b.half[0], b.half[1], b.half[2]);
-      if (r > maxR) maxR = r;
-    }
-    this.camera.setTarget(new Vector3(cx, cy, cz));
+    const target = new Vector3(cx, cy, cz);
+    const maxR = this._assemblyBoundingRadius(parts, target);
+    this.camera.setTarget(target);
     this.camera.radius = fitSphereCameraRadius({
       boundingRadius: maxR,
       verticalFovRadians: this.camera.fov,
       aspectRatio: this.engine?.getAspectRatio(this.camera) ?? 1,
     });
+  }
+
+  private _assemblyBoundingRadius(parts: readonly RenderPart[], target: Vector3): number {
+    let maxR = 0;
+    for (const part of parts) {
+      const r =
+        Math.hypot(
+          part.center[0] - target.x,
+          part.center[1] - target.y,
+          part.center[2] - target.z,
+        ) + Math.max(part.half[0], part.half[1], part.half[2]);
+      if (r > maxR) maxR = r;
+    }
+    return maxR;
   }
 
   /** S1 · 状态变化后取景：把 seat ∪ scatter 的并集质心与包围半径算进相机半径，
@@ -752,7 +943,8 @@ class BabylonScene implements SceneManager {
     if (n === 0) return;
     cx /= n; cy /= n; cz /= n;
     for (const [id, mesh] of this.meshes) {
-      const halfExtents = this.halfSize.get(id) ?? [0.8, 0.8, 0.8];
+      const halfExtents = this.halfSize.get(id);
+      if (!halfExtents) continue;
       const half = Math.max(halfExtents[0], halfExtents[1], halfExtents[2]);
       const dx = Math.abs(mesh.position.x - cx) + half;
       const dy = Math.abs(mesh.position.y - cy) + half;
@@ -908,7 +1100,7 @@ class BabylonAssets implements AssetManager {
 
   async loadLine(line: ProductionLine, bom: AssemblyBom): Promise<readonly string[]> {
     if (line.id !== bom.lineId) throw new Error('产线与 BOM 不匹配');
-    await this.sceneMgr.renderParts(bom);
+    await this.sceneMgr.renderParts(bom, line.modelVersion);
     this._partIds = bom.parts.map((part) => part.id);
     this._loaded = this._partIds.length;
     return this._partIds;
@@ -930,6 +1122,18 @@ class BabylonRuntime implements RuntimeAnimationController {
 
   get boundNodeCount(): number {
     return this.scene.runtimeBindingCount;
+  }
+
+  get materialItemCount(): number {
+    return this.scene.materialItemCount;
+  }
+
+  get materialCompletedUnits(): number {
+    return this.scene.materialCompletedUnits;
+  }
+
+  get activeStationIds(): readonly string[] {
+    return this.scene.activeStationIds;
   }
 
   start(): boolean {

@@ -4,7 +4,478 @@ Command failures and integration errors.
 
 > 记录工具链/算法/环境层面的真实踩坑（含已修复），避免重复排查。格式遵循 `.agent/skills/self-improving-agent`。
 
+## [ERR-20260904-045] material_flow_patch_path
+
+**Logged**: 2026-09-04T17:30:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+物料流转补丁中的一个绝对路径缺少 `MyResume`，导致整组补丁校验失败且未写入文件。
+
+### Error
+```text
+Failed to read file: No such file or directory
+```
+
+### Context
+- `apply_patch` 在校验阶段失败，项目内容未发生变化。
+
+### Suggested Fix
+统一使用当前仓库的绝对路径再应用补丁。
+
+### Metadata
+- Reproducible: no
+- Related Files: apps/sim-platform/src/engine/material-flow.ts
+- Tags: tooling, patch, path
+
 ---
+
+## [ERR-20260904-043] domain_empty_test_suite
+
+**Logged**: 2026-09-04T17:15:00+08:00
+**Priority**: low
+**Status**: pending
+**Area**: tests
+
+### Summary
+根 `pnpm test` 因 `@assemble/domain` 没有测试文件而失败。
+
+### Error
+```text
+No test files found, exiting with code 1
+```
+
+### Context
+- 根测试脚本递归执行所有 `packages/*` 的 `test` 脚本。
+- `domain` 本次仅修改类型契约，没有现成测试目录；类型检查已通过。
+
+### Suggested Fix
+后续为 domain 增加契约测试，或让空测试包使用显式的 no-test 配置。
+
+### Metadata
+- Reproducible: yes
+- Related Files: packages/domain/package.json, packages/domain/src/rhythm.ts
+- Tags: vitest, domain, baseline
+
+---
+
+## [ERR-20260904-041] sim_platform_vitest_path
+
+**Logged**: 2026-09-04T17:10:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+从仓库根目录向 sim-platform 的自定义 Vitest 配置传入应用相对路径，导致测试收集为空。
+
+### Error
+```text
+No test files found, exiting with code 1
+```
+
+### Context
+- `vue-tsc --noEmit -p apps/sim-platform/tsconfig.json` 已通过。
+- 失败命令使用了根目录工作路径和 `apps/sim-platform/src/...` 过滤路径。
+
+### Suggested Fix
+从 `apps/sim-platform` 目录执行包脚本或传入相对该目录的测试路径。
+
+### Resolution
+改为在应用目录执行 `vitest run src/engine/test/taktpanel.test.ts`。
+
+### Metadata
+- Reproducible: yes
+- Related Files: apps/sim-platform/vite.config.ts
+- Tags: vitest, path, frontend
+
+---
+
+## [ERR-20260904-044] runtime_inspection_workdir
+
+**Logged**: 2026-09-04T17:25:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+读取运行态代码时误用了不存在的工作目录，命令在进程创建阶段失败。
+
+### Error
+```text
+CreateProcess: No such file or directory
+```
+
+### Context
+- 读取命令的 `workdir` 拼写错误，未修改项目文件。
+
+### Suggested Fix
+复用仓库根目录绝对路径执行读取命令。
+
+### Metadata
+- Reproducible: no
+- Related Files: apps/sim-platform/src/engine/babylon.ts
+- Tags: tooling, workdir
+
+---
+
+## [ERR-20260904-042] sim_platform_hoisted_binary_path
+
+**Logged**: 2026-09-04T17:12:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+应用使用 hoisted 依赖，但整包校验命令误从应用目录寻找本地 `node_modules/.bin/vue-tsc`。
+
+### Error
+```text
+Cannot find module '.../apps/sim-platform/node_modules/.bin/vue-tsc'
+```
+
+### Context
+- 应用目录没有独立 `node_modules`，依赖位于仓库根目录。
+
+### Suggested Fix
+从应用目录执行时使用 `../../node_modules/.bin/<binary>`，或通过包管理器脚本调用。
+
+### Resolution
+改用根目录 hoisted 二进制路径重跑类型检查与测试。
+
+### Metadata
+- Reproducible: yes
+- Related Files: apps/sim-platform/package.json, .npmrc
+- Tags: pnpm, hoisted, vue-tsc
+
+---
+
+## [ERR-20260904-039] git_index_lock_permission
+
+**Logged**: 2026-09-04T00:00:00+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: tooling
+
+### Summary
+沙箱允许修改工作区文件，但禁止 Git 创建 `.git/index.lock`，导致提交命令失败。
+
+### Error
+```text
+fatal: Unable to create '.git/index.lock': Operation not permitted
+```
+
+### Context
+- Command: `git add ... && git commit ...`
+- 契约与文档已完成类型检查，失败发生在 Git 写索引阶段。
+
+### Suggested Fix
+申请允许写入当前仓库 `.git` 的权限后重试同一提交。
+
+### Metadata
+- Reproducible: yes
+- Related Files: packages/domain/src/rhythm.ts, docs/ARCHITECTURE.md
+- Tags: git, sandbox, permissions
+
+---
+
+## [ERR-20260904-040] takt_config_lookup_key
+
+**Logged**: 2026-09-04T17:07:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: backend
+
+### Summary
+节拍配置仓储首次按 `id` 查询，无法命中使用独立配置主键的 `lineId`。
+
+### Error
+```text
+测试期望 configuration/500/0.92，服务实际返回 derived/1/0.1
+```
+
+### Context
+- `POST /takt/simulate` 集成测试注入配置 `id=config-line-a`、`lineId=line-a`。
+- `Repository<T>` 仅提供主键 `get(id)`，业务路由需要按 `lineId` 定位配置。
+
+### Suggested Fix
+使用 `list().find(item => item.lineId === lineId)`，后续接真库时为 `lineId` 增加索引查询。
+
+### Resolution
+路由改为按 `lineId` 查询仓储列表，并补回归测试。
+
+### Metadata
+- Reproducible: yes
+- Related Files: services/takt-svc/src/app.ts, services/takt-svc/test/app.test.ts
+- Tags: repository, lookup, takt
+
+---
+
+## [ERR-20260904-038] dev_script_bind_eperm
+
+**Logged**: 2026-09-04T16:20:30+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+沙箱内运行一键开发编排时禁止服务绑定本机端口。
+
+### Error
+```text
+listen EPERM: operation not permitted 127.0.0.1:7101
+```
+
+### Context
+- Command: `env -u NODE_OPTIONS node scripts/dev.mjs`
+- 服务代码尚未启动，失败发生在端口探测 `listen` 阶段。
+- 脚本单测、语法检查和 takt-svc 定向测试均已通过。
+
+### Suggested Fix
+联调需要本机进程权限时申请允许绑定本地开发端口；不改变应用逻辑绕过该限制。
+
+### Resolution
+已申请本机权限完成 `scripts/dev.mjs` 启动验证，服务端口均可复用且健康检查通过。
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/dev.mjs
+- Tags: sandbox, dev-server, port-bind
+
+---
+
+## [ERR-20260904-035] blender_headless_metal_crash
+
+**Logged**: 2026-09-04T12:12:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+Blender 4.4 后台生成转运输送 GLB 时在 Metal 后端初始化阶段发生原生崩溃。
+
+### Error
+```text
+Segmentation fault: 11
+gpu::MTLBackend::metal_is_supported
+```
+
+### Context
+- Command: `Blender -b --python scripts/gltf-gen/gen_device.py -- transfer-conveyor --out ...`
+- Python generator had not started; no asset file was written.
+
+### Suggested Fix
+在本机以允许 Metal 初始化的本地进程权限运行 Blender headless；该版本不支持 OpenGL GPU backend 参数。
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/gltf-gen/gen_device.py
+- Tags: blender, gltf, headless, metal
+- Resolution: 已提升本机进程权限成功生成 `transfer-conveyor.glb`。
+
+---
+
+## [ERR-20260904-037] blender_headless_metal_crash_retry
+
+**Logged**: 2026-09-04T12:42:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+重新导出带面版本时，Blender 4.4 再次在 Metal 后端初始化阶段原生崩溃。
+
+### Error
+```text
+Segmentation fault: 11
+gpu::MTLBackend::metal_is_supported
+```
+
+### Context
+旧的 `transfer-conveyor.glb` 未被覆盖，生成脚本尚未开始执行。
+
+### Suggested Fix
+使用 `--factory-startup` 或可用的本机 Blender 图形后端启动参数后重试。
+
+### Metadata
+- Reproducible: intermittent
+- Related Files: scripts/gltf-gen/gen_device.py
+- Tags: blender, gltf, headless, metal
+- Resolution: 重试后 Blender 成功导出带面版本 `transfer-conveyor.glb`，并通过 GLB 包络量测。
+
+---
+
+## [ERR-20260904-036] gltf_generator_out_flag
+
+**Logged**: 2026-09-04T12:14:30+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+`gen_device.py` 的帮助文档使用 `--out`，但参数解析把它误当成输出目录。
+
+### Error
+```text
+[gen] wrote --out/transfer-conveyor.glb
+```
+
+### Context
+Blender 成功运行，但命令 `device --out <dir>` 生成到了仓库根目录的 `--out/` 临时目录，而不是 model-svc 资产目录。
+
+### Suggested Fix
+让生成器同时正确解析文档中的 `--out <dir>` 形式，并在 gen-all 中统一使用该形式。
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/gltf-gen/gen_device.py, scripts/gltf-gen/gen-all.sh
+- Tags: blender, gltf, cli
+- Resolution: `gen_device.py` 已支持 `--out <dir>`，并由 `gen-all.sh` 使用正确参数生成资产。
+
+---
+
+## [ERR-20260904-032] takt_optional_target_residual
+
+**Logged**: 2026-09-04T11:36:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+节拍接口迁移为只接收 `lineId` 后，核心负荷计算仍引用可选的旧目标字段，导致消费者类型检查失败。
+
+### Error
+```text
+src/taktCore.ts(32,43): error TS18048: 'req.targetUnitsPerHour' is possibly 'undefined'.
+```
+
+### Context
+目标产能已在服务端由瓶颈工位节拍归一化，但循环计算没有统一使用归一化后的局部值。
+
+### Suggested Fix
+跨层契约删改后，搜索旧字段的所有读写点，并用服务端归一化值完成后续计算。
+
+### Metadata
+- Reproducible: yes
+- Related Files: services/takt-svc/src/taktCore.ts
+
+---
+
+## [ERR-20260904-033] domain_package_without_tests
+
+**Logged**: 2026-09-04T11:43:00+08:00
+**Priority**: low
+**Status**: pending
+**Area**: tests
+
+### Summary
+全仓测试在 `@assemble/domain` 包因没有测试文件退出，未进入后续 workspace 包。
+
+### Error
+```text
+@assemble/domain@0.1.0 test: No test files found, exiting with code 1
+```
+
+### Context
+本次改动已通过 domain 构建和所有受影响服务/前端定向测试；该失败属于仓库现有测试配置限制。
+
+### Suggested Fix
+为无测试的契约包配置允许空测试集，或补充领域契约测试后再恢复全仓测试门禁。
+
+### Metadata
+- Reproducible: yes
+- Related Files: packages/domain/package.json, packages/domain/src
+
+---
+
+## [ERR-20260904-031] workspace_domain_stale_build
+
+**Logged**: 2026-09-04T11:22:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+跨包契约新增字段后，takt-svc 类型检查先解析到了旧的 domain 构建产物。
+
+### Error
+```text
+Object literal may only specify known properties, and 'availability' does not exist in type 'TaktBottleneckResult'.
+```
+
+### Context
+服务包的 workspace 依赖未直接映射到 domain 源码，需先构建共享 domain 再检查消费者。
+
+### Suggested Fix
+修改 `packages/domain` 契约后，先构建 domain，再运行受影响服务的 typecheck/test。
+
+### Resolution
+已先构建 domain，再通过 `f57fab3` 完成 takt-svc 消费端类型检查。
+
+### Metadata
+- Reproducible: yes
+- Related Files: packages/domain/src/rhythm.ts, services/takt-svc/src/taktCore.ts
+- Resolution: 已先构建 domain，再通过 `f57fab3` 完成 takt-svc 消费端类型检查。
+
+
+## [ERR-20260904-034] git_index_write_requires_approval
+
+**Logged**: 2026-09-04T12:10:30+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+本轮转运输送段提交时，沙箱再次拒绝创建 `.git/index.lock`。
+
+### Error
+```text
+fatal: Unable to create '/Users/zenquan/ZCodeProject/MyResume/assemble-platform/.git/index.lock': Operation not permitted
+```
+
+### Context
+- 已完成 domain 资产契约改动并准备暂存。
+- 源码工作区可写，但 Git 索引目录需要提升权限。
+
+### Suggested Fix
+用户已要求小步提交时，对本次 `git add` / `git commit` 请求提升本地权限。
+
+### Metadata
+- Reproducible: yes
+- Related Files: .git/index
+- See Also: ERR-20260904-030, ERR-20260904-002
+- Resolution: 已提升本地 Git 写权限完成 `7eafe8d`、`0febce3`、`9f12d47` 三个小步提交。
+
+---
+
+## [ERR-20260904-030] git_index_write_requires_approval
+
+**Logged**: 2026-09-04T11:04:30+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+沙箱内提交紧凑布局改动时无法创建 `.git/index.lock`。
+
+### Error
+```text
+fatal: Unable to create '.git/index.lock': Operation not permitted
+```
+
+### Context
+源码和测试可写，但当前 Git 索引写入仍需要提升本地权限。
+
+### Suggested Fix
+在用户已授权提交的前提下，仅对本次 `git add` / `git commit` 请求提升权限。
+
+### Metadata
+- Reproducible: yes
+- Related Files: .git/index
+- Resolution: 通过提升本地 Git 写权限完成提交 `2ae185a`。
+
 
 ## ERR-20260904-001
 
@@ -41,6 +512,13 @@ Command failures and integration errors.
 - **Context**: 浏览器自动化点击运行态“暂停”按钮时，定位到唯一可见按钮但 CDP 操作在 3 秒内超时。
 - **Resolution**: 页面 DOM 已确认绑定 12 个节点且运行中；按钮点击自动化超时已保留为验证工具限制。
 
+
+## ERR-20260904-006
+
+- **Status**: pending
+- **Category**: tooling
+- **Context**: 使用 Blender 4.4 后台生成 `produce-sort` 新设备时发生原生 `Segmentation fault: 11`，没有 Python traceback。
+- **Resolution**: 缩小到单资产运行并检查 Blender 崩溃日志；必要时拆分生成批次。
 
 ## [ERR-20260902-001] pnpm_install_symlink
 

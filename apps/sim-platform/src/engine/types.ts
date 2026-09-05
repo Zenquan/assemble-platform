@@ -99,6 +99,8 @@ export interface SceneManager {
   setCamera(viewId: CameraViewId): CameraPose;
   /** 以给定零件包围盒适配视野（"适配/聚焦"） */
   frameToPart(partIds: readonly string[]): void;
+  /** 恢复初始化轴测方向，并按整条真实装配体重新适配视野 */
+  frameToAssembly(): void;
   /** 请求一次渲染（手动重绘 / 测试用）；返回当前帧渲染是否成功 */
   requestRender(): boolean;
   /** 开始/停止渲染循环 */
@@ -154,6 +156,12 @@ export interface RuntimeAnimationController {
   pause(): boolean;
   /** 清除运行态时间并恢复 GLB 初始位姿 */
   reset(): void;
+  /** 当前随产线传送路径运动的物料件数 */
+  readonly materialItemCount: number;
+  /** 物料流转已完成件数 */
+  readonly materialCompletedUnits: number;
+  /** 当前有物料经过的工位 id */
+  readonly activeStationIds: readonly string[];
 }
 
 /** 交互拾取/拖拽（手动装配入口） */

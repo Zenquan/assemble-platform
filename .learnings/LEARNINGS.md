@@ -8,6 +8,74 @@ Corrections, insights, and knowledge gaps captured during development.
 
 ---
 
+## LRN-20260905-005
+
+- **Category**: best_practice
+- **Status**: resolved
+- **Context**: CloudBase 云托管单容器部署此前依赖本地 `.deploy/` 代码快照与 `tcb cloudrun deploy` CLI（见 LRN-20260905-001/002/003）；后续改为云托管「通过 Git 仓库部署」绑定 GitHub `main`，由 CloudBase 直接拉源码构建。
+- **Insight**: Git 仓库部署免去本地快照同步、lockfile 快照漂移与 CLI 登录/API key 维护，代码 push `main` 即触发构建发布；`docs/DEPLOYMENT.md` 是当前部署事实源，云端仓库形态与本地 `pnpm dev` 编排互不影响。
+- **Action**: 移除 `.deploy/` 快照流程与 `scripts/sync-deploy.mjs`、失效的 `services:compose:up/down` 脚本，部署说明收敛到 `docs/DEPLOYMENT.md`。
+- **Related Files**: docs/DEPLOYMENT.md, Dockerfile, services/gateway/src/server.ts, scripts/sync-deploy.mjs, CHANGELOG.md
+- **Resolution**: 部署链路收尾提交后落地；旧快照与 CLI 学习条目视为已被本条目取代。
+
+---
+
+## LRN-20260905-003
+
+- **Category**: best_practice
+- **Status**: resolved
+- **Context**: CloudBase CloudRun 单容器只推了后端：`.deploy` 的 apps 只同步 package.json、Dockerfile 不执行 `vite build`、gateway 也没有静态路由，访问服务域名 `/index.html` 直接命中 gateway 的 `NOT_FOUND` 信封。
+- **Insight**: 聚合 gateway 是单容器部署形态的前端同源事实入口；前端必须随镜像构建并由 gateway 托管静态产物，否则“页面 URL”和“API URL”落在同一个容器上却互不相通。
+- **Action**: sync-deploy 把 sim-platform 的 Vite 构建输入（index.html/public/src/config）同步进 `.deploy`；Dockerfile 在 build 阶段跑 `pnpm --filter @assemble/sim-platform build` 并把 dist 拷入 runtime；gateway 对未命中 API 的 GET/HEAD 走静态托管，路径做解码 + 根目录包含校验。
+- **Related Files**: Dockerfile, scripts/sync-deploy.mjs, services/gateway/src/static.ts, services/gateway/src/server.ts
+- **Resolution**: `ac8803e` feat(deploy) 落地；gateway 14 项测试与本地冒烟（`/`、`/index.html`、asset、`/lines`、`/healthz`）均 200。
+
+---
+
+## LRN-20260905-004
+
+- **Category**: knowledge_gap
+- **Status**: pending
+- **Context**: 本地验证 `pnpm --filter @assemble/sim-platform build` 时输出长期停在 `transforming...`，一度被当成“卡死”，实际进程单核 94% 持续约 9 分钟（3327 modules）后正常完成。
+- **Insight**: Babylon 相关前端生产构建是重任务，无阶段日志不等于死锁；判断标准应看进程 CPU/时长，而不是等日志。镜像内 `vite build` 会让 CloudRun 每次部署叠加约数分钟构建耗时。
+- **Action**: 后续给部署/CI 留足构建超时预算，并评估 Vite 分包（manualChunks）或构建缓存能否压掉该耗时；本地等待时不要仅凭无输出就中断。
+- **Related Files**: Dockerfile, apps/sim-platform/vite.config.ts, apps/sim-platform/package.json
+
+---
+
+## LRN-20260905-002
+
+- **Category**: best_practice
+- **Status**: pending
+- **Context**: CloudRun 云端构建（`tcb cloudrun deploy`）失败于 `ERR_PNPM_OUTDATED_LOCKFILE`：新增 workspace 包（`services/gateway`）后，`pnpm-lock.yaml` 没有该包的 importer 条目，云端 `pnpm install --frozen-lockfile` 直接拒绝。
+- **Insight**: Monorepo 新增 workspace 包后，必须先本地跑一次 `pnpm install`（本仓用 corepack pnpm.cjs + `--store-dir node_modules/.assemble-pnpm-store`）更新 lockfile 再部署；`--frozen-lockfile` 是 CI 默认，云端构建尤其敏感。
+- **Action**: 本仓约定「新增 services/* 或 packages/* 包 → 更新 lockfile → 提交」；`.deploy/` 快照由 `scripts/sync-deploy.mjs` 生成并同步 lockfile。
+- **Related Files**: pnpm-lock.yaml, Dockerfile, scripts/sync-deploy.mjs
+
+---
+
+## LRN-20260905-001
+
+- **Category**: knowledge_gap
+- **Status**: pending
+- **Context**: CloudBase MCP 的 `manageCloudRun(deploy)` 强制 `targetPath` 在 MCP 进程 cwd 内；本会话 MCP 固化在旧项目目录（fastapi-app）且该目录被沙箱拒写，无法用 MCP 部署云托管。
+- **Insight**: 云托管部署的兜底路径是 CloudBase CLI：`tcb login --cloudbase-api-key <api_key>`（MCP `manageAppAuth(action="createApiKey", keyType="api_key")` 生成，注意 `publish_key` 是匿名客户端 key，CLI 登录会验证失败）+ `tcb cloudrun deploy -s <name> --source <dir> --port 3000`（source 不受 MCP cwd 限制）。CLI 装在 `/tmp/tcb-cli`（`npm install --prefix /tmp/tcb-cli --cache /tmp/npm-cache-user @cloudbase/cli`，绕开 `/opt/cache/npm` 权限问题）。
+- **Action**: 后续 CloudRun 部署统一走 CLI；`.deploy/cloudbaserc.json` 已配置 envId 与 cloudrun.name。
+- **Related Files**: .deploy/cloudbaserc.json, scripts/sync-deploy.mjs
+
+---
+
+## LRN-20260904-021
+
+- **Category**: correction
+- **Status**: pending
+- **Context**: 净菜线瓶颈节拍为 `6.8s` 时，服务将 `529.4 件/时` 向上取整为 `530 P/H`，页面因此显示未达产。
+- **Insight**: 自动推导的目标产能不能高于瓶颈理论产能；没有独立业务目标时应向下取整，避免制造虚假的超负荷。
+- **Action**: takt-svc 默认目标改为 `floor(3600 / bottleneckTakt)`，并用 `6.8s` 回归测试锁定 `529 P/H` 与达产状态。
+- **Related Files**: services/takt-svc/src/taktCore.ts, services/takt-svc/test/app.test.ts
+
+---
+
 ## LRN-20260904-001
 
 - **Category**: best_practice
@@ -23,6 +91,37 @@ Corrections, insights, and knowledge gaps captured during development.
 - **Context**: 测试夹具用 `undefined` 表达“无流水线基座”，但 TypeScript/JavaScript 默认参数会把它变成默认 `conveyor`。
 - **Insight**: 可选配置测试必须使用明确的空值哨兵（本仓使用 `null`），避免默认参数让测试数据悄悄改变。
 - **Action**: assembly-svc BOM 测试改用 `null` 表达无基座，并验证真实净菜设备组合。
+
+## LRN-20260904-003
+
+- **Category**: correction
+- **Status**: resolved
+- **Context**: 用户指出净菜线设备之间显示距离过大。
+- **Insight**: 设备 GLB 的真实包络与工位中心坐标必须一起规划；仅按工艺序号或早期演示坐标摆放，会把相邻设备的转运间隙放大成不真实的断线。
+- **Action**: 净菜线中心坐标按真实 GLB 长度累加，并固定小额卫生/转运间隙；测试校验相邻包络不超过目标间隙。
+
+## LRN-20260904-004
+
+- **Category**: best_practice
+- **Status**: pending
+- **Context**: 前端产线卡片曾用工位数估算零部件数、用固定值注入节拍开动率，干涉预检接口也接收 `lineKind/partCount`。
+- **Insight**: 业务指标必须来自后端领域结果；前端只传业务标识并展示服务返回值，视觉布局和测试替身参数另行隔离。
+- **Action**: 预检改为按 `lineId` 由 interference-svc 读取 assembly-svc BOM，节拍由 takt-svc 按 assembly-svc 工位计算并返回目标与实际 availability，移除前端估算零件数、节拍目标和伪进度条。
+- **Resolution**: 已由 `bc9acf3`、`f57fab3` 固化干涉与节拍两条真实后端链路。
+
+
+## LRN-20260904-005
+
+- **Category**: correction
+- **Status**: resolved
+- **Context**: 用户检查 `transfer-conveyor.glb` 后指出模型只有滚筒和机架，页面无法辨认出传送带带面。
+- **Insight**: 传送带资产不能只用深色薄片表达食品带；从端视角和无 IBL 渲染环境看，带面必须使用非金属食品级颜色，并与滚筒顶部形成连续高度关系。
+- **Action**: 资产源增加可见的食品级青蓝带面、回程带，并将侧护栏调整到带面边缘；重新生成 GLB 后量测包络并做浏览器视觉确认。
+- **Metadata**:
+  - Source: user_feedback
+  - Related Files: scripts/gltf-gen/gen_device.py, services/model-svc/assets/glb/transfer-conveyor.glb
+  - Tags: glb, conveyor, material, web3d
+  - Resolution: 已由 `56c976a` 修复带面材质与回程带，并由 `7988bd0` 增加模型版本缓存隔离。
 
 
 ## [LRN-20260902-001] best_practice
@@ -615,5 +714,28 @@ S4 E2E 启动 `chromium.launch({headless:true})` 直接报「Executable doesn't 
 - Related Files: apps/sim-platform/src/engine/framing.ts, apps/sim-platform/src/engine/babylon.ts, apps/sim-platform/src/engine/test/framing.test.ts
 - Tags: camera, framing, fov, aspect-ratio, glb
 - Pattern-Key: web3d.aspect_aware_camera_fit
+
+---
+
+## [LRN-20260904-020] correction
+
+**Logged**: 2026-09-04T15:35:00+08:00
+**Priority**: high
+**Status**: pending
+**Area**: frontend / Web3D
+
+### Summary
+“初始化视角”必须恢复加载完成时的相机基准，不能只重新计算当前镜头的距离。
+
+### Details
+用户反馈点击初始化视角没有明显效果。现有实现虽然重新设置了整线包围半径，但没有持久化初始相机目标与轨道姿态；在当前镜头已经自动适配时，重复计算会看起来像按钮没有生效。Babylon ArcRotateCamera 的 beta 也应按极角使用 acos 换算。
+
+### Suggested Action
+真实 GLB 加载完成后记录目标点、包围半径、alpha、beta；初始化视角操作恢复这些基准，并按当前视口宽高比重新计算半径。
+
+### Metadata
+- Source: user_feedback
+- Related Files: apps/sim-platform/src/engine/babylon.ts, apps/sim-platform/src/views/WorkbenchView.vue
+- Tags: camera, framing, reset, babylon
 
 ---

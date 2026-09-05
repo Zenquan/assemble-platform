@@ -22,8 +22,6 @@
     "dev:interference": "pnpm --filter @assemble/interference-svc dev",
     "dev:model": "pnpm --filter @assemble/model-svc dev",
     "dev:takt": "pnpm --filter @assemble/takt-svc dev",
-    "dev:auth": "pnpm --filter @assemble/auth-svc dev",
-    "services:compose:up": "docker compose -f deploy/compose/docker-compose.yml up -d",
-    "services:compose:down": "docker compose -f deploy/compose/docker-compose.yml down"
+    "dev:auth": "pnpm --filter @assemble/auth-svc dev"
   }
 }

@@ -7,7 +7,7 @@
 #
 # 用法:
 #   scripts/gltf-gen/gen-all.sh                  # 生成全部资产
-#   scripts/gltf-gen/gen-all.sh freshcut         # 生成净菜加工线七设备
+#   scripts/gltf-gen/gen-all.sh freshcut         # 生成净菜加工线七设备与转运输送段
 #   scripts/gltf-gen/gen-all.sh bubble-washer    # 只生成某一件
 #
 set -euo pipefail
@@ -38,20 +38,29 @@ run_freshcut() {
   fi
 }
 
+run_transfer_conveyor() {
+  "${BLENDER}" -b --python "${SCRIPT_DIR}/gen_device.py" -- "transfer-conveyor" --out "${OUT_DIR}"
+}
+
 echo "[gen] 输出目录: ${OUT_DIR}"
 case "${TARGET}" in
   all)
     "${BLENDER}" -b --python "${SCRIPT_DIR}/gen_device.py" -- "${LEGACY_DEVICES}" --out "${OUT_DIR}"
     run_freshcut all
+    run_transfer_conveyor
     ;;
   legacy)
     "${BLENDER}" -b --python "${SCRIPT_DIR}/gen_device.py" -- "${LEGACY_DEVICES}" --out "${OUT_DIR}"
     ;;
   freshcut)
     run_freshcut all
+    run_transfer_conveyor
     ;;
   infeed-elevator|bubble-washer|inspection-conveyor|vegetable-cutter|vibratory-dewaterer|weigh-packer|metal-detector)
     run_freshcut "${TARGET}"
+    ;;
+  transfer-conveyor)
+    run_transfer_conveyor
     ;;
   *)
     "${BLENDER}" -b --python "${SCRIPT_DIR}/gen_device.py" -- "${TARGET}" --out "${OUT_DIR}"

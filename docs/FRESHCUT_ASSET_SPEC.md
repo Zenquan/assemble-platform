@@ -4,7 +4,7 @@
 
 ## 1. 工艺与设备清单
 
-首批整线按物料从左向右流动，七个工位均由 assembly-svc 的 BOM 指向 model-svc GLB：
+首批整线按物料从左向右流动，七个工位和工位间转运输送段均由 assembly-svc 的 BOM 指向 model-svc GLB：
 
 | 顺序 | assetId | 设备 | GLB 实测包络（长×宽×高，m） | 核心结构 |
 |------|---------|------|--------------------------|----------|
@@ -15,6 +15,7 @@
 | 5 | `vibratory-dewaterer` | 振动沥水机 | 3.02 × 1.72 × 1.37 | 穿孔筛床、弹簧座、双振动电机、集水盘、防护栏 |
 | 6 | `weigh-packer` | 组合称重包装机 | 2.15 × 1.83 × 2.90 | 上料斗、多头秤、成型筒、封口机构、膜卷、HMI |
 | 7 | `metal-detector` | 金属检测输送机 | 2.32 × 1.64 × 1.80 | 检测门、食品带、剔除机构、收集箱、电控屏 |
+| 设备间 | `transfer-conveyor` | 卫生转运输送段 | 0.80 × 0.70 × 0.73 | 食品级 PU 带、滚筒、卫生护栏、支撑脚 |
 
 尺寸是本版 GLB 的世界包围盒实测值，按 X×Z×Y 记为长×宽×高；采用公开展示用的行业基准比例。拿到厂商尺寸图或 CAD 后，只校准参数，不改变 `assetId`、节点名与服务契约。
 
@@ -24,7 +25,20 @@
 - glTF 导出：`export_yup=True`；进入 Babylon 后 Y 轴向上，物料仍沿 X 轴流动。
 - 每台设备根节点原点位于安装底面的包围盒中心。
 - 所有对象应用 scale；根节点保留位姿，运行时由 `AssemblyPart.localPosition/localRotation` 控制。
-- `line-freshcut-01` 不再增加一条贯穿全线的通用 conveyor；每台设备自带真实进出料段。
+- `line-freshcut-01` 不增加一条贯穿全线的通用 conveyor；每台设备自带进出料段，设备之间由 `transfer-conveyor.glb` 补齐卫生转运。
+- 工位中心由 assembly-svc 按 GLB 长度首尾累加；相邻设备之间预留 `0.8m` 并由独立转运输送段填充，禁止用固定等距坐标拉开整线。
+
+### 2.1 多产线工艺模板
+
+三条净菜线共享本规范中的 GLB 资产和坐标规则，由 `assembly-svc` 的产线数据组合出不同工艺路线：
+
+| lineId | 工艺路线 | 工位组合 |
+|---|---|---|
+| `line-freshcut-01` | 果蔬净菜加工 | 提升上料 → 气泡清洗 → 人工挑选 → 连续切配 → 振动沥水 → 组合称重包装 → 金属检测 |
+| `line-freshcut-02` | 叶菜净菜清洗 | 提升上料 → 气泡清洗 → 人工挑选 → 振动沥水 → 组合称重包装 → 金属检测 |
+| `line-freshcut-03` | 根茎净菜切配 | 提升上料 → 气泡清洗 → 连续切配 → 人工挑选 → 组合称重包装 → 金属检测 |
+
+三条路线均由 `Station.footprintLengthMeters` 驱动紧凑排布，并由 `ProductionLine.transferAssetId` 配置设备间卫生转运段；新增路线只增加数据，不复制 BOM 生成逻辑。
 
 ## 3. 节点层级
 
@@ -63,7 +77,7 @@
 
 ## 6. 验收
 
-- `/bin/bash scripts/gltf-gen/gen-all.sh freshcut` 可一次生成七个 GLB；设置 `GLTF_RENDER_PREVIEWS=1` 时额外生成离线预览图。
+- `/bin/bash scripts/gltf-gen/gen-all.sh freshcut` 可一次生成七台设备和转运输送段共八个 GLB；设置 `GLTF_RENDER_PREVIEWS=1` 时额外生成离线预览图。
 - 量测结果与本规范包络相符，原点和底面没有明显漂移。
 - 工作台切换到净菜线后，BOM 树出现七个真实工位，画面没有旧 feeder/gantry/box-pack。
 - 浏览器画面能辨认每台设备的用途，机体无大面积纯黑、无可见碰撞盒、无互相穿插。

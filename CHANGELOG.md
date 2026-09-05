@@ -7,21 +7,40 @@
 
 ### Added
 
+- sim-platform 新增产线配置中心，可编辑工艺类型、GLB 设备、工位节拍、设备长度和卫生转运参数，并创建自定义产线。
+- SimEngine 新增基于真实 BOM 工位路径的物料流转运行态，显示现场物料件、完成件数并联动当前工位高亮。
+- assembly-svc 新增叶菜净菜清洗线与根茎净菜切配线，两条路线复用真实设备 GLB 和卫生转运段。
+- 产线契约新增设备占用长度与转运资产配置字段，为多条果蔬/净菜工艺线复用同一套 BOM 排布算法做准备。
+- 节拍领域契约新增后端配置 `TaktConfig` 与现场观测 `TaktObservation`，结果携带实际产出快照及数据来源。
 - assembly-svc 按流水线返回真实 BOM，工作台按 BOM 从 model-svc 加载 GLB。
 - 全仓生产代码与工程脚本硬编码审计及治理标准。
-- 果蔬/净菜加工线数字样机规范与七台行业设备资产管线。
+- 果蔬/净菜加工线数字样机规范与七台行业设备、设备间卫生转运输送段资产管线。
 - 七台净菜设备的 GLB `extras.motion` 运行态动画绑定与无 WebGL 时序测试。
+- 入口干涉预检改为按 `lineId` 读取 assembly-svc 真实 BOM，前端不再估算零部件数。
 
 ### Changed
 
+- 部署链路改为 CloudBase 云托管「通过 Git 仓库部署」绑定 GitHub `main`：push 即自动构建发布，移除本地 `.deploy/` 快照与 `tcb cloudrun deploy` 手动流程。
+- CloudBase 云托管单容器部署纳入 sim-platform 静态产物：gateway 同源托管 `index.html` 与 `/assets/*`，浏览器访问不再落到 API 404 路由。
+- 节拍面板新增后端现场实际产量、实际平均 CT、数据来源和观测时间展示，无观测时显示明确空态。
 - BOM 树按后端 `stationId` 分组并随流水线动态切换。
 - 净菜预处理线改为提升上料、气泡清洗、人工挑选、切配、振动沥水、称重包装和金检七工位。
 - Babylon 整线与 BOM 单机取景按视口宽高比适配，窄视口不再裁切设备。
 - 设备运行态动画由 GLB 节点声明驱动，支持输送、旋转、振动、开合、推杆等动作，并自动随工作台启动。
+- 净菜线工位改按 GLB 实测长度紧凑排布，设备间仅保留卫生转运间隙。
+- 净菜线设备间由 assembly-svc 按相邻设备边界动态插入固定 `transfer-conveyor`，通过 model-svc 加载真实 GLB，避免设备之间出现裸露空隙。
+- `transfer-conveyor.glb` 增加可见食品级带面与回程带，侧护栏抬升至滚筒带面高度；前端 GLB 地址按 `modelVersion` 缓存隔离。
+- 节拍面板的目标产能、开动率和负荷改为展示 takt-svc 基于 assembly-svc 工位计算的结果，移除前端演示注入。
 
 ### Removed
 
+- 本地部署产物与脚本：`.deploy/` 快照、`scripts/sync-deploy.mjs`、空 `deploy/` 编排目录、失效的 `services:compose:up/down` 脚本。
 - 前端合成 BOM、按产线类型生成的可见盒体装配模型及 GLB 失败盒体降级。
+
+### Fixed
+
+- 节拍服务自动生成目标产能改为向下取整，避免 `6.8s` 瓶颈被向上取为 `530 P/H`，导致 `529.4 P/H` 被错误显示为未达产。
+- `scripts/dev.mjs` 启动服务前自动检测并构建缺失或过期的 `dist/server.js`，避免节拍等后端契约更新后继续运行旧产物并返回 `VALIDATION_FAILED`。
 
 ## [0.1.0] - 2026-09-01
 

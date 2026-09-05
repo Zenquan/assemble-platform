@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Vec3 } from '@assemble/domain';
-import { computeTwoStatePlacement, selectActivePoses, type SeatInput } from '@/engine/placement';
+import { computeTwoStatePlacement, floorCenterOffset, selectActivePoses, type SeatInput } from '@/engine/placement';
 
 /** 造一个零件（seat 中心 + 半轴） */
 const p = (partId: string, center: [number, number, number], half: [number, number, number] = [1, 1, 1]): SeatInput => ({
@@ -31,6 +31,14 @@ function sample(): SeatInput[] {
 }
 
 describe('computeTwoStatePlacement（S1 分态布局）', () => {
+  it('按零件外包络计算底板居中偏移，不改变 Y 高度', () => {
+    const offset = floorCenterOffset([
+      p('left', [-4, 2, 3], [2, 1, 1]),
+      p('right', [8, 5, -1], [1, 2, 2]),
+    ]);
+    expect(offset).toEqual([1.5, 0, 0.5]);
+  });
+
   it('每件算出 seat（=输入贴合中心）与一个与之分离的 scatter 待料位', () => {
     const parts = sample();
     const res = computeTwoStatePlacement(parts);

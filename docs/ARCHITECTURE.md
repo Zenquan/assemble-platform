@@ -12,7 +12,7 @@ assemble-platform/
 │  ├─ sim-platform # 仿真工作台（主应用，Vue3+Babylon，经 SimEngine 访问引擎）
 │  └─ sim-admin    # 管理后台（产线/模型/用户/权限配置，规划中）
 ├─ services/       # 后端微服务（无状态、端口隔离、各自可独立启动）
-│  ├─ gateway/          # API 网关（路由/鉴权/限流，规划中）
+│  ├─ gateway/          # 单容器聚合入口（子进程编排 5 服务 + 静态托管 + 反向代理）
 │  ├─ assembly-svc/     # 装配服务：产线/BOM/装配约束表/工艺步骤
 │  ├─ interference-svc/ # 干涉分析服务：服务端离线整线批量预检
 │  ├─ model-svc/        # 模型服务：glTF 元数据/资产版本/CDN 签名
@@ -23,7 +23,7 @@ assemble-platform/
 │  ├─ sim-utils/       # 纯数学/几何工具
 │  ├─ clearance-core/  # 干涉分析核心算法（前端实时 + 后端离线复用）
 │  └─ storage/         # 降级仓储层（内存/文件/未来 DB）
-├─ deploy/          # Dockerfile / docker-compose 编排
+├─ Dockerfile       # 单容器聚合镜像（CloudBase Git 仓库部署的构建入口）
 ├─ infra/           # 中间件与基础设施配置占位（MySQL/Redis/MQ/ES/CDN）
 ├─ docs/            # 文档（本文件所在）
 └─ scripts/         # 工程级脚本（clean 等）
@@ -64,7 +64,7 @@ Vue3 业务组件层（views/stores/components）   ← 只依赖 SimEngine 公�
 |------|------|------------|
 | 实时装配 | 自动/手动/回放三模式，约束贴合用 slerp 平滑过渡 | `assembly.ts` |
 | 实时干涉 | 拖拽装配时的实时碰撞检测，命中即高亮/拦截 | `clearance-core` |
-| 节拍可视 | 传送带/机械臂节拍动画、瓶颈高亮 | `rhythm.ts` |
+| 产线运行态 | GLB 设备运动节点、物料沿 BOM 工位路径流转、当前工位状态联动 | `rhythm.ts` + SimEngine runtime |
 
 ## 3. 干涉算法：前后端协同（本工程最具含金量的部分）
 
@@ -94,6 +94,7 @@ Vue3 业务组件层（views/stores/components）   ← 只依赖 SimEngine 公�
 ```
 AssemblySvc ──► Repository<ProductionLine>      ← 介质=内存/文件(当前)
 InterferenceSvc ─► Repository<InterferenceReport>/Job
+TaktSvc ──► Repository<TaktConfig> + Repository<TaktObservation>
 ...
 AuthSvc ─► Repository<AuditLogEntry> + JWT 校验
 ```
@@ -106,7 +107,9 @@ AuthSvc ─► Repository<AuditLogEntry> + JWT 校验
 - `AssemblyBom`（装配 BOM）= `AssemblyPart[]`（零件树）+ `Constraint[]`（约束表）+ `AssemblyStep[]`（工艺步骤）
 - `Constraint` 类型：`coincident / coplanar / concentric / distance`（对齐方案 4.2）
 - 干涉产物：`InterferenceReport`（含 `hits`、`elapsedMs`、`broadCullRatio` 等质量指标）
-- 节拍产物：`TaktBottleneckResult`（瓶颈工位 / 理论产能 / 各工位负荷）
+- 节拍配置：`TaktConfig`（目标产能 / 计划开动率 / 配置更新时间与来源）
+- 节拍观测：`TaktObservation`（MES/PLC 观测窗口 / 完成件数 / 实际平均节拍）
+- 节拍产物：`TaktBottleneckResult`（瓶颈工位 / 理论产能 / 各工位负荷 / 后端实际产出）
 - 模型资产：`ModelAssetVersion`（内容寻址指纹，压缩策略 `draco/meshopt`）
 - 权限：`AuthPrincipal`（OIDC sub + 角色 + 权限点 + ABAC 产线范围）
 
@@ -135,6 +138,10 @@ AssemblyBom(parts + steps.stationId)
 5. BOM 树使用 `AssemblyStep.stationId`，不得按步骤序号 round-robin 猜测工位。
 6. `ProductionLine.baseAssetId` 只用于确有贯穿基座的产线；净菜等设备自带输送段的工艺线省略该字段，避免重复可见输送带。
 
+7. BOM 中可包含 `isMovable=false` 的固定设施（如设备间转运输送段）；这类零件由 `assembly-svc` 按相邻设备边界动态生成，不创建装配步骤，但必须走同一条 model-svc GLB 链路。
+8. 入口离线预检只接收 `lineId`；`interference-svc` 通过服务间 HTTP 从 `assembly-svc` 读取产线与 BOM，零件数不得由前端估算或由 `lineKind` 合成。
+9. 产线紧凑排布由 `Station.footprintLengthMeters`、`ProductionLine.transferAssetId` 和 `transferGapMeters` 配置驱动；BOM 算法不得按 `line.kind` 分支猜设备尺寸或转运段。
+
 ## 6. 工程约定与目录规约
 
 | 项 | 约定 |
@@ -147,6 +154,7 @@ AssemblyBom(parts + steps.stationId)
 
 ## 7. 已知边界 / 规划中
 
-- 当前已落地：`packages/*`（domain/sim-utils/clearance-core/storage）与根工程。
-- 规划中（见 `VERSIONING.md` 0.2.x 起）：`apps/sim-platform`（SimEngine）、5 个后端服务、gateway、Docker 编排、中间件真接入。
+- 当前已落地：`packages/*`、5 个后端服务、gateway 单容器聚合、`apps/sim-platform` 与 Dockerfile。
+- 部署链路：CloudBase 云托管「通过 Git 仓库部署」绑定 GitHub `main`，push 即构建发布（见 `DEPLOYMENT.md`）。
+- 规划中（见 `VERSIONING.md` 0.5.x 起）：中间件真接入、HA 编排、监控与发布加固。
 - 前端真实渲染依赖 Babylon 运行库与 WebGL，浏览器侧验收（playwright 截图）在 0.2.x 落地。

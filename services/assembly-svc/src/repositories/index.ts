@@ -9,6 +9,7 @@ const DEFAULT_FACING_DEGREES = 90;
 const MIN_ASSEMBLY_DURATION_SECONDS = 0.6;
 const MAX_ASSEMBLY_DURATION_SECONDS = 2.5;
 const TAKT_TO_ANIMATION_RATIO = 3;
+const DEFAULT_TRANSFER_GAP_METERS = 0.8;
 const IDENTITY_ROTATION: Quat = { x: 0, y: 0, z: 0, w: 1 };
 
 /** 装配服务仓储：以产线为主聚合，用降级存储（内存/文件） */
@@ -16,7 +17,7 @@ export interface AssemblyRepos {
   lines: Repository<ProductionLine>;
 }
 
-/** 种子产线：覆盖三类产线，供本地演示/联调 */
+/** 种子产线：覆盖通用分拣、三条净菜工艺与冷链预包装，供本地演示/联调 */
 export function buildSeedLines(): ProductionLine[] {
   const now = new Date().toISOString();
   const lines: ProductionLine[] = [
@@ -48,38 +49,114 @@ export function buildSeedLines(): ProductionLine[] {
       id: 'line-freshcut-01',
       name: '果蔬净菜加工线',
       kind: 'fresh-cut',
-      modelVersion: 'freshcut-v1.0.0',
+      transferAssetId: 'transfer-conveyor',
+      transferGapMeters: DEFAULT_TRANSFER_GAP_METERS,
+      modelVersion: 'freshcut-v1.0.1',
       enabled: true,
       createdAt: now,
       updatedAt: now,
       stations: [
         {
           id: 'st-f1', lineId: 'line-freshcut-01', seq: 1, name: '提升上料', taktSeconds: 5.2,
-          deviceKind: 'infeed-elevator', position: [-12, 0, 0], facingDeg: 0,
+          deviceKind: 'infeed-elevator', footprintLengthMeters: 3.49, facingDeg: 0,
         },
         {
           id: 'st-f2', lineId: 'line-freshcut-01', seq: 2, name: '气泡清洗', taktSeconds: 6.8,
-          deviceKind: 'bubble-washer', position: [-8, 0, 0], facingDeg: 0,
+          deviceKind: 'bubble-washer', footprintLengthMeters: 4.50, facingDeg: 0,
         },
         {
           id: 'st-f3', lineId: 'line-freshcut-01', seq: 3, name: '人工挑选', taktSeconds: 5.6,
-          deviceKind: 'inspection-conveyor', position: [-3.8, 0, 0], facingDeg: 0,
+          deviceKind: 'inspection-conveyor', footprintLengthMeters: 3.73, facingDeg: 0,
         },
         {
           id: 'st-f4', lineId: 'line-freshcut-01', seq: 4, name: '连续切配', taktSeconds: 4.4,
-          deviceKind: 'vegetable-cutter', position: [0, 0, 0], facingDeg: 0,
+          deviceKind: 'vegetable-cutter', footprintLengthMeters: 2.49, facingDeg: 0,
         },
         {
           id: 'st-f5', lineId: 'line-freshcut-01', seq: 5, name: '振动沥水', taktSeconds: 5.0,
-          deviceKind: 'vibratory-dewaterer', position: [3.2, 0, 0], facingDeg: 0,
+          deviceKind: 'vibratory-dewaterer', footprintLengthMeters: 3.02, facingDeg: 0,
         },
         {
           id: 'st-f6', lineId: 'line-freshcut-01', seq: 6, name: '组合称重包装', taktSeconds: 6.2,
-          deviceKind: 'weigh-packer', position: [7, 0, 0], facingDeg: 0,
+          deviceKind: 'weigh-packer', footprintLengthMeters: 2.15, facingDeg: 0,
         },
         {
           id: 'st-f7', lineId: 'line-freshcut-01', seq: 7, name: '金属检测', taktSeconds: 4.8,
-          deviceKind: 'metal-detector', position: [10.8, 0, 0], facingDeg: 0,
+          deviceKind: 'metal-detector', footprintLengthMeters: 2.32, facingDeg: 0,
+        },
+      ],
+    },
+    {
+      id: 'line-freshcut-02',
+      name: '叶菜净菜清洗线',
+      kind: 'fresh-cut',
+      transferAssetId: 'transfer-conveyor',
+      transferGapMeters: DEFAULT_TRANSFER_GAP_METERS,
+      modelVersion: 'freshcut-v1.0.1',
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+      stations: [
+        {
+          id: 'st-l1', lineId: 'line-freshcut-02', seq: 1, name: '提升上料', taktSeconds: 5.0,
+          deviceKind: 'infeed-elevator', footprintLengthMeters: 3.49, facingDeg: 0,
+        },
+        {
+          id: 'st-l2', lineId: 'line-freshcut-02', seq: 2, name: '气泡清洗', taktSeconds: 6.4,
+          deviceKind: 'bubble-washer', footprintLengthMeters: 4.50, facingDeg: 0,
+        },
+        {
+          id: 'st-l3', lineId: 'line-freshcut-02', seq: 3, name: '人工挑选', taktSeconds: 5.6,
+          deviceKind: 'inspection-conveyor', footprintLengthMeters: 3.73, facingDeg: 0,
+        },
+        {
+          id: 'st-l4', lineId: 'line-freshcut-02', seq: 4, name: '振动沥水', taktSeconds: 5.0,
+          deviceKind: 'vibratory-dewaterer', footprintLengthMeters: 3.02, facingDeg: 0,
+        },
+        {
+          id: 'st-l5', lineId: 'line-freshcut-02', seq: 5, name: '组合称重包装', taktSeconds: 6.2,
+          deviceKind: 'weigh-packer', footprintLengthMeters: 2.15, facingDeg: 0,
+        },
+        {
+          id: 'st-l6', lineId: 'line-freshcut-02', seq: 6, name: '金属检测', taktSeconds: 4.8,
+          deviceKind: 'metal-detector', footprintLengthMeters: 2.32, facingDeg: 0,
+        },
+      ],
+    },
+    {
+      id: 'line-freshcut-03',
+      name: '根茎净菜切配线',
+      kind: 'fresh-cut',
+      transferAssetId: 'transfer-conveyor',
+      transferGapMeters: DEFAULT_TRANSFER_GAP_METERS,
+      modelVersion: 'freshcut-v1.0.1',
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+      stations: [
+        {
+          id: 'st-r1', lineId: 'line-freshcut-03', seq: 1, name: '提升上料', taktSeconds: 5.4,
+          deviceKind: 'infeed-elevator', footprintLengthMeters: 3.49, facingDeg: 0,
+        },
+        {
+          id: 'st-r2', lineId: 'line-freshcut-03', seq: 2, name: '气泡清洗', taktSeconds: 6.6,
+          deviceKind: 'bubble-washer', footprintLengthMeters: 4.50, facingDeg: 0,
+        },
+        {
+          id: 'st-r3', lineId: 'line-freshcut-03', seq: 3, name: '连续切配', taktSeconds: 4.4,
+          deviceKind: 'vegetable-cutter', footprintLengthMeters: 2.49, facingDeg: 0,
+        },
+        {
+          id: 'st-r4', lineId: 'line-freshcut-03', seq: 4, name: '人工挑选', taktSeconds: 5.8,
+          deviceKind: 'inspection-conveyor', footprintLengthMeters: 3.73, facingDeg: 0,
+        },
+        {
+          id: 'st-r5', lineId: 'line-freshcut-03', seq: 5, name: '组合称重包装', taktSeconds: 6.2,
+          deviceKind: 'weigh-packer', footprintLengthMeters: 2.15, facingDeg: 0,
+        },
+        {
+          id: 'st-r6', lineId: 'line-freshcut-03', seq: 6, name: '金属检测', taktSeconds: 4.8,
+          deviceKind: 'metal-detector', footprintLengthMeters: 2.32, facingDeg: 0,
         },
       ],
     },
@@ -125,6 +202,23 @@ function durationFromTakt(taktSeconds: number): number {
   );
 }
 
+function compactStationPositions(
+  stations: readonly Station[],
+  transferGapMeters: number,
+): Map<string, Vec3> {
+  const positions = new Map<string, Vec3>();
+  let cursor = 0;
+  let previousLength = 0;
+  for (const [index, station] of stations.entries()) {
+    const length = station.footprintLengthMeters ?? 3;
+    if (index === 0) cursor = -length / 2;
+    else cursor += previousLength / 2 + length / 2 + transferGapMeters;
+    positions.set(station.id, [cursor, 0, 0]);
+    previousLength = length;
+  }
+  return positions;
+}
+
 /**
  * 由流水线工位动态生成后端 BOM。产线一旦增删/调整工位，零件、步骤、工位归属与
  * 资产组合随之变化；前端只消费结果，不再按 line.kind 合成。
@@ -136,7 +230,15 @@ export function buildBomForLine(line: ProductionLine): AssemblyBom {
     return { lineId: line.id, parts: [], constraints: [], steps: [] };
   }
 
-  const positions = stations.map((station, index) => positionOf(station, index, stations.length));
+  const hasFootprints = stations.length > 0 && stations.every(
+    (station) => station.footprintLengthMeters !== undefined,
+  );
+  const compactPositions = hasFootprints
+    ? compactStationPositions(stations, line.transferGapMeters ?? DEFAULT_TRANSFER_GAP_METERS)
+    : null;
+  const positions = stations.map((station, index) =>
+    compactPositions?.get(station.id) ?? positionOf(station, index, stations.length),
+  );
   const basePosition: Vec3 = [
     positions.reduce((sum, position) => sum + position[0], 0) / positions.length,
     0,
@@ -184,6 +286,31 @@ export function buildBomForLine(line: ProductionLine): AssemblyBom {
       durationSeconds: durationFromTakt(station.taktSeconds),
       description: `安装${station.name}设备`,
     });
+  }
+
+  if (line.transferAssetId) {
+    for (let index = 1; index < stations.length; index += 1) {
+      const previous = stations[index - 1];
+      const current = stations[index];
+      const previousPosition = positions[index - 1];
+      const currentPosition = positions[index];
+      if (!previous || !current || !previousPosition || !currentPosition) continue;
+      if (!previous.deviceKind || !current.deviceKind) continue;
+      const previousLength = previous.footprintLengthMeters ?? 3;
+      const currentLength = current.footprintLengthMeters ?? 3;
+      parts.push({
+        id: `${line.id}-transfer-${previous.id}-${current.id}`,
+        name: `${previous.name}至${current.name}卫生输送段`,
+        assetId: line.transferAssetId,
+        localPosition: [
+          (previousPosition[0] + previousLength / 2 + currentPosition[0] - currentLength / 2) / 2,
+          0,
+          (previousPosition[2] + currentPosition[2]) / 2,
+        ],
+        localRotation: IDENTITY_ROTATION,
+        isMovable: false,
+      });
+    }
   }
 
   return { lineId: line.id, parts, constraints: [], steps };

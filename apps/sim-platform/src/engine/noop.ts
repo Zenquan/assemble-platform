@@ -93,6 +93,9 @@ export class NoopClearance implements ClearanceController {
 class NoopRuntime implements RuntimeAnimationController {
   readonly boundNodeCount = 0;
   readonly playing = false;
+  readonly materialItemCount = 0;
+  readonly materialCompletedUnits = 0;
+  readonly activeStationIds: readonly string[] = [];
 
   start(): boolean {
     return false;
@@ -226,6 +229,9 @@ class NoopScene implements SceneManager {
   }
   frameToPart(_partIds: readonly string[]): void {
     /* noop：真 Babylon 实现时改为聚焦包围盒 */
+  }
+  frameToAssembly(): void {
+    /* noop：无真实场景可供重新取景 */
   }
   requestRender(): boolean {
     return this.mounted;

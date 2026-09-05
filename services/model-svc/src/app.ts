@@ -31,9 +31,18 @@ interface CompressBody {
   sourceSizeBytes?: number;
 }
 
-export function buildApp(deps?: { repos?: ModelRepos }): FastifyInstance {
+export function buildApp(deps?: {
+  repos?: ModelRepos;
+  /** OSS 回源基址：配置后 /model/glb/:file 从对象存储拉取并回源（云端部署）；缺省读本地文件 */
+  glbOssBaseUrl?: string;
+  fetchImpl?: typeof fetch;
+}): FastifyInstance {
   const app = Fastify({ logger: true });
   const repos = deps?.repos ?? createModelRepos();
+  const fetchImpl = deps?.fetchImpl ?? fetch;
+  // 云端部署：设备 GLB 存放于对象存储（CloudBase 云存储桶 / COS），服务端拉取后同源回给
+  // 前端（免浏览器跨域）。未配置时保持本地文件路径（本地开发行为不变）。
+  const glbOssBase = deps?.glbOssBaseUrl ?? process.env['ASSEMBLE_GLB_BASE_URL']?.replace(/\/+$/, '');
 
   app.get('/healthz', async () => ({
     status: 'ok',
@@ -66,16 +75,34 @@ export function buildApp(deps?: { repos?: ModelRepos }): FastifyInstance {
     if (!(MODEL_ASSET_IDS as readonly string[]).includes(assetId)) {
       return reply.status(404).send(err('NOT_FOUND', `设备资产 ${assetId} 不存在`));
     }
-    const filePath = path.join(GLB_DIR, file);
-    try {
-      const buf = await fs.readFile(filePath);
+    const headers = (buf: Buffer) => {
       reply
         .header('Content-Type', 'application/octet-stream')
         .header('Content-Length', String(buf.length))
         .header('Content-Disposition', `attachment; filename="${file}"`)
-        .header('Cache-Control', 'public, max-age=3600')
-        .send(buf);
-      return reply;
+        .header('Cache-Control', 'public, max-age=3600');
+    };
+
+    // OSS 回源：云端部署时从对象存储拉取并回给前端（同源、无跨域）；未配置则读本地文件
+    if (glbOssBase) {
+      try {
+        const ossRes = await fetchImpl(`${glbOssBase}/${file}`);
+        if (!ossRes.ok) {
+          return reply.status(404).send(err('NOT_FOUND', `设备资产文件 ${file} 在对象存储缺失`));
+        }
+        const buf = Buffer.from(await ossRes.arrayBuffer());
+        headers(buf);
+        return reply.send(buf);
+      } catch {
+        return reply.status(502).send(err('BAD_GATEWAY', `对象存储不可达，无法获取 ${file}`));
+      }
+    }
+
+    const filePath = path.join(GLB_DIR, file);
+    try {
+      const buf = await fs.readFile(filePath);
+      headers(buf);
+      return reply.send(buf);
     } catch {
       return reply.status(404).send(err('NOT_FOUND', `设备资产文件 ${file} 缺失`));
     }
