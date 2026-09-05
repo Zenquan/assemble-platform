@@ -46,10 +46,8 @@ const canEnter = computed(() => props.entry.health === 'ready');
 
 function onPrimary(): void {
   if (props.entry.health === 'disabled') return;
-  if (canEnter.value) {
-    void router.push({ name: 'workbench', params: { lineId: props.entry.line.id } });
-  }
-  // health=attention 时本轮仅提示，处理干涉入口留待装配工作台
+  // 就绪 → 进入装配工作台；待检修（离线预检有干涉）→ 进入同一工作台处理干涉
+  void router.push({ name: 'workbench', params: { lineId: props.entry.line.id } });
 }
 </script>
 
