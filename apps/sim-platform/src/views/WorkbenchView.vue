@@ -322,6 +322,7 @@ async function loadTakt(version: number, ln: ProductionLine) {
   <div class="wb-page">
     <div class="wb-panel">
       <header class="wb-head">
+        <img class="wb-logo" src="/logo.png" alt="SIM-PLATFORM" draggable="false" />
         <div>
           <div class="wb-name">产线 {{ line?.name ?? lineId }} · 装配工作台</div>
           <div class="wb-sub">SIMULATION WORKBENCH · 0.4 动态 BOM + GLB 装配</div>
@@ -397,6 +398,14 @@ async function loadTakt(version: number, ln: ProductionLine) {
   padding: 16px 22px;
   border-bottom: 1px solid var(--line);
   background: rgba(9, 15, 28, 0.6);
+}
+.wb-logo {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 8px;
+  background: #fff;
+  object-fit: cover;
 }
 .wb-name {
   font-size: 14px;

@@ -22,6 +22,8 @@
 ### Changed
 
 - 部署链路改为 CloudBase 云托管「通过 Git 仓库部署」绑定 GitHub `main`：push 即自动构建发布，移除本地 `.deploy/` 快照与 `tcb cloudrun deploy` 手动流程。
+- 全站页头与浏览器标签启用 `logo.png` 品牌标识，替换原「3D」文字标。
+- 产线选择页内容宽度基准与装配工作台对齐（`1680px`），减少宽屏下的两侧空白。
 - Docker/CloudBase 单容器部署监听端口由 `3000` 改为 `80`（云托管「容器端口」同步填 `80`）。
 - CloudBase 云托管单容器部署纳入 sim-platform 静态产物：gateway 同源托管 `index.html` 与 `/assets/*`，浏览器访问不再落到 API 404 路由。
 - 节拍面板新增后端现场实际产量、实际平均 CT、数据来源和观测时间展示，无观测时显示明确空态。

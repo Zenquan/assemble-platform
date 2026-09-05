@@ -17,7 +17,7 @@ const router = useRouter();
 
 <template>
   <header class="hd">
-    <div class="hdlogo">3D</div>
+    <img class="hdlogo" src="/logo.png" alt="SIM-PLATFORM" draggable="false" />
     <div>
       <div class="hd-name">{{ title ?? '产线装配仿真平台' }}</div>
       <div class="hd-sub">{{ subtitle ?? 'ASSEMBLY SIMULATION CONSOLE' }}</div>
@@ -44,16 +44,12 @@ const router = useRouter();
   background: rgba(9, 15, 28, 0.6);
 }
 .hdlogo {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
+  flex: none;
   border-radius: 8px;
-  background: linear-gradient(135deg, #1f6feb, #0891b2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
+  background: #fff;
+  object-fit: cover;
 }
 .hd-name {
   font-size: 14px;
