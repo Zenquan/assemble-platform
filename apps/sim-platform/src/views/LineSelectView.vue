@@ -100,9 +100,10 @@ onMounted(() => {
 }
 .shell {
   position: relative;
-  max-width: 1120px;
+  width: 100%;
+  max-width: 1680px;
   margin: 0 auto;
-  padding: 22px 20px 60px;
+  padding: 16px;
 }
 .shell > :first-child {
   border: 1px solid var(--line);
