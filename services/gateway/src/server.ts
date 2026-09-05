@@ -4,7 +4,7 @@
  * 一个容器一个进程：
  *   1. spawn 各后端服务子进程（127.0.0.1:7101–7105），保持服务边界与独立 dist 产物；
  *   2. 等待各服务 /healthz 就绪；
- *   3. 监听 PORT（云托管要求 3000），按 routing.ts 前缀表把同源请求转发到对应上游，
+ *   3. 监听 PORT（云托管要求 80），按 routing.ts 前缀表把同源请求转发到对应上游，
  *      把 /healthz 聚合为网关健康探针，并为未命中 API 的 GET/HEAD 托管
  *      sim-platform 静态产物（单容器形态下前端与 API 同源）。
  *
@@ -23,7 +23,7 @@ import {
 import { tryServeStaticFile } from './static.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env['PORT'] ?? 3000);
+const PORT = Number(process.env['PORT'] ?? 80);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
 const STATIC_DIR =
   process.env['SIM_WEB_ROOT'] ?? path.resolve(__dirname, '../../../apps/sim-platform/dist');
