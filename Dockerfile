@@ -1,6 +1,6 @@
 # assemble-platform 单容器聚合部署镜像（CloudBase 云托管源码构建）
 # 5 个 Fastify 服务由 services/gateway 以子进程方式编排（127.0.0.1:7101–7105），
-# gateway 监听 PORT（云托管标准 3000）同源托管 sim-platform 静态产物并前缀反代 API。
+# gateway 监听 PORT（云托管标准 80）同源托管 sim-platform 静态产物并前缀反代 API。
 #
 # 构建策略：
 #   1. deps 阶段：corepack 安装 pnpm（packageManager 锁定 9.15.4），冻结 lockfile 安装
@@ -50,8 +50,8 @@ COPY --from=build /app/apps/sim-platform/dist ./apps/sim-platform/dist
 # model-svc 本地 GLB 回退目录（OSS 不可达时的兜底；云端事实源为 ASSEMBLE_GLB_BASE_URL）
 COPY services/model-svc/assets /app/services/model-svc/assets
 # 聚合入口监听端口（云托管探活同端口）
-ENV PORT=3000
-EXPOSE 3000
+ENV PORT=80
+EXPOSE 80
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=5 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||80)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "services/gateway/dist/server.js"]
