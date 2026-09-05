@@ -8,6 +8,29 @@ Corrections, insights, and knowledge gaps captured during development.
 
 ---
 
+## LRN-20260905-003
+
+- **Category**: best_practice
+- **Status**: resolved
+- **Context**: CloudBase CloudRun 单容器只推了后端：`.deploy` 的 apps 只同步 package.json、Dockerfile 不执行 `vite build`、gateway 也没有静态路由，访问服务域名 `/index.html` 直接命中 gateway 的 `NOT_FOUND` 信封。
+- **Insight**: 聚合 gateway 是单容器部署形态的前端同源事实入口；前端必须随镜像构建并由 gateway 托管静态产物，否则“页面 URL”和“API URL”落在同一个容器上却互不相通。
+- **Action**: sync-deploy 把 sim-platform 的 Vite 构建输入（index.html/public/src/config）同步进 `.deploy`；Dockerfile 在 build 阶段跑 `pnpm --filter @assemble/sim-platform build` 并把 dist 拷入 runtime；gateway 对未命中 API 的 GET/HEAD 走静态托管，路径做解码 + 根目录包含校验。
+- **Related Files**: Dockerfile, scripts/sync-deploy.mjs, services/gateway/src/static.ts, services/gateway/src/server.ts
+- **Resolution**: `ac8803e` feat(deploy) 落地；gateway 14 项测试与本地冒烟（`/`、`/index.html`、asset、`/lines`、`/healthz`）均 200。
+
+---
+
+## LRN-20260905-004
+
+- **Category**: knowledge_gap
+- **Status**: pending
+- **Context**: 本地验证 `pnpm --filter @assemble/sim-platform build` 时输出长期停在 `transforming...`，一度被当成“卡死”，实际进程单核 94% 持续约 9 分钟（3327 modules）后正常完成。
+- **Insight**: Babylon 相关前端生产构建是重任务，无阶段日志不等于死锁；判断标准应看进程 CPU/时长，而不是等日志。镜像内 `vite build` 会让 CloudRun 每次部署叠加约数分钟构建耗时。
+- **Action**: 后续给部署/CI 留足构建超时预算，并评估 Vite 分包（manualChunks）或构建缓存能否压掉该耗时；本地等待时不要仅凭无输出就中断。
+- **Related Files**: Dockerfile, apps/sim-platform/vite.config.ts, apps/sim-platform/package.json
+
+---
+
 ## LRN-20260905-002
 
 - **Category**: best_practice
