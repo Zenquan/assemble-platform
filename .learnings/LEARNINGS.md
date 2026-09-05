@@ -8,6 +8,18 @@ Corrections, insights, and knowledge gaps captured during development.
 
 ---
 
+## LRN-20260905-005
+
+- **Category**: best_practice
+- **Status**: resolved
+- **Context**: CloudBase 云托管单容器部署此前依赖本地 `.deploy/` 代码快照与 `tcb cloudrun deploy` CLI（见 LRN-20260905-001/002/003）；后续改为云托管「通过 Git 仓库部署」绑定 GitHub `main`，由 CloudBase 直接拉源码构建。
+- **Insight**: Git 仓库部署免去本地快照同步、lockfile 快照漂移与 CLI 登录/API key 维护，代码 push `main` 即触发构建发布；`docs/DEPLOYMENT.md` 是当前部署事实源，云端仓库形态与本地 `pnpm dev` 编排互不影响。
+- **Action**: 移除 `.deploy/` 快照流程与 `scripts/sync-deploy.mjs`、失效的 `services:compose:up/down` 脚本，部署说明收敛到 `docs/DEPLOYMENT.md`。
+- **Related Files**: docs/DEPLOYMENT.md, Dockerfile, services/gateway/src/server.ts, scripts/sync-deploy.mjs, CHANGELOG.md
+- **Resolution**: 部署链路收尾提交后落地；旧快照与 CLI 学习条目视为已被本条目取代。
+
+---
+
 ## LRN-20260905-003
 
 - **Category**: best_practice

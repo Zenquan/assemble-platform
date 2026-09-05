@@ -12,7 +12,7 @@ assemble-platform/
 │  ├─ sim-platform # 仿真工作台（主应用，Vue3+Babylon，经 SimEngine 访问引擎）
 │  └─ sim-admin    # 管理后台（产线/模型/用户/权限配置，规划中）
 ├─ services/       # 后端微服务（无状态、端口隔离、各自可独立启动）
-│  ├─ gateway/          # API 网关（路由/鉴权/限流，规划中）
+│  ├─ gateway/          # 单容器聚合入口（子进程编排 5 服务 + 静态托管 + 反向代理）
 │  ├─ assembly-svc/     # 装配服务：产线/BOM/装配约束表/工艺步骤
 │  ├─ interference-svc/ # 干涉分析服务：服务端离线整线批量预检
 │  ├─ model-svc/        # 模型服务：glTF 元数据/资产版本/CDN 签名
@@ -23,7 +23,7 @@ assemble-platform/
 │  ├─ sim-utils/       # 纯数学/几何工具
 │  ├─ clearance-core/  # 干涉分析核心算法（前端实时 + 后端离线复用）
 │  └─ storage/         # 降级仓储层（内存/文件/未来 DB）
-├─ deploy/          # Dockerfile / docker-compose 编排
+├─ Dockerfile       # 单容器聚合镜像（CloudBase Git 仓库部署的构建入口）
 ├─ infra/           # 中间件与基础设施配置占位（MySQL/Redis/MQ/ES/CDN）
 ├─ docs/            # 文档（本文件所在）
 └─ scripts/         # 工程级脚本（clean 等）
@@ -154,6 +154,7 @@ AssemblyBom(parts + steps.stationId)
 
 ## 7. 已知边界 / 规划中
 
-- 当前已落地：`packages/*`（domain/sim-utils/clearance-core/storage）与根工程。
-- 规划中（见 `VERSIONING.md` 0.2.x 起）：`apps/sim-platform`（SimEngine）、5 个后端服务、gateway、Docker 编排、中间件真接入。
+- 当前已落地：`packages/*`、5 个后端服务、gateway 单容器聚合、`apps/sim-platform` 与 Dockerfile。
+- 部署链路：CloudBase 云托管「通过 Git 仓库部署」绑定 GitHub `main`，push 即构建发布（见 `DEPLOYMENT.md`）。
+- 规划中（见 `VERSIONING.md` 0.5.x 起）：中间件真接入、HA 编排、监控与发布加固。
 - 前端真实渲染依赖 Babylon 运行库与 WebGL，浏览器侧验收（playwright 截图）在 0.2.x 落地。

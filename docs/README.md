@@ -12,6 +12,7 @@
 | `TESTING.md` | 测试策略：分层/类型/性能基准门禁/提交门禁 | 动手改核心算法前必读 |
 | `sim-platform-design.md` | sim-platform 关键页（产线选择/装配工作台）**深色科技扁平**设计稿说明 + 配色令牌（高保真稿见 `apps/sim-platform/design/sim-platform-tech-mockup.html`） | 0.2.x 落地前端组件前必读 |
 | `FRESHCUT_ASSET_SPEC.md` | 果蔬/净菜加工线设备清单、尺寸、坐标、节点、材质与浏览器预算 | 新增或重做净菜设备 GLB 前必读 |
+| `DEPLOYMENT.md` | CloudBase 云托管 Git 仓库绑定部署：单容器形态、首次绑定步骤、触发与注意事项 | 部署/上线、改 Docker 或 gateway 前必读 |
 
 > 根目录 `CHANGELOG.md` 记录版本变更历史（Keep a Changelog，发布流程详见 `VERSIONING.md`）。
 

@@ -20,6 +20,7 @@
 
 ### Changed
 
+- 部署链路改为 CloudBase 云托管「通过 Git 仓库部署」绑定 GitHub `main`：push 即自动构建发布，移除本地 `.deploy/` 快照与 `tcb cloudrun deploy` 手动流程。
 - CloudBase 云托管单容器部署纳入 sim-platform 静态产物：gateway 同源托管 `index.html` 与 `/assets/*`，浏览器访问不再落到 API 404 路由。
 - 节拍面板新增后端现场实际产量、实际平均 CT、数据来源和观测时间展示，无观测时显示明确空态。
 - BOM 树按后端 `stationId` 分组并随流水线动态切换。
@@ -33,6 +34,7 @@
 
 ### Removed
 
+- 本地部署产物与脚本：`.deploy/` 快照、`scripts/sync-deploy.mjs`、空 `deploy/` 编排目录、失效的 `services:compose:up/down` 脚本。
 - 前端合成 BOM、按产线类型生成的可见盒体装配模型及 GLB 失败盒体降级。
 
 ### Fixed
