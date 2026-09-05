@@ -32,3 +32,5 @@ vitest.config.ts.timestamp-*.mjs
 # Middleware local data (degraded mode)
 .assemble-data/
 *.sqlite
+.reasonix/
+.deploy/

@@ -8,6 +8,28 @@ Corrections, insights, and knowledge gaps captured during development.
 
 ---
 
+## LRN-20260905-002
+
+- **Category**: best_practice
+- **Status**: pending
+- **Context**: CloudRun 云端构建（`tcb cloudrun deploy`）失败于 `ERR_PNPM_OUTDATED_LOCKFILE`：新增 workspace 包（`services/gateway`）后，`pnpm-lock.yaml` 没有该包的 importer 条目，云端 `pnpm install --frozen-lockfile` 直接拒绝。
+- **Insight**: Monorepo 新增 workspace 包后，必须先本地跑一次 `pnpm install`（本仓用 corepack pnpm.cjs + `--store-dir node_modules/.assemble-pnpm-store`）更新 lockfile 再部署；`--frozen-lockfile` 是 CI 默认，云端构建尤其敏感。
+- **Action**: 本仓约定「新增 services/* 或 packages/* 包 → 更新 lockfile → 提交」；`.deploy/` 快照由 `scripts/sync-deploy.mjs` 生成并同步 lockfile。
+- **Related Files**: pnpm-lock.yaml, Dockerfile, scripts/sync-deploy.mjs
+
+---
+
+## LRN-20260905-001
+
+- **Category**: knowledge_gap
+- **Status**: pending
+- **Context**: CloudBase MCP 的 `manageCloudRun(deploy)` 强制 `targetPath` 在 MCP 进程 cwd 内；本会话 MCP 固化在旧项目目录（fastapi-app）且该目录被沙箱拒写，无法用 MCP 部署云托管。
+- **Insight**: 云托管部署的兜底路径是 CloudBase CLI：`tcb login --cloudbase-api-key <api_key>`（MCP `manageAppAuth(action="createApiKey", keyType="api_key")` 生成，注意 `publish_key` 是匿名客户端 key，CLI 登录会验证失败）+ `tcb cloudrun deploy -s <name> --source <dir> --port 3000`（source 不受 MCP cwd 限制）。CLI 装在 `/tmp/tcb-cli`（`npm install --prefix /tmp/tcb-cli --cache /tmp/npm-cache-user @cloudbase/cli`，绕开 `/opt/cache/npm` 权限问题）。
+- **Action**: 后续 CloudRun 部署统一走 CLI；`.deploy/cloudbaserc.json` 已配置 envId 与 cloudrun.name。
+- **Related Files**: .deploy/cloudbaserc.json, scripts/sync-deploy.mjs
+
+---
+
 ## LRN-20260904-021
 
 - **Category**: correction
