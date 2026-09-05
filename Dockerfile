@@ -1,6 +1,6 @@
 # assemble-platform 单容器聚合部署镜像（CloudBase 云托管源码构建）
 # 5 个 Fastify 服务由 services/gateway 以子进程方式编排（127.0.0.1:7101–7105），
-# gateway 监听 PORT（云托管标准 3000）做同源前缀反代。
+# gateway 监听 PORT（云托管标准 3000）同源托管 sim-platform 静态产物并前缀反代 API。
 #
 # 构建策略：
 #   1. deps 阶段：corepack 安装 pnpm（packageManager 锁定 9.15.4），冻结 lockfile 安装
@@ -36,7 +36,8 @@ RUN pnpm --filter @assemble/assembly-svc build \
   && pnpm --filter @assemble/model-svc build \
   && pnpm --filter @assemble/takt-svc build \
   && pnpm --filter @assemble/auth-svc build \
-  && pnpm --filter @assemble/gateway build
+  && pnpm --filter @assemble/gateway build \
+  && pnpm --filter @assemble/sim-platform build
 
 FROM node:20-slim AS runtime
 ENV NODE_ENV=production
@@ -44,6 +45,8 @@ WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/services ./services
+# sim-platform Vite 产物由 gateway 静态托管（同源，无需独立静态站点/跨域）
+COPY --from=build /app/apps/sim-platform/dist ./apps/sim-platform/dist
 # model-svc 本地 GLB 回退目录（OSS 不可达时的兜底；云端事实源为 ASSEMBLE_GLB_BASE_URL）
 COPY services/model-svc/assets /app/services/model-svc/assets
 # 聚合入口监听端口（云托管探活同端口）

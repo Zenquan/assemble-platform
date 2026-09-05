@@ -10,7 +10,7 @@
  *  - packages/*：src + package.json + tsconfig.json（不含 dist/test/node_modules）
  *  - services/*：src + package.json + tsconfig.json + services/tsconfig.base.json
  *    （model-svc 的 assets/glb 一并同步，作为 OSS 未配置时的本地回退）
- *  - apps/*：仅 package.json（pnpm workspace install 需要 importer 存在）
+ *  - apps/*：Vite 构建输入（index.html/public/src/package.json/tsconfig/vite.config）
  *  - 保留 .deploy/ 下不属于仓库映射的文件（如 cloudbaserc.json），不做全量清空
  *  - 清理：.deploy 中已从仓库删除的映射文件会被移除，避免陈旧文件混入部署包
  *
@@ -40,7 +40,10 @@ const ROOT_FILES = [
 /** 每个 workspace 包需要同步的成员（相对包根） */
 const PKG_MEMBERS = ['src', 'package.json', 'tsconfig.json'];
 
-/** packages/* 与 services/* 的包名清单（apps 只同步 package.json，前端不经 CloudRun 构建） */
+/** 前端 app 需要同步的 Vite 构建输入（相对 app 根；dist/design/test 不进云构建上下文） */
+const APP_MEMBERS = ['index.html', 'public', 'src', 'package.json', 'tsconfig.json', 'vite.config.ts'];
+
+/** packages/* 与 services/* 的包名清单（apps 单独按 APP_MEMBERS 同步构建输入） */
 const PACKAGES = ['domain', 'sim-utils', 'clearance-core', 'http', 'storage'];
 const SERVICES = ['assembly-svc', 'interference-svc', 'model-svc', 'takt-svc', 'auth-svc', 'gateway'];
 
@@ -160,13 +163,23 @@ async function main() {
   }
   log(`services synced (${SERVICES.length} services)`);
 
-  // 4. apps/*（仅 package.json，pnpm workspace install 需要 importer）
+  // 4. apps/*（同步 Vite 构建输入；CloudRun 镜像内执行 `vite build` 产出 dist）
   for (const name of ['sim-platform', 'sim-admin']) {
-    const pkgJson = join(ROOT, 'apps', name, 'package.json');
-    if (!(await pathExists(pkgJson))) continue;
-    await mkdir(join(DEPLOY, 'apps', name), { recursive: true });
-    if (await syncFile(pkgJson, join(DEPLOY, 'apps', name, 'package.json'))) changed += 1;
+    const appDir = join(ROOT, 'apps', name);
+    if (!(await pathExists(appDir))) continue;
+    const dstAppDir = join(DEPLOY, 'apps', name);
+    await mkdir(dstAppDir, { recursive: true });
+    for (const member of APP_MEMBERS) {
+      const src = join(appDir, member);
+      const dst = join(dstAppDir, member);
+      if ((await pathExists(src)) && (await stat(src)).isDirectory()) {
+        changed += await syncDir(src, dst);
+      } else if (await syncFile(src, dst)) {
+        changed += 1;
+      }
+    }
   }
+  log(`apps synced (sim-platform build inputs)`);
 
   // 5. 清理 .deploy 中不属于映射集合的顶层残留（保留 KEEP_FILES 与本次写入的目录）
   const managedTops = new Set(['Dockerfile', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'tsconfig.base.json', 'packages', 'services', 'apps']);

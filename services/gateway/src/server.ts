@@ -5,7 +5,8 @@
  *   1. spawn 各后端服务子进程（127.0.0.1:7101–7105），保持服务边界与独立 dist 产物；
  *   2. 等待各服务 /healthz 就绪；
  *   3. 监听 PORT（云托管要求 3000），按 routing.ts 前缀表把同源请求转发到对应上游，
- *      并把 /healthz 聚合为网关健康探针。
+ *      把 /healthz 聚合为网关健康探针，并为未命中 API 的 GET/HEAD 托管
+ *      sim-platform 静态产物（单容器形态下前端与 API 同源）。
  *
  * 服务间仍经 HTTP 通信（interference/takt 通过默认 ASSEMBLY_SVC_URL=127.0.0.1:7101 访问
  * assembly-svc），不 import 彼此源码。
@@ -19,10 +20,13 @@ import {
   matchRoute,
   UPSTREAM_SERVICES,
 } from './routing.js';
+import { tryServeStaticFile } from './static.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env['PORT'] ?? 3000);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
+const STATIC_DIR =
+  process.env['SIM_WEB_ROOT'] ?? path.resolve(__dirname, '../../../apps/sim-platform/dist');
 const READY_TIMEOUT_MS = Number(process.env['GATEWAY_READY_TIMEOUT_MS'] ?? 30_000);
 const READY_POLL_MS = Number(process.env['GATEWAY_READY_POLL_MS'] ?? 300);
 
@@ -104,7 +108,7 @@ const spawnAll = (): ChildProcess[] => UPSTREAM_SERVICES.map(spawnUpstream);
 
 /** 反向代理主服务（node:http，流式 pipe，不缓存响应体） */
 function startProxyServer(): void {
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     const url = req.url ?? '/';
     // 仅取 pathname 参与路由；query string 原样透传给上游
     const pathname = url.split('?')[0] ?? '/';
@@ -128,6 +132,8 @@ function startProxyServer(): void {
 
     const route = matchRoute(pathname);
     if (!route) {
+      // 未匹配 API 的 GET/HEAD 尝试静态托管（sim-platform Vite 产物）
+      if (await tryServeStaticFile(req, res, pathname, STATIC_DIR)) return;
       const body = JSON.stringify({ ok: false, code: 'NOT_FOUND', message: `网关无匹配路由: ${pathname}` });
       res.writeHead(404, {
         'Content-Type': 'application/json',
