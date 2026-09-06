@@ -759,3 +759,26 @@ S4 E2E 启动 `chromium.launch({headless:true})` 直接报「Executable doesn't 
 - **Notes**: 真实 GLB 装载后持久化目标点/包围半径/alpha/beta 基准，`frameAssembly` 恢复基准并按当前视口宽高比重算距离；前端按钮语义已闭合。
 
 ---
+
+## [LRN-20260906-021] knowledge_gap
+
+**Logged**: 2026-09-06T16:15:00+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: frontend / Web3D
+
+### Summary
+Babylon 相机 `attachControl` 的第二参数是 `noPreventDefault`，传 `true` 会让视口内滚轮/捏合缩放同时触发浏览器整页缩放。
+
+### Details
+装配工作台的 ArcRotateCamera 此前以 `attachControl(canvas, true)` 挂载。参数 `true` 表示“不调用 `preventDefault()`”，因此用户在 3D 工作区用滚轮/触控板捏合缩放时，浏览器默认页面缩放也一起发生，页面整体比例被改变。改为 `false` 后，Babylon 会在视口内对滚轮/pointer 事件调用 `preventDefault()`，页面保持 100% 缩放，只有 3D 相机距离变化。
+
+### Suggested Action
+视口内由 3D 相机消费的 wheel/pinch 交互一律使用 `attachControl(canvas, false)`；拖拽后恢复相机控制时保持同一参数，避免 `noPreventDefault` 配置不一致。
+
+### Metadata
+- Source: best_practice
+- Related Files: apps/sim-platform/src/engine/babylon.ts
+- Tags: babylon, camera, wheel, preventDefault, page-zoom
+
+---

@@ -403,7 +403,9 @@ class BabylonScene implements SceneManager {
       new Vector3(0, 6, 0),
       this.scene,
     );
-    this.camera.attachControl(this.canvas, true);
+    // noPreventDefault=false：视口内的滚轮/捏合缩放由 Babylon preventDefault，
+    // 不会把浏览器整页一起放大（页面缩放比例保持不变）。
+    this.camera.attachControl(this.canvas, false);
     this.camera.lowerRadiusLimit = 8;
     this.camera.upperRadiusLimit = 300;
     this.camera.minZ = 0.1;
@@ -1075,9 +1077,10 @@ class BabylonScene implements SceneManager {
   /** 拖拽期间挂起/恢复相机轨道控制（避免旋转与零件拖拽冲突） */
   setCameraControlEnabled(on: boolean): void {
     if (!this.canvas || !this.camera) return;
-    // Babylon 9：detachControl 无参、attachControl(canvas, noPreventDefault)
+    // Babylon 9：detachControl 无参、attachControl(canvas, noPreventDefault)。
+    // noPreventDefault=false：工作区缩放时阻止页面默认缩放/滚动，页面比例保持 100%。
     if (!on) this.camera.detachControl();
-    else this.camera.attachControl(this.canvas, true);
+    else this.camera.attachControl(this.canvas, false);
   }
 }
 
