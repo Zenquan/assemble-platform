@@ -33,6 +33,7 @@
 | 节拍仿真 | `takt-svc` 基于工位数据计算目标产能、开动率、负荷与瓶颈，前端结合现场观测展示 |
 | 产线运行态 | GLB 声明驱动设备运动节点，物料沿 BOM 工位路径流转，当前工位高亮 |
 | 产线配置中心 | 可视化维护工艺类型、GLB 设备、工位节拍、设备长度与卫生转运参数 |
+| 可观测性 | 全链路 `X-Request-Id` 串联、`/metrics` 指标（Prometheus 文本）、gateway 结构化访问日志、前端 `SimMonitor` 埋点（Web Vitals / FPS / 内存） |
 
 ## 界面速览
 
@@ -93,7 +94,8 @@ assemble-platform/
 │  ├─ sim-utils/           # 纯数学 / 几何工具
 │  ├─ clearance-core/      # 干涉分析核心算法（BVH + OBB-SAT）
 │  ├─ storage/             # 内存 / 文件降级仓储
-│  └─ http/                # 统一响应信封
+│  ├─ http/                # 统一响应信封
+│  └─ observability/       # 轻量指标库（Counter/Histogram + Prometheus 文本 + request-id）
 ├─ docs/                   # 架构 / 版本 / 测试 / 协作文档
 ├─ scripts/                # dev 编排等工程脚本
 └─ Dockerfile              # CloudBase 单容器部署镜像
@@ -201,9 +203,10 @@ pnpm dev:auth
 
 ## 版本路线
 
-版本策略与里程碑出口详见 `docs/VERSIONING.md`。当前主线处于 **M3 平台化（0.4.x）**：
-多产线复用、真实 GLB 资产链路、产线配置中心与节拍实际观测已经落地；M4 加固（HA、监控、
-发布安全）与 M5 试点上线仍在前方路线中。
+版本策略与里程碑出口详见 `docs/VERSIONING.md`。当前主线处于 **M4 加固（0.5.x）**：
+0.4.x（M3 平台化，v0.4.1）的多产线复用、真实 GLB 资产链路、产线配置中心与节拍观测已发布；
+M4 加固已落地「测试与基准体系」与「监控与可观测性」两个方向，剩余 HA 部署编排、RBAC/审计/加密、
+容灾与告警推送，之后进入 M5 试点上线。
 
 ## 协作约定
 

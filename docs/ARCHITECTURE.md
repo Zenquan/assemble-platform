@@ -22,7 +22,9 @@ assemble-platform/
 │  ├─ domain/          # 领域类型契约（全工程单一事实源）
 │  ├─ sim-utils/       # 纯数学/几何工具
 │  ├─ clearance-core/  # 干涉分析核心算法（前端实时 + 后端离线复用）
-│  └─ storage/         # 降级仓储层（内存/文件/未来 DB）
+│  ├─ storage/         # 降级仓储层（内存/文件/未来 DB）
+│  ├─ http/            # 服务统一响应信封（成功 `{ok,data}` / 失败 `{ok,code,message}`）
+│  └─ observability/   # 轻量可观测性指标库（Counter/Histogram + Prometheus 文本 + request-id，零 Node 依赖，前后端同源）
 ├─ Dockerfile       # 单容器聚合镜像（CloudBase Git 仓库部署的构建入口）
 ├─ infra/           # 中间件与基础设施配置占位（MySQL/Redis/MQ/ES/CDN）
 ├─ docs/            # 文档（本文件所在）
@@ -150,7 +152,7 @@ AssemblyBom(parts + steps.stationId)
 |----|------|
 | 模块导出 | 每个 `package` 通过 `src/index.ts` 聚合导出；外部只用包入口，不深路径 `import 包/src/...` |
 | TS 配置 | 统一继承根 `tsconfig.base.json`；`strict + noUncheckedIndexedAccess + noImplicitOverride` |
-| 纯代码 vs 依赖 | `sim-utils`、`clearance-core`、`domain` 保持**无 DOM/Node 专属依赖**，浏览器与后端一致可用 |
+| 纯代码 vs 依赖 | `sim-utils`、`clearance-core`、`domain`、`observability` 保持**无 DOM/Node 专属依赖**，浏览器与后端一致可用 |
 | 包内脚本 | 统一提供 `build` / `typecheck` / `test`（vitest） |
 | 测试 | 单测放各包 `test/`，走根 `vitest.config.ts`（alias 到源码，无需先 build） |
 
@@ -158,5 +160,5 @@ AssemblyBom(parts + steps.stationId)
 
 - 当前已落地：`packages/*`、5 个后端服务、gateway 单容器聚合、`apps/sim-platform` 与 Dockerfile。
 - 部署链路：CloudBase 云托管「通过 Git 仓库部署」绑定 GitHub `main`，push 即构建发布（见 `DEPLOYMENT.md`）。
-- 规划中（见 `VERSIONING.md` 0.5.x 起）：中间件真接入、HA 编排、监控与发布加固。
+- 规划中（见 `VERSIONING.md` 0.5.x 起）：中间件真接入、HA 部署编排、RBAC/审计/加密与容灾。0.5.x 已落地「测试与基准体系」「监控与可观测性」两个方向（`TESTING.md` / `OBSERVABILITY.md`）。
 - 前端真实渲染依赖 Babylon 运行库与 WebGL，浏览器侧验收（playwright 截图）在 0.2.x 落地。

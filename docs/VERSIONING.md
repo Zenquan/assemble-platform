@@ -30,7 +30,12 @@
 
 > 当前仓库版本基线：根 `package.json` 与 `apps/sim-platform` 记为 `0.4.1`，对应下方 `0.4.x` 行（`v0.4.1` tag 已发；0.4.0 里程碑未单独发 tag，与 0.4.1 一并归档）。版本号统一由**根包**号代表「平台整体版本」，各 workspace 包随发布同步主版本（早期用同一主版号更易管理）。
 >
-> 进度注记：**0.2.0 出口两门禁、v0.3.0（M2 MVP）均已闭合发布**；**0.4.x（M3 平台化）已发布 v0.4.1**：真实 GLB 资产管线、净菜多产线（分拣 / 净菜 / 冷链 3 类 `kind`、5 条种子线共享 13 个 GLB 资产库）、后端归属 BOM / 节拍 / 物料流转、CloudBase 单容器 Git 部署。出口门禁「3 类产线复用」已具备；「资产复用 ≥70%」以资产库多线共享落地，度量口径已在 0.5.x 固化为可执行指标（`pnpm metrics`，复用率 75% 达标）。下一站进入 **0.5.x（M4 加固期：HA 部署、RBAC/审计/加密、监控告警与基准体系）**。
+> 进度注记：**0.2.0 出口两门禁、v0.3.0（M2 MVP）均已闭合发布**；**0.4.x（M3 平台化）已发布 v0.4.1**：真实 GLB 资产管线、净菜多产线（分拣 / 净菜 / 冷链 3 类 `kind`、5 条种子线共享 13 个 GLB 资产库）、后端归属 BOM / 节拍 / 物料流转、CloudBase 单容器 Git 部署。出口门禁「3 类产线复用」已具备；「资产复用 ≥70%」以资产库多线共享落地，度量口径已在 0.5.x 固化为可执行指标（`pnpm metrics`，复用率 75% 达标）。进入 **0.5.x（M4 加固期）**。
+>
+> **0.5.x（M4 加固）进行中**，已落地两个方向：
+> - **测试与基准体系**：CI 门禁链（GitHub Actions，push/PR 自动 `build:all`+`typecheck:all`+`test:all`）、覆盖率门禁（核心算法包 lines/functions/statements ≥80%、branches ≥75%）、性能基准独立化（`pnpm bench` 产出可对比 JSON，`runFull.200 <200ms` 门禁）、资产复用率度量（`pnpm metrics`，复用率 75% 达标）+ E2E 视觉回归骨架。详见 `TESTING.md`。
+> - **监控与可观测性**：新增 `@assemble/observability` 纯 TS 指标库；5 服务接入 `/metrics` 与 `X-Request-Id` 跨服务透传；gateway 结构化访问日志 + `/metrics` 聚合 5 上游 + `/telemetry`；前端 `SimMonitor` 埋点（Web Vitals / FPS / 内存）节流批量上报。详见 `OBSERVABILITY.md`。
+> - 剩余方向：HA 部署编排、RBAC/审计/加密、容灾与告警推送（告警阈值已在 `OBSERVABILITY.md` 预留，接入留 HA 方向）。
 
 ## 2. 各阶段（0.x）的工程内落地指引
 
