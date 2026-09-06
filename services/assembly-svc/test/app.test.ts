@@ -237,3 +237,33 @@ describe('GET /lines/:id/bom', () => {
     await app.close();
   });
 });
+
+describe('可观测性：/metrics 与 X-Request-Id', () => {
+  it('/metrics 返回 Prometheus 文本并累计请求计数', async () => {
+    const app = await appWith();
+    await app.inject({ method: 'GET', url: '/lines/missing/bom' });
+    const res = await app.inject({ method: 'GET', url: '/metrics' });
+
+    expect(res.statusCode).toBe(200);
+    expect(String(res.headers['content-type'] ?? '')).toContain('text/plain');
+    expect(res.body).toContain('# TYPE http_requests_total counter');
+    expect(res.body).toContain('# TYPE http_request_duration_seconds histogram');
+    expect(res.body).toContain('status="404"');
+    await app.close();
+  });
+
+  it('响应头回显透传的 x-request-id，无则自动生成', async () => {
+    const app = await appWith();
+    const withId = await app.inject({
+      method: 'GET',
+      url: '/lines/missing/bom',
+      headers: { 'x-request-id': 'req-test-1' },
+    });
+    expect(withId.headers['x-request-id']).toBe('req-test-1');
+
+    const withoutId = await app.inject({ method: 'GET', url: '/lines/missing/bom' });
+    expect(withoutId.headers['x-request-id']).toBeDefined();
+    expect(withoutId.headers['x-request-id']).not.toBe('');
+    await app.close();
+  });
+});

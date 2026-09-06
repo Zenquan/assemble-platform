@@ -1,5 +1,11 @@
 import type { AuthPrincipal, PermissionAction, Role } from '@assemble/domain';
 import { err, ok } from '@assemble/http';
+import {
+  createHttpMetrics,
+  MetricsRegistry,
+  REQUEST_ID_HEADER,
+  renderPrometheusText,
+} from '@assemble/observability';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { permissionsFor } from './rbac.js';
 import { createAuthRepos, type AuthRepos, writeAudit } from './repositories/index.js';
@@ -26,14 +32,31 @@ function buildPrincipal(body: TokenBody): AuthPrincipal {
 }
 
 export function buildApp(deps?: { repos?: AuthRepos }): FastifyInstance {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, requestIdHeader: REQUEST_ID_HEADER });
   const repos = deps?.repos ?? createAuthRepos();
+  const registry = new MetricsRegistry();
+  const httpMetrics = createHttpMetrics(registry);
+  const startedAt = new WeakMap<object, number>();
+
+  app.addHook('onRequest', async (req, reply) => {
+    startedAt.set(req, httpMetrics.startRequest());
+    reply.header(REQUEST_ID_HEADER, req.id);
+  });
+  app.addHook('onResponse', async (req, reply) => {
+    const t0 = startedAt.get(req) ?? httpMetrics.startRequest();
+    httpMetrics.record(t0, req.method, req.routeOptions.url ?? req.url ?? '', reply.statusCode);
+  });
 
   app.get('/healthz', async () => ({
     status: 'ok',
     service: 'auth-svc',
     time: new Date().toISOString(),
   }));
+
+  app.get('/metrics', async (_req, reply) => {
+    reply.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    return renderPrometheusText(registry);
+  });
 
   app.get('/auth/roles', async () =>
     ok(['super_admin', 'production_engineer', 'simulation_engineer', 'trainer', 'manager', 'viewer']),

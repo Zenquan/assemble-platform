@@ -10,6 +10,7 @@ export default defineConfig({
       '@assemble/domain': r('./packages/domain/src/index.ts'),
       '@assemble/sim-utils': r('./packages/sim-utils/src/index.ts'),
       '@assemble/clearance-core': r('./packages/clearance-core/src/index.ts'),
+      '@assemble/observability': r('./packages/observability/src/index.ts'),
     },
   },
   test: {

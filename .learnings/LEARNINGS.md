@@ -810,3 +810,15 @@ Babylon 相机 `attachControl` 的第二参数是 `noPreventDefault`，传 `true
 - **Notes**: 真实包络/BOM 预检、工作台处理闭环、端面相贴容差均已实现并通过类型检查/单测/服务联调。
 
 ---
+
+## LRN-20260907-001
+
+- **Category**: best_practice
+- **Status**: resolved
+- **Context**: M4「监控与可观测性」M1 落地时，给 5 个 Fastify v5 服务统一接入 `/metrics` 与 `X-Request-Id` 透传，遇到三处 API/时序坑导致响应头不生效、类型报错。
+- **Insight**: ① Fastify v5 的 `FastifyRequest` 类型**无 `routerPath`**，路由模板在 `req.routeOptions.url`（`string | undefined`，404 时为 undefined，需 `?? req.url ?? ''` 兜底）。② **`onResponse` hook 里 `reply.header()` 无效**（响应已发送），要在 `onRequest` 里提前设置响应头。③ 新增 workspace 包必须先 `build` 出 `dist/index.d.ts` 才能被依赖方 tsc 解析（exports 指向 dist）；install 后链接才建在各服务 `node_modules/@assemble/`。
+- **Action**: 统一接入模式固化在 `packages/observability`（`createHttpMetrics` + `renderPrometheusText` + `REQUEST_ID_HEADER`）；服务层只写约 10 行 hook 胶水。跨服务 request-id 用 `requestIdHeader: 'x-request-id'` 让 Fastify 自动采纳上游 id。
+- **Related Files**: packages/observability/src/*, services/*/src/app.ts, vitest.config.ts
+- **Resolution**: commit `76c04d1`，全仓 typecheck + test 绿，inject 冒烟验证 `/metrics` 文本、X-Request-Id 回显、跨服务透传。
+
+---

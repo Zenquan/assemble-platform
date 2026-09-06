@@ -1,5 +1,11 @@
 import { err, ok } from '@assemble/http';
 import type { AssemblyPart } from '@assemble/domain';
+import {
+  createHttpMetrics,
+  MetricsRegistry,
+  REQUEST_ID_HEADER,
+  renderPrometheusText,
+} from '@assemble/observability';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { runOfflineCheck } from './offlineCheck.js';
 
@@ -32,11 +38,13 @@ async function fetchAssemblyData(
   lineId: string,
   baseUrl: string,
   fetchImpl: typeof fetch,
+  requestId?: string,
 ): Promise<{ line: AssemblyLine; bom: AssemblyBom }> {
   const encodedId = encodeURIComponent(lineId);
+  const headers = requestId ? { [REQUEST_ID_HEADER]: requestId } : undefined;
   const [lineResponse, bomResponse] = await Promise.all([
-    fetchImpl(`${baseUrl}/lines/${encodedId}`),
-    fetchImpl(`${baseUrl}/lines/${encodedId}/bom`),
+    fetchImpl(`${baseUrl}/lines/${encodedId}`, { headers }),
+    fetchImpl(`${baseUrl}/lines/${encodedId}/bom`, { headers }),
   ]);
   const lineEnvelope = await lineResponse.json() as Envelope<AssemblyLine>;
   const bomEnvelope = await bomResponse.json() as Envelope<AssemblyBom>;
@@ -53,15 +61,32 @@ async function fetchAssemblyData(
 }
 
 export function buildApp(deps: InterferenceAppDeps = {}): FastifyInstance {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, requestIdHeader: REQUEST_ID_HEADER });
   const assemblyBaseUrl = deps.assemblyBaseUrl ?? process.env['ASSEMBLY_SVC_URL'] ?? 'http://127.0.0.1:7101';
   const fetchImpl = deps.fetchImpl ?? fetch;
+  const registry = new MetricsRegistry();
+  const httpMetrics = createHttpMetrics(registry);
+  const startedAt = new WeakMap<object, number>();
+
+  app.addHook('onRequest', async (req, reply) => {
+    startedAt.set(req, httpMetrics.startRequest());
+    reply.header(REQUEST_ID_HEADER, req.id);
+  });
+  app.addHook('onResponse', async (req, reply) => {
+    const t0 = startedAt.get(req) ?? httpMetrics.startRequest();
+    httpMetrics.record(t0, req.method, req.routeOptions.url ?? req.url ?? '', reply.statusCode);
+  });
 
   app.get('/healthz', async () => ({
     status: 'ok',
     service: 'interference-svc',
     time: new Date().toISOString(),
   }));
+
+  app.get('/metrics', async (_req, reply) => {
+    reply.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    return renderPrometheusText(registry);
+  });
 
   // 离线整线批量预检入口
   app.post<{ Body: InterferenceCheckBody }>(
@@ -72,7 +97,7 @@ export function buildApp(deps: InterferenceAppDeps = {}): FastifyInstance {
         return reply.status(400).send(err('VALIDATION_FAILED', '缺少 lineId'));
       }
       try {
-        const { line, bom } = await fetchAssemblyData(lineId, assemblyBaseUrl, fetchImpl);
+        const { line, bom } = await fetchAssemblyData(lineId, assemblyBaseUrl, fetchImpl, req.id);
         const { report } = runOfflineCheck({
           lineId,
           parts: bom.parts,

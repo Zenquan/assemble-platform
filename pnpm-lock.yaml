@@ -86,6 +86,15 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  packages/observability:
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)
+
   packages/sim-utils:
     dependencies:
       '@assemble/domain':
@@ -126,6 +135,9 @@ importers:
       '@assemble/http':
         specifier: workspace:*
         version: link:../../packages/http
+      '@assemble/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@assemble/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -151,6 +163,9 @@ importers:
       '@assemble/http':
         specifier: workspace:*
         version: link:../../packages/http
+      '@assemble/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@assemble/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -169,6 +184,10 @@ importers:
         version: 2.1.9(@types/node@22.20.1)
 
   services/gateway:
+    dependencies:
+      '@assemble/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
@@ -191,6 +210,9 @@ importers:
       '@assemble/http':
         specifier: workspace:*
         version: link:../../packages/http
+      '@assemble/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@assemble/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -216,6 +238,9 @@ importers:
       '@assemble/http':
         specifier: workspace:*
         version: link:../../packages/http
+      '@assemble/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@assemble/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -241,6 +266,9 @@ importers:
       '@assemble/http':
         specifier: workspace:*
         version: link:../../packages/http
+      '@assemble/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@assemble/storage':
         specifier: workspace:*
         version: link:../../packages/storage

@@ -12,9 +12,26 @@
  * assembly-svc），不 import 彼此源码。
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer, request as httpRequest } from 'node:http';
+import {
+  createServer,
+  request as httpRequest,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { REQUEST_ID_HEADER } from '@assemble/observability';
+import {
+  fetchUpstreamMetricsText,
+  gatewayHttpMetrics,
+  getOrCreateRequestId,
+  logJson,
+  recordTelemetry,
+  readJsonBody,
+  renderGatewayMetrics,
+  type TelemetrySample,
+  type UpstreamMetricsText,
+} from './observability.js';
 import {
   GATEWAY_OWN_PATHS,
   matchRoute,
@@ -30,7 +47,7 @@ const STATIC_DIR =
 const READY_TIMEOUT_MS = Number(process.env['GATEWAY_READY_TIMEOUT_MS'] ?? 30_000);
 const READY_POLL_MS = Number(process.env['GATEWAY_READY_POLL_MS'] ?? 300);
 
-const log = (msg: string): void => console.log(`[gateway] ${msg}`);
+const log = (msg: string): void => logJson('info', msg);
 
 /** 启动一个上游服务子进程（继承 stdout/stderr；端口/监听地址由 env 覆盖） */
 function spawnUpstream(service: (typeof UPSTREAM_SERVICES)[number]): ChildProcess {
@@ -106,32 +123,110 @@ async function aggregateHealth(): Promise<Record<string, unknown>> {
 
 const spawnAll = (): ChildProcess[] => UPSTREAM_SERVICES.map(spawnUpstream);
 
+/** 聚合 /metrics：gateway 自身指标 + 上拉各上游 /metrics 注入 service 标签合并 */
+async function handleMetrics(res: ServerResponse): Promise<void> {
+  const upstreams: UpstreamMetricsText[] = [];
+  for (const s of UPSTREAM_SERVICES) {
+    try {
+      upstreams.push({ service: s.service, text: await fetchUpstreamMetricsText(s.port) });
+    } catch (err) {
+      // 单个上游拉取失败不阻断整体，日志记录后跳过（degraded 聚合）
+      logJson('warn', 'upstream metrics fetch failed', {
+        service: s.service,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  const body = renderGatewayMetrics(upstreams);
+  res.writeHead(200, {
+    'Content-Type': 'text/plain; version=0.0.4; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body),
+  });
+  res.end(body);
+}
+
+/** 接收前端 SimMonitor 上报的 telemetry 样本，内存聚合后返回 ok */
+async function handleTelemetry(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method !== 'POST') {
+    const body = JSON.stringify({
+      ok: false,
+      code: 'METHOD_NOT_ALLOWED',
+      message: 'telemetry 仅接受 POST',
+    });
+    res.writeHead(405, {
+      'Content-Type': 'application/json',
+      Allow: 'POST',
+      'Content-Length': Buffer.byteLength(body),
+    });
+    res.end(body);
+    return;
+  }
+  const payload = await readJsonBody(req);
+  const rawSamples =
+    payload !== null && typeof payload === 'object' && Array.isArray((payload as { samples?: unknown }).samples)
+      ? ((payload as { samples: TelemetrySample[] }).samples)
+      : [];
+  const received = recordTelemetry(rawSamples);
+  const resp = JSON.stringify({ ok: true, data: { received } });
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(resp),
+  });
+  res.end(resp);
+}
+
 /** 反向代理主服务（node:http，流式 pipe，不缓存响应体） */
 function startProxyServer(): void {
   const server = createServer(async (req, res) => {
     const url = req.url ?? '/';
     // 仅取 pathname 参与路由；query string 原样透传给上游
     const pathname = url.split('?')[0] ?? '/';
+    const startedAt = gatewayHttpMetrics.startRequest();
+    const requestId = getOrCreateRequestId(req);
+    // gateway 自身所有响应都回显 request-id，供前端/下游串链路
+    res.setHeader(REQUEST_ID_HEADER, requestId);
+
+    const matchedRoute = matchRoute(pathname);
+    // route 标签收敛：上游前缀 / gateway 自有路径 / 其它（静态与 404 归并，避免高基数）
+    const routeLabel =
+      matchedRoute?.prefix ?? (GATEWAY_OWN_PATHS.includes(pathname) ? pathname : 'other');
+
+    res.on('finish', () => {
+      gatewayHttpMetrics.record(startedAt, req.method ?? 'GET', routeLabel, res.statusCode);
+      logJson('info', 'access', {
+        method: req.method ?? 'GET',
+        path: pathname,
+        status: res.statusCode,
+        durationMs: Date.now() - startedAt,
+        requestId,
+        upstream: matchedRoute?.service ?? 'gateway',
+      });
+    });
 
     if (GATEWAY_OWN_PATHS.includes(pathname)) {
-      aggregateHealth()
-        .then((health) => {
-          const body = JSON.stringify(health);
-          res.writeHead(health.status === 'ok' ? 200 : 503, {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(body),
+      if (pathname === '/metrics') {
+        await handleMetrics(res);
+      } else if (pathname === '/telemetry') {
+        await handleTelemetry(req, res);
+      } else {
+        aggregateHealth()
+          .then((health) => {
+            const body = JSON.stringify(health);
+            res.writeHead(health.status === 'ok' ? 200 : 503, {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(body),
+            });
+            res.end(body);
+          })
+          .catch(() => {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'error', service: 'gateway' }));
           });
-          res.end(body);
-        })
-        .catch(() => {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ status: 'error', service: 'gateway' }));
-        });
+      }
       return;
     }
 
-    const route = matchRoute(pathname);
-    if (!route) {
+    if (!matchedRoute) {
       // 未匹配 API 的 GET/HEAD 尝试静态托管（sim-platform Vite 产物）
       if (await tryServeStaticFile(req, res, pathname, STATIC_DIR)) return;
       const body = JSON.stringify({ ok: false, code: 'NOT_FOUND', message: `网关无匹配路由: ${pathname}` });
@@ -148,10 +243,12 @@ function startProxyServer(): void {
     for (const hop of ['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']) {
       delete headers[hop];
     }
-    headers['host'] = `127.0.0.1:${route.port}`;
+    headers['host'] = `127.0.0.1:${matchedRoute.port}`;
+    // 透传 request-id 给上游，让服务日志与本条链路串起来
+    headers[REQUEST_ID_HEADER] = requestId;
 
     const upstream = httpRequest(
-      { host: '127.0.0.1', port: route.port, path: url, method: req.method, headers },
+      { host: '127.0.0.1', port: matchedRoute.port, path: url, method: req.method, headers },
       (upRes) => {
         res.writeHead(upRes.statusCode ?? 502, upRes.headers);
         upRes.pipe(res);
@@ -165,7 +262,7 @@ function startProxyServer(): void {
       const body = JSON.stringify({
         ok: false,
         code: 'BAD_GATEWAY',
-        message: `上游 ${route.service} 不可用: ${err.message}`,
+        message: `上游 ${matchedRoute.service} 不可用: ${err.message}`,
       });
       res.writeHead(502, {
         'Content-Type': 'application/json',
@@ -186,7 +283,9 @@ async function main(): Promise<void> {
   try {
     await waitForUpstreams([...UPSTREAM_SERVICES]);
   } catch (err) {
-    console.error(`[gateway] ${err instanceof Error ? err.message : String(err)}`);
+    logJson('error', 'gateway startup failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
     process.exit(1);
   }
   startProxyServer();

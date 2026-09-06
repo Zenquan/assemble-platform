@@ -1,20 +1,23 @@
 {
-  "name": "@assemble/gateway",
+  "name": "@assemble/observability",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "start": "node dist/server.js",
-    "dev": "node --watch dist/server.js",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@assemble/observability": "workspace:*"
-  },
   "devDependencies": {
-    "@types/node": "^22.10.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
   }

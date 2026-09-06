@@ -4,6 +4,12 @@ import {
   type ModelAssetVersion,
 } from '@assemble/domain';
 import { err, ok } from '@assemble/http';
+import {
+  createHttpMetrics,
+  MetricsRegistry,
+  REQUEST_ID_HEADER,
+  renderPrometheusText,
+} from '@assemble/observability';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
@@ -37,9 +43,21 @@ export function buildApp(deps?: {
   glbOssBaseUrl?: string;
   fetchImpl?: typeof fetch;
 }): FastifyInstance {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, requestIdHeader: REQUEST_ID_HEADER });
   const repos = deps?.repos ?? createModelRepos();
   const fetchImpl = deps?.fetchImpl ?? fetch;
+  const registry = new MetricsRegistry();
+  const httpMetrics = createHttpMetrics(registry);
+  const startedAt = new WeakMap<object, number>();
+
+  app.addHook('onRequest', async (req, reply) => {
+    startedAt.set(req, httpMetrics.startRequest());
+    reply.header(REQUEST_ID_HEADER, req.id);
+  });
+  app.addHook('onResponse', async (req, reply) => {
+    const t0 = startedAt.get(req) ?? httpMetrics.startRequest();
+    httpMetrics.record(t0, req.method, req.routeOptions.url ?? req.url ?? '', reply.statusCode);
+  });
   // 云端部署：设备 GLB 存放于对象存储（CloudBase 云存储桶 / COS），服务端拉取后同源回给
   // 前端（免浏览器跨域）。未配置时保持本地文件路径（本地开发行为不变）。
   const glbOssBase = deps?.glbOssBaseUrl ?? process.env['ASSEMBLE_GLB_BASE_URL']?.replace(/\/+$/, '');
@@ -49,6 +67,11 @@ export function buildApp(deps?: {
     service: 'model-svc',
     time: new Date().toISOString(),
   }));
+
+  app.get('/metrics', async (_req, reply) => {
+    reply.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    return renderPrometheusText(registry);
+  });
 
   app.get('/model/assets', async () => ok(await repos.assets.list()));
 

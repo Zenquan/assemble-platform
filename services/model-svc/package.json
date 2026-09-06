@@ -13,6 +13,7 @@
   "dependencies": {
     "@assemble/domain": "workspace:*",
     "@assemble/http": "workspace:*",
+    "@assemble/observability": "workspace:*",
     "@assemble/storage": "workspace:*",
     "fastify": "^5.2.0"
   },
