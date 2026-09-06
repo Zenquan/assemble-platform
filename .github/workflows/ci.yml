@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 构建 + 类型检查 + 全仓测试（含 clearance-core 200 件 <200ms 性能门禁）
+  build-typecheck-test:
+    name: build / typecheck / test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (topological)
+        run: pnpm build:all
+
+      - name: Typecheck (all workspace)
+        run: pnpm typecheck:all
+
+      - name: Test (all workspace, incl. perf gate)
+        run: pnpm test:all
+
+      - name: Coverage gate (clearance-core + sim-utils)
+        run: pnpm test:coverage

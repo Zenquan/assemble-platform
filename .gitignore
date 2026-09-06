@@ -19,6 +19,9 @@ coverage/
 apps/sim-platform/public/gltf/
 *.glb.draco.json
 
+# WorkBuddy 本地会话数据（非团队共享，不入库）
+.workbuddy/
+
 # IDE / OS
 .DS_Store
 .idea/

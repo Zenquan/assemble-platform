@@ -13,9 +13,14 @@
     "dev": "node scripts/dev.mjs",
     "dev:all": "node scripts/dev.mjs --all",
     "build": "pnpm -r --filter \"./packages/**\" run build",
+    "build:all": "pnpm -r --sort run build",
     "typecheck": "pnpm -r --filter \"./packages/**\" run typecheck",
+    "typecheck:all": "pnpm -r run typecheck",
     "test": "pnpm -r --filter \"./packages/**\" run test",
     "test:services": "pnpm -r --filter \"./services/**\" run test",
+    "test:all": "pnpm -r --if-present run test",
+    "test:coverage": "vitest run --coverage",
+    "ci": "pnpm build:all && pnpm typecheck:all && pnpm test:all",
     "dev:platform": "pnpm --filter @assemble/sim-platform dev",
     "dev:gateway": "pnpm --filter @assemble/gateway dev",
     "dev:assembly": "pnpm --filter @assemble/assembly-svc dev",
@@ -23,5 +28,8 @@
     "dev:model": "pnpm --filter @assemble/model-svc dev",
     "dev:takt": "pnpm --filter @assemble/takt-svc dev",
     "dev:auth": "pnpm --filter @assemble/auth-svc dev"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "2.1.9"
   }
 }
