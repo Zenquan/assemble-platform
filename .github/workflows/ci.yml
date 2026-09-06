@@ -42,3 +42,6 @@ jobs:
 
       - name: Test (all workspace, incl. perf gate)
         run: pnpm test:all
+
+      - name: Coverage gate (clearance-core + sim-utils)
+        run: pnpm test:coverage

@@ -64,6 +64,8 @@ pnpm typecheck
 
 ## 6. 覆盖率与回归
 
-- 不做覆盖率数字的教条式 KPI，但**核心算法（bvh/obbSat/detector）改动必须新增几何用例**证明正确性。
+- **覆盖率门禁已落地**（`pnpm test:coverage`，已并入 CI）：对核心算法包 `clearance-core` + `sim-utils` 强制 `lines/functions/statements ≥80%`、`branches ≥75%`。阈值在根 `vitest.config.ts` 的 `coverage.thresholds`。
+  - `branches` 单独放宽到 75% 的原因：`math.ts`/`obb.ts` 含大量防御性 `?? 0`/`|| 1` 兜底分支（类型层已保证非空），无法通过有意义用例触发，不为凑数字写无意义测试。
+- 不做覆盖率的教条式 KPI（骨架/服务/前端包不强制数字），但**核心算法（bvh/obbSat/detector）改动必须新增几何用例**证明正确性。
 - 回归靠两条：① Conventional Commit 的可追溯性（见 GIT_GUIDE）；② 性能/行为阈值用例随版本固化在 `test/`。
 - 修复 bug 先补一条能复现该 bug 的用例再改实现（红→绿），防止同一坑复发。

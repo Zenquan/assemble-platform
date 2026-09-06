@@ -95,6 +95,7 @@ git push origin main
 | 构建 | `pnpm build:all` | 全 workspace 拓扑构建（`pnpm -r --sort`） |
 | 类型检查 | `pnpm typecheck:all` | 全 workspace `tsc --noEmit`（含 sim-platform `vue-tsc`） |
 | 测试 | `pnpm test:all` | packages + services + apps 全量单测，**含 clearance-core 200 件 `runFull <200ms` 性能回归门禁** |
+| 覆盖率 | `pnpm test:coverage` | 核心算法包（clearance-core / sim-utils）lines/functions/statements ≥80%、branches ≥75% |
 
 本地一键复现整条门禁：`pnpm ci`（= `build:all` + `typecheck:all` + `test:all`）。
 
