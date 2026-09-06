@@ -30,7 +30,7 @@
 ## 本仓快速事实
 
 - **包管理**：pnpm（`pnpm-lock.yaml`），Monorepo。本环境用 corepack 的 pnpm 调入口；`.npmrc` 强制 `node-linker=hoisted`。
-- **版本迭代走分支**：每个版本/里程碑（0.2.0/0.3.x…）开 `feat/<版本>-<名>` 分支，小步 commit 到该分支，收尾 merge 回 `main`。**已合并的版本/里程碑分支保留不删**（利于按版本归因错误与回溯 diff，用户明确约定）。已保留分支：`feat/0.1.0-baseline`（v0.1.0 M1 技术验证基线，指向 `2da0421`，即引入 Vue 前端代码前的状态）＋ `feat/0.2.0-services-runtime` / `feat/0.2.0-sim-platform` / `feat/0.2.0-clean-ready-line` / `feat/0.2.0-babylon-render`（闭合 0.2.0「浏览器渲染装配」出口）＋ `feat/0.3.0-s1-distinct-render` / `feat/0.3.0-s2-assembly-anim` / `feat/0.3.0-s3-manual-drag` / `feat/0.3.0-s4-bom-takt`（闭合 0.3.0「交互式装配仿真」S1–S4）。
+- **版本迭代走分支**：每个版本/里程碑（0.2.0/0.3.x/0.4.x…）开 `feat/<版本>-<名>` 分支，小步 commit 到该分支，收尾 merge 回 `main`。**已合并的版本/里程碑分支保留不删**（利于按版本归因错误与回溯 diff，用户明确约定）。已保留分支：`feat/0.1.0-baseline`（v0.1.0 M1 技术验证基线，指向 `2da0421`，即引入 Vue 前端代码前的状态）＋ `feat/0.2.0-services-runtime` / `feat/0.2.0-sim-platform` / `feat/0.2.0-clean-ready-line` / `feat/0.2.0-babylon-render`（闭合 0.2.0「浏览器渲染装配」出口）＋ `feat/0.3.0-s1-distinct-render` / `feat/0.3.0-s2-assembly-anim` / `feat/0.3.0-s3-manual-drag` / `feat/0.3.0-s4-bom-takt`（闭合 0.3.0「交互式装配仿真」S1–S4）＋ `feat/0.4.0-glb-asset-pipeline` / `feat/0.4.1-fresh-produce-sorting`（闭合 0.4.x「M3 平台化」GLB 资产管线与净菜多产线）。
 - **仓库**：本目录是**独立 git 仓**（main 主干），不从属于父 resume 仓。
 - **共享层**：`packages/*`（domain/sim-utils/clearance-core/storage/http）。契约先动 `domain`，纯算法无 DOM。
 - **性能红线**：clearance-core **200 件 `runFull <200ms`** 不得突破。

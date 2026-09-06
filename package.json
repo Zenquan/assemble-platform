@@ -1,6 +1,6 @@
 {
   "name": "assemble-platform",
-  "version": "0.3.0",
+  "version": "0.4.1",
   "private": true,
   "description": "产线 3D 装配仿真平台 · 工业级 Web3D 工程（Monorepo）",
   "type": "module",

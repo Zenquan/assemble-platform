@@ -1,6 +1,6 @@
 {
   "name": "@assemble/sim-platform",
-  "version": "0.3.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "description": "产线 3D 装配仿真工作台（主应用，Vue3 + SimEngine 门面）",

@@ -36,7 +36,7 @@ Failed to read file: No such file or directory
 
 **Logged**: 2026-09-04T17:15:00+08:00
 **Priority**: low
-**Status**: pending
+**Status**: resolved
 **Area**: tests
 
 ### Summary
@@ -58,6 +58,11 @@ No test files found, exiting with code 1
 - Reproducible: yes
 - Related Files: packages/domain/package.json, packages/domain/src/rhythm.ts
 - Tags: vitest, domain, baseline
+
+### Resolution
+- **Resolved**: 2026-09-06T16:00:00+08:00
+- **Commit**: `d8784b1`（chore(release) v0.4.1）
+- **Notes**: 空测试包统一改为 `vitest run --passWithNoTests`（domain/storage/auth-svc），根 `pnpm test` 与 `pnpm test:services` 全绿；约定见 `docs/TESTING.md`。
 
 ---
 
@@ -367,7 +372,7 @@ src/taktCore.ts(32,43): error TS18048: 'req.targetUnitsPerHour' is possibly 'und
 
 **Logged**: 2026-09-04T11:43:00+08:00
 **Priority**: low
-**Status**: pending
+**Status**: resolved
 **Area**: tests
 
 ### Summary
@@ -387,6 +392,11 @@ src/taktCore.ts(32,43): error TS18048: 'req.targetUnitsPerHour' is possibly 'und
 ### Metadata
 - Reproducible: yes
 - Related Files: packages/domain/package.json, packages/domain/src
+
+### Resolution
+- **Resolved**: 2026-09-06T16:00:00+08:00
+- **Commit**: `d8784b1`（chore(release) v0.4.1）
+- **Notes**: 与 ERR-20260904-043 同源，`--passWithNoTests` 修复后关闭；契约/骨架包后续仍可补真用例但不再阻塞全仓测试门禁。
 
 ---
 
