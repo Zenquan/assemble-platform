@@ -48,3 +48,6 @@ jobs:
 
       - name: Perf benchmark gate (clearance-core runFull.200 median < 200ms)
         run: node scripts/bench-clearance.mjs --quiet
+
+      - name: Asset reuse metric gate (≥70%)
+        run: node scripts/metric-asset-reuse.mjs

@@ -31,6 +31,13 @@ apps/sim-platform/public/gltf/
 # 性能基准报告（本地趋势，不入库）
 .bench/
 
+# 平台指标报告（本地留痕，不入库）
+.metrics/
+
+# E2E 视觉回归未通过时的 diff 产物
+test-results/
+playwright-report/
+
 # Vitest 临时产物
 vitest.config.ts.timestamp-*.mjs
 *.timestamp-*.mjs

@@ -21,6 +21,8 @@
     "test:all": "pnpm -r --if-present run test",
     "test:coverage": "vitest run --coverage",
     "bench": "node scripts/bench-clearance.mjs",
+    "metrics": "node scripts/metric-asset-reuse.mjs",
+    "e2e": "playwright test",
     "ci": "pnpm build:all && pnpm typecheck:all && pnpm test:all",
     "dev:platform": "pnpm --filter @assemble/sim-platform dev",
     "dev:gateway": "pnpm --filter @assemble/gateway dev",
@@ -31,6 +33,7 @@
     "dev:auth": "pnpm --filter @assemble/auth-svc dev"
   },
   "devDependencies": {
+    "@playwright/test": "1.48.2",
     "@vitest/coverage-v8": "2.1.9"
   }
 }
