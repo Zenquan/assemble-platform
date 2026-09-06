@@ -53,10 +53,12 @@ pnpm typecheck
 
 ## 5. 提交 / 评审门禁（与 GIT_GUIDE 衔接）
 
+> CI 已落地（`.github/workflows/ci.yml`，见 `GIT_GUIDE.md` §5）：`push` 到 `main` 与 `pull_request` 自动跑 `pnpm build:all` + `typecheck:all` + `test:all`，失败阻断合并。下表为门禁语义来源。
+
 | 动作 | 前置通过项 |
 |------|-----------|
 | 任何提交 | 所属包 `typecheck` + `test` |
-| merge 到 main | 全仓 `typecheck` + `test`（含性能基准） |
+| merge 到 main | 全仓 `typecheck` + `test`（含性能基准），CI 绿灯 |
 | 修改 domain 契约 | 反向全量 `typecheck`（改动波及所有依赖包），优先向后兼容 |
 | 修改 clearance-core | 单测 + 200 件性能用例必须仍绿 |
 

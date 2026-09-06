@@ -14,6 +14,7 @@
 - `clearance-core` 新增 `obbFromBomPart`：按 Babylon 装配挂载口径，把 BOM 位姿 + 资产包络转成世界 OBB。
 - 产线配置中心工位表支持显式 X/Y/Z 安装锚点与朝向编辑；保存后回到工作台可重新预检。
 - assembly-svc 新增 `GET /lines/:id/layout-suggestions`：对真实命中自动计算可回填的工位位置建议；配置中心点「自动计算避让」回填后点保存即完成避让。
+- CI 门禁链落地（`.github/workflows/ci.yml`）：`push`/`pull_request` 自动跑 `build:all` + `typecheck:all` + `test:all`，失败阻断合并；根脚本新增 `ci`/`build:all`/`typecheck:all`/`test:all` 聚合入口。
 
 ### Changed
 

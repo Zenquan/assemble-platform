@@ -86,7 +86,21 @@ git push origin main
 
 **tag 即发布单元**：CI 检测到 `vX.Y.Z` tag 触发构建/镜像/部署。
 
-## 5. 协作红线（务必遵守）
+## 5. CI 门禁（GitHub Actions）
+
+`.github/workflows/ci.yml` 在 `push` 到 `main` 与 `pull_request` 时自动执行，把「人工约定」固化为「机器门禁」，任一环节失败即阻断合并：
+
+| 阶段 | 命令 | 覆盖 |
+|------|------|------|
+| 构建 | `pnpm build:all` | 全 workspace 拓扑构建（`pnpm -r --sort`） |
+| 类型检查 | `pnpm typecheck:all` | 全 workspace `tsc --noEmit`（含 sim-platform `vue-tsc`） |
+| 测试 | `pnpm test:all` | packages + services + apps 全量单测，**含 clearance-core 200 件 `runFull <200ms` 性能回归门禁** |
+
+本地一键复现整条门禁：`pnpm ci`（= `build:all` + `typecheck:all` + `test:all`）。
+
+> 依赖用 `pnpm install --frozen-lockfile` 锁定，保证 CI 与本地 `pnpm-lock.yaml` 一致；`node-linker=hoisted` 已在 `.npmrc` 强制（规避受限环境 symlink 拒绝）。
+
+## 6. 协作红线（务必遵守）
 
 - 禁止直接向 `main` push；一律 PR。
 - 不 `--force` push 共享分支；确需改写历史只限未 push 的本地分支。
