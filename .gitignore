@@ -28,6 +28,9 @@ apps/sim-platform/public/gltf/
 .vscode/*
 !.vscode/extensions.json
 
+# 性能基准报告（本地趋势，不入库）
+.bench/
+
 # Vitest 临时产物
 vitest.config.ts.timestamp-*.mjs
 *.timestamp-*.mjs

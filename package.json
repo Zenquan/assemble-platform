@@ -20,6 +20,7 @@
     "test:services": "pnpm -r --filter \"./services/**\" run test",
     "test:all": "pnpm -r --if-present run test",
     "test:coverage": "vitest run --coverage",
+    "bench": "node scripts/bench-clearance.mjs",
     "ci": "pnpm build:all && pnpm typecheck:all && pnpm test:all",
     "dev:platform": "pnpm --filter @assemble/sim-platform dev",
     "dev:gateway": "pnpm --filter @assemble/gateway dev",

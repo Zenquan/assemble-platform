@@ -31,7 +31,8 @@ apps/*       前端（组件/逻辑测试优先，引擎门面 mock；E2E/截图
 - **`@assemble/clearance-core`：200 零部件 `runFull < 200ms`**（对齐简历口径，产线工程师可接受的上限）。
   - 位置：`packages/clearance-core/test/clearance.test.ts`
   - 该用例作为**性能回归门禁**：任何几何/索引改动若使其失败，必须先定位是不是引入 O(n²) 或分配热点。
-- 其它基准（OBB-SAT 单对、BVH 构建）随功能演进补 `test/` 阈值用例。
+- **独立基准（`pnpm bench`）已落地**：`scripts/bench-clearance.mjs` 输出可对比的 JSON 报告（`.bench/clearance-core.json`，含 median/p95 与上次 delta），覆盖 OBB-SAT 微基准（ns/op）、BVH 构建、runFull 200/500 件、broad 自交、queryInteractive 实时路径。门禁口径为 `runFull.200 median < 200ms`（与上表一致），失败退出码非 0，已并入 CI。
+  - 报告目录 `.bench/` 不入库（本地趋势工具），CI 仅跑门禁不依赖历史。
 
 > 判断基准波动：CI 环境比本机慢属正常；阈值留 20% 余量，若经常贴线再评估调优而非放宽。
 
@@ -49,6 +50,9 @@ pnpm --filter @assemble/clearance-core test
 
 # typecheck（提交前必跑）
 pnpm typecheck
+
+# 性能基准（独立于单测，产出 .bench/clearance-core.json 趋势报告）
+pnpm bench
 ```
 
 ## 5. 提交 / 评审门禁（与 GIT_GUIDE 衔接）

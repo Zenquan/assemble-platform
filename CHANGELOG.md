@@ -16,6 +16,7 @@
 - assembly-svc 新增 `GET /lines/:id/layout-suggestions`：对真实命中自动计算可回填的工位位置建议；配置中心点「自动计算避让」回填后点保存即完成避让。
 - CI 门禁链落地（`.github/workflows/ci.yml`）：`push`/`pull_request` 自动跑 `build:all` + `typecheck:all` + `test:all`，失败阻断合并；根脚本新增 `ci`/`build:all`/`typecheck:all`/`test:all` 聚合入口。
 - 覆盖率门禁（`pnpm test:coverage`，已并入 CI）：核心算法包 `clearance-core`/`sim-utils` 强制 lines/functions/statements ≥80%、branches ≥75%；补齐 `sim-utils` 数学库与 `clearance-core` 几何/交互路径单测，整体 lines 达 98.94%。
+- 性能基准独立化（`pnpm bench`，已并入 CI）：`scripts/bench-clearance.mjs` 产出可对比 JSON 报告（median/p95 + 上次 delta），覆盖 OBB-SAT 微基准、BVH 构建、runFull 200/500 件、broad 自交与 queryInteractive 实时路径；门禁 `runFull.200 median < 200ms`。
 
 ### Changed
 
