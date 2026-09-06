@@ -92,7 +92,7 @@ flowchart TD
 |------|------|--------|------|
 | **M1** | 指标库 + request-id + /metrics | `packages/observability`（Counter/Histogram + Prometheus 序列化）；5 服务接入 `/metrics` 与 `X-Request-Id` 透传 | ✅ 已落地 |
 | **M2** | gateway 改造 | 结构化 JSON 日志；request-id 透传/生成；`/metrics` 聚合 5 上游；`/telemetry` 端点 | ✅ 已落地 |
-| **M3** | 前端 SimMonitor | Web Vitals + FPS + 内存采样，节流批量上报 `/telemetry` | ⬜ 待实现 |
+| **M3** | 前端 SimMonitor | Web Vitals + FPS + 内存采样，节流批量上报 `/telemetry` | ✅ 已落地 |
 
 每个切片完成即过 `typecheck` + `test`，一个逻辑单元一次 Conventional Commit。
 

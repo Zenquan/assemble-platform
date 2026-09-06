@@ -22,6 +22,7 @@
 - 监控与可观测性需求共识文档（`docs/OBSERVABILITY.md`）：request-id 链路、`/metrics` 指标、结构化访问日志、前端 SimMonitor 埋点四块轻量自研方案 + 数据流图与 M1–M3 实施切片。
 - 可观测性 M1（指标库 + request-id + `/metrics`）：新增 `@assemble/observability` 纯 TS 指标库（Counter/Histogram 内存聚合 + Prometheus 文本序列化，零 Node/fastify 依赖）；5 个后端服务接入 `/metrics` 与 `X-Request-Id`（Fastify `requestIdHeader` 采纳上游 id + 跨服务透传，interference/takt 调 assembly 带上 request-id）。
 - 可观测性 M2（gateway 改造）：`console.log` 裸输出改为结构化 JSON 访问日志（method/path/status/durationMs/requestId/upstream）；gateway 生成/透传 `X-Request-Id`（回显响应头 + 透传上游）；新增 `/metrics` 聚合 5 上游（`@assemble/observability` 的 `injectServiceLabel` 给同名指标注入 `service` 标签）；新增 `/telemetry` 端点接收前端 SimMonitor 上报并内存聚合。
+- 可观测性 M3（前端 SimMonitor）：sim-platform 新增 `src/monitor` 埋点 SDK，一条 rAF 循环同时驱动 FPS（`render.fps`）+ 内存采样（`memory.js_heap_used/total`）并周期 flush，`PerformanceObserver` 采 Web Vitals（`webvitals.lcp/cls/fid`），节流批量 POST 到 gateway `/telemetry`（`{ samples:[{name,value}] }`）；核心编排与浏览器宿主分离（`createSimMonitor(host)` 纯逻辑 + `createBrowserHost()` 绑定），失败静默丢弃不阻塞业务，`main.ts` 入口 `initSimMonitor()` 一键启动。
 
 ### Changed
 
