@@ -17,7 +17,13 @@ describe('OBB-SAT obbIntersect', () => {
 
   it('仅边缘接触视为不干涉（容差内分离）', () => {
     const a = obbFromCenterHalfExtents([0, 0, 0], [1, 1, 1]);
-    const b = obbFromCenterHalfExtents([2.000001, 0, 0], [1, 1, 1]);
+    const b = obbFromCenterHalfExtents([2, 0, 0], [1, 1, 1]);
+    expect(obbIntersect(a, b)).toBe(false);
+  });
+
+  it('恰好端面相贴不判干涉（净菜转运段与设备同缝贴合）', () => {
+    const a = obbFromCenterHalfExtents([-1.745, 0.905, 0], [1.745, 0.905, 0.72]);
+    const b = obbFromCenterHalfExtents([0.4, 0.365, 0], [0.4, 0.365, 0.35]);
     expect(obbIntersect(a, b)).toBe(false);
   });
 
