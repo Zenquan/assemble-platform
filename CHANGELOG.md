@@ -20,6 +20,7 @@
 - 资产复用率度量固化（`pnpm metrics`，已并入 CI）：`scripts/metric-asset-reuse.mjs` 把 M3「资产复用 ≥70%」固化为可执行指标（复用率 = 首条线设备资产被其它产线复用的比例），当前 3/4 = 75% 达标。
 - E2E / 视觉回归骨架（`pnpm e2e`，本地工具）：根 `playwright.config.ts` + `e2e/line-select.spec.ts`，mock 后端 fixture 渲染产线选择页，冒烟断言 + `toHaveScreenshot` 截图基线。
 - 监控与可观测性需求共识文档（`docs/OBSERVABILITY.md`）：request-id 链路、`/metrics` 指标、结构化访问日志、前端 SimMonitor 埋点四块轻量自研方案 + 数据流图与 M1–M3 实施切片。
+- 可观测性 M1（指标库 + request-id + `/metrics`）：新增 `@assemble/observability` 纯 TS 指标库（Counter/Histogram 内存聚合 + Prometheus 文本序列化，零 Node/fastify 依赖）；5 个后端服务接入 `/metrics` 与 `X-Request-Id`（Fastify `requestIdHeader` 采纳上游 id + 跨服务透传，interference/takt 调 assembly 带上 request-id）。
 
 ### Changed
 

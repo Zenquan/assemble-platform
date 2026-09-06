@@ -1,6 +1,6 @@
 # 监控与可观测性（OBSERVABILITY）
 
-> **状态**：需求共识已确认，待实现（0.5.x M4 加固 · 监控告警方向）
+> **状态**：M1（指标库 + request-id + `/metrics`）已落地；M2（gateway 改造）/ M3（前端 SimMonitor）待实现（0.5.x M4 加固 · 监控告警方向）
 > **对应方案**：`产线3D装配仿真平台-工业级Web3D技术方案.md` §8
 > **关联文档**：`ARCHITECTURE.md`（模块边界）、`TESTING.md`（门禁）、`VERSIONING.md`（版本档）
 
@@ -88,11 +88,11 @@ flowchart TD
 
 ## 3. 实施切片（小步可发布）
 
-| 切片 | 内容 | 交付物 |
-|------|------|--------|
-| **M1** | 指标库 + request-id + /metrics | `packages/observability`（Counter/Histogram + Prometheus 序列化）；5 服务接入 `/metrics` 与 `X-Request-Id` 透传 |
-| **M2** | gateway 改造 | 结构化 JSON 日志；request-id 透传/生成；`/metrics` 聚合 5 上游；`/telemetry` 端点 |
-| **M3** | 前端 SimMonitor | Web Vitals + FPS + 内存采样，节流批量上报 `/telemetry` |
+| 切片 | 内容 | 交付物 | 状态 |
+|------|------|--------|------|
+| **M1** | 指标库 + request-id + /metrics | `packages/observability`（Counter/Histogram + Prometheus 序列化）；5 服务接入 `/metrics` 与 `X-Request-Id` 透传 | ✅ 已落地 |
+| **M2** | gateway 改造 | 结构化 JSON 日志；request-id 透传/生成；`/metrics` 聚合 5 上游；`/telemetry` 端点 | ⬜ 待实现 |
+| **M3** | 前端 SimMonitor | Web Vitals + FPS + 内存采样，节流批量上报 `/telemetry` | ⬜ 待实现 |
 
 每个切片完成即过 `typecheck` + `test`，一个逻辑单元一次 Conventional Commit。
 
