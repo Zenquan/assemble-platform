@@ -19,6 +19,7 @@
 - 性能基准独立化（`pnpm bench`，已并入 CI）：`scripts/bench-clearance.mjs` 产出可对比 JSON 报告（median/p95 + 上次 delta），覆盖 OBB-SAT 微基准、BVH 构建、runFull 200/500 件、broad 自交与 queryInteractive 实时路径；门禁 `runFull.200 median < 200ms`。
 - 资产复用率度量固化（`pnpm metrics`，已并入 CI）：`scripts/metric-asset-reuse.mjs` 把 M3「资产复用 ≥70%」固化为可执行指标（复用率 = 首条线设备资产被其它产线复用的比例），当前 3/4 = 75% 达标。
 - E2E / 视觉回归骨架（`pnpm e2e`，本地工具）：根 `playwright.config.ts` + `e2e/line-select.spec.ts`，mock 后端 fixture 渲染产线选择页，冒烟断言 + `toHaveScreenshot` 截图基线。
+- 监控与可观测性需求共识文档（`docs/OBSERVABILITY.md`）：request-id 链路、`/metrics` 指标、结构化访问日志、前端 SimMonitor 埋点四块轻量自研方案 + 数据流图与 M1–M3 实施切片。
 
 ### Changed
 
