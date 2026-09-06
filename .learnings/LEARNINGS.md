@@ -782,3 +782,31 @@ Babylon 相机 `attachControl` 的第二参数是 `noPreventDefault`，传 `true
 - Tags: babylon, camera, wheel, preventDefault, page-zoom
 
 ---
+
+## [LRN-20260906-022] best_practice
+
+**Logged**: 2026-09-06T18:25:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: domain / clearance-core / interference-svc / sim-platform
+
+### Summary
+离线干涉预检要用真实 GLB 包络 + BOM 位姿（由测量脚本产出共享元数据），并且端面恰好相贴不能判为干涉；“处理干涉”闭环必须包含布局调整后的复检路径。
+
+### Details
+旧 interference-svc 用合成 OBB 夹具，命中 partId 与真实 BOM 对不上；产线卡“处理干涉”只能跳工作台，无法定位真实零件。本轮把资产包络元数据集中到 domain（`MODEL_ASSET_BOUNDS`），由 clearance-core `obbFromBomPart` 统一构造世界 OBB；工作台新增命中清单 + 3D 定位/高亮 + 配置中心 X/Y/Z/朝向调整，保存后回工作台重新预检。联调同时发现真实布局的转运段与设备按 0 间隙同缝贴合时被 SAT 判成干涉，修正为接触容差 `CONTACT_EPS`。
+
+### Suggested Action
+真实几何任务禁止在服务里复制前端坐标规则或继续使用合成夹具；资产包络变更必须重新跑 measure 脚本并同步 `MODEL_ASSET_BOUNDS`。布局调整要写回 BOM 可消费的产线配置（显式 `station.position/facingDeg`），而不是只在前端改视觉。
+
+### Metadata
+- Source: best_practice
+- Related Files: packages/domain/src/model.ts, packages/clearance-core/src/obbSat.ts, services/interference-svc/src/offlineCheck.ts, apps/sim-platform/src/components/InterferencePanel.vue
+- Tags: interference, clearance, glb, geometry, closed-loop, sat
+
+### Resolution
+- **Resolved**: 2026-09-06T18:25:00+08:00
+- **Commit**: `d6186ac`, `84b0960`, `d5f2218`
+- **Notes**: 真实包络/BOM 预检、工作台处理闭环、端面相贴容差均已实现并通过类型检查/单测/服务联调。
+
+---
