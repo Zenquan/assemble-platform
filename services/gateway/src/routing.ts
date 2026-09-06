@@ -31,7 +31,7 @@ export const SERVICE_ROUTES: readonly ServiceRoute[] = [
 ];
 
 /** 聚合入口自己应答、不转发上游的路径（云托管健康探测打在 80 端口） */
-export const GATEWAY_OWN_PATHS: readonly string[] = ['/healthz'];
+export const GATEWAY_OWN_PATHS: readonly string[] = ['/healthz', '/metrics', '/telemetry'];
 
 /** 按路径前缀匹配上游服务；未命中返回 undefined */
 export function matchRoute(pathname: string): ServiceRoute | undefined {

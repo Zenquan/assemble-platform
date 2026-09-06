@@ -184,6 +184,10 @@ importers:
         version: 2.1.9(@types/node@22.20.1)
 
   services/gateway:
+    dependencies:
+      '@assemble/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
     devDependencies:
       '@types/node':
         specifier: ^22.10.0

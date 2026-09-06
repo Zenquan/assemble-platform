@@ -5,6 +5,7 @@ import {
   createRequestId,
   DEFAULT_DURATION_BUCKETS,
   Histogram,
+  injectServiceLabel,
   MetricsRegistry,
   REQUEST_ID_HEADER,
   renderPrometheusText,
@@ -90,6 +91,40 @@ describe('renderPrometheusText', () => {
   it('DEFAULT_DURATION_BUCKETS 为升序', () => {
     const sorted = [...DEFAULT_DURATION_BUCKETS].sort((a, b) => a - b);
     expect(DEFAULT_DURATION_BUCKETS).toEqual(sorted);
+  });
+});
+
+describe('injectServiceLabel', () => {
+  it('为带 label 的 sample 行注入 service 标签', () => {
+    const text =
+      '# HELP http_requests_total Total\n' +
+      '# TYPE http_requests_total counter\n' +
+      'http_requests_total{method="GET",route="/lines",status="200"} 3\n';
+    const out = injectServiceLabel(text, 'assembly-svc');
+    expect(out).toContain('# HELP http_requests_total Total');
+    expect(out).toContain(
+      'http_requests_total{service="assembly-svc",method="GET",route="/lines",status="200"} 3',
+    );
+  });
+
+  it('为无 label 的 sample 行补上 service 标签', () => {
+    const text = 'some_gauge 42\n';
+    const out = injectServiceLabel(text, 'takt-svc');
+    expect(out).toContain('some_gauge{service="takt-svc"} 42');
+  });
+
+  it('注释行、空行、无法解析的行原样保留', () => {
+    const text = '# TYPE x counter\n\nx 1\nnot-a-valid-line\n';
+    const out = injectServiceLabel(text, 'svc');
+    expect(out).toContain('# TYPE x counter');
+    expect(out).toContain('\n\n');
+    expect(out).toContain('x{service="svc"} 1');
+    expect(out).toContain('not-a-valid-line');
+  });
+
+  it('转义 service 中的引号/反斜杠', () => {
+    const out = injectServiceLabel('x 1\n', 'a"b\\c');
+    expect(out).toContain('x{service="a\\"b\\\\c"} 1');
   });
 });
 

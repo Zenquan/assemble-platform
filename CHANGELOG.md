@@ -21,6 +21,7 @@
 - E2E / 视觉回归骨架（`pnpm e2e`，本地工具）：根 `playwright.config.ts` + `e2e/line-select.spec.ts`，mock 后端 fixture 渲染产线选择页，冒烟断言 + `toHaveScreenshot` 截图基线。
 - 监控与可观测性需求共识文档（`docs/OBSERVABILITY.md`）：request-id 链路、`/metrics` 指标、结构化访问日志、前端 SimMonitor 埋点四块轻量自研方案 + 数据流图与 M1–M3 实施切片。
 - 可观测性 M1（指标库 + request-id + `/metrics`）：新增 `@assemble/observability` 纯 TS 指标库（Counter/Histogram 内存聚合 + Prometheus 文本序列化，零 Node/fastify 依赖）；5 个后端服务接入 `/metrics` 与 `X-Request-Id`（Fastify `requestIdHeader` 采纳上游 id + 跨服务透传，interference/takt 调 assembly 带上 request-id）。
+- 可观测性 M2（gateway 改造）：`console.log` 裸输出改为结构化 JSON 访问日志（method/path/status/durationMs/requestId/upstream）；gateway 生成/透传 `X-Request-Id`（回显响应头 + 透传上游）；新增 `/metrics` 聚合 5 上游（`@assemble/observability` 的 `injectServiceLabel` 给同名指标注入 `service` 标签）；新增 `/telemetry` 端点接收前端 SimMonitor 上报并内存聚合。
 
 ### Changed
 

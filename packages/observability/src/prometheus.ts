@@ -62,3 +62,39 @@ export function renderPrometheusText(registry: MetricsRegistry): string {
 
   return lines.join('\n') + '\n';
 }
+
+/** Prometheus 文本格式的 sample 行：`name{labels} value` 或 `name value` */
+const SAMPLE_LINE_RE = /^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{([^}]*)\})?\s+(.+)$/;
+
+/**
+ * 给一份 Prometheus 文本格式注入 `service` 标签，用于 gateway 聚合多个上游
+ * 时区分同名指标（如各服务的 `http_requests_total`）的来源。
+ *
+ * `# HELP` / `# TYPE` 注释行与空行原样保留；无法解析的 sample 行原样保留
+ * （防御，不吞指标）。上游文本由本包 `renderPrometheusText` 产出，label 已
+ * 排序，注入 `service` 后仍满足 Prometheus 的抓取语义。
+ */
+export function injectServiceLabel(promText: string, service: string): string {
+  const svc = escapeLabelValue(service);
+  const out: string[] = [];
+  for (const line of promText.split('\n')) {
+    if (line.startsWith('#') || line.trim() === '') {
+      out.push(line);
+      continue;
+    }
+    const m = SAMPLE_LINE_RE.exec(line);
+    if (!m) {
+      out.push(line);
+      continue;
+    }
+    const name = m[1]!;
+    const rawLabels = m[2];
+    const value = m[3]!;
+    if (rawLabels === undefined) {
+      out.push(`${name}{service="${svc}"} ${value}`);
+    } else {
+      out.push(`${name}{service="${svc}",${rawLabels}} ${value}`);
+    }
+  }
+  return out.join('\n');
+}

@@ -9,6 +9,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, resolve, sep } from 'node:path';
+import { logJson } from './observability.js';
 
 const MIME_BY_EXT: Readonly<Record<string, string>> = {
   '.css': 'text/css; charset=utf-8',
@@ -91,7 +92,7 @@ export async function tryServeStaticFile(
 
   const stream = createReadStream(filePath);
   stream.on('error', (err) => {
-    console.error(`[gateway] static read error: ${err.message}`);
+    logJson('error', 'static read error', { file: filePath, error: err.message });
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: false, code: 'STATIC_READ_ERROR', message: '静态资源读取失败' }));
