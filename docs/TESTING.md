@@ -8,7 +8,7 @@
 ```
 packages/*   单测（vitest，纯逻辑，快，ms~s 级）
 services/*   服务级测试（注入 app 不监听，发真实 HTTP 打 /healthz 与业务路由）
-apps/*       前端（组件/逻辑测试优先，引擎门面 mock；E2E/截图在 0.2.x 落地）
+apps/*       前端（组件/逻辑测试优先，引擎门面 mock；E2E/视觉回归骨架在 0.5.x 落地，见 §7）
 ```
 
 **约定**：
@@ -31,7 +31,8 @@ apps/*       前端（组件/逻辑测试优先，引擎门面 mock；E2E/截图
 - **`@assemble/clearance-core`：200 零部件 `runFull < 200ms`**（对齐简历口径，产线工程师可接受的上限）。
   - 位置：`packages/clearance-core/test/clearance.test.ts`
   - 该用例作为**性能回归门禁**：任何几何/索引改动若使其失败，必须先定位是不是引入 O(n²) 或分配热点。
-- 其它基准（OBB-SAT 单对、BVH 构建）随功能演进补 `test/` 阈值用例。
+- **独立基准（`pnpm bench`）已落地**：`scripts/bench-clearance.mjs` 输出可对比的 JSON 报告（`.bench/clearance-core.json`，含 median/p95 与上次 delta），覆盖 OBB-SAT 微基准（ns/op）、BVH 构建、runFull 200/500 件、broad 自交、queryInteractive 实时路径。门禁口径为 `runFull.200 median < 200ms`（与上表一致），失败退出码非 0，已并入 CI。
+  - 报告目录 `.bench/` 不入库（本地趋势工具），CI 仅跑门禁不依赖历史。
 
 > 判断基准波动：CI 环境比本机慢属正常；阈值留 20% 余量，若经常贴线再评估调优而非放宽。
 
@@ -49,6 +50,9 @@ pnpm --filter @assemble/clearance-core test
 
 # typecheck（提交前必跑）
 pnpm typecheck
+
+# 性能基准（独立于单测，产出 .bench/clearance-core.json 趋势报告）
+pnpm bench
 ```
 
 ## 5. 提交 / 评审门禁（与 GIT_GUIDE 衔接）
@@ -69,3 +73,16 @@ pnpm typecheck
 - 不做覆盖率的教条式 KPI（骨架/服务/前端包不强制数字），但**核心算法（bvh/obbSat/detector）改动必须新增几何用例**证明正确性。
 - 回归靠两条：① Conventional Commit 的可追溯性（见 GIT_GUIDE）；② 性能/行为阈值用例随版本固化在 `test/`。
 - 修复 bug 先补一条能复现该 bug 的用例再改实现（红→绿），防止同一坑复发。
+
+## 7. E2E 视觉回归与平台指标
+
+**E2E / 视觉回归（`pnpm e2e`，本地工具，不并入主 CI）**：
+- 骨架：根 `playwright.config.ts` + `e2e/line-select.spec.ts`，以产线选择页为入口，用固定 fixture mock `/lines` + `/interference/offline`，不依赖真实后端，保证截图基线可复现。
+- 冒烟（`pnpm e2e --grep smoke`）：断言关键元素渲染，无截图对比，跨机器稳定。
+- 视觉回归（`toHaveScreenshot`）：对字体/渲染差异敏感，作为**本地工具**使用——改动 UI 前跑一次存基线、改动后跑一次 diff；首次/有意变更用 `pnpm e2e --update-snapshots` 更新基线。截图基线（`e2e/*-snapshots/`）入库。
+- 为什么不进主 CI：跨机器字体/抗锯齿差异会导致截图对比误报，价值低于成本；冒烟断言已覆盖「页面可加载」这类稳定信号。
+
+**资产复用率度量（`pnpm metrics`，确定性指标，已并入 CI）**：
+- `scripts/metric-asset-reuse.mjs` 固化 M3「资产复用 ≥70%」出口门禁（对应 `docs/VERSIONING.md` 0.4.x）。
+- 口径：`复用率 = 首条线设备资产中被其它产线复用的数量 / 首条线设备资产总数`；数据源单一（直接调用 assembly-svc `buildSeedLines()`，不重复维护资产清单）。当前 3/4 = 75% 达标。
+- 门禁失败退出码非 0，供 CI 捕获；报告落盘 `.metrics/asset-reuse.json`（不入库）。
