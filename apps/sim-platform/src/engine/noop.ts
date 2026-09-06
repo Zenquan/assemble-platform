@@ -230,6 +230,9 @@ class NoopScene implements SceneManager {
   frameToPart(_partIds: readonly string[]): void {
     /* noop：真 Babylon 实现时改为聚焦包围盒 */
   }
+  highlightParts(_partIds: readonly string[], _on: boolean): void {
+    /* noop：无真实网格可高亮，契约由 Babylon 后端实现 */
+  }
   frameToAssembly(): void {
     /* noop：无真实场景可供重新取景 */
   }

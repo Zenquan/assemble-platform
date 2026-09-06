@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@assemble/clearance-core": "workspace:*",
     "@assemble/domain": "workspace:*",
     "@assemble/http": "workspace:*",
     "@assemble/storage": "workspace:*",

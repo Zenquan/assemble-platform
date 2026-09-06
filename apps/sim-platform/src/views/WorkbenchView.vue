@@ -5,21 +5,24 @@
  * 红线保持：本组件**不 import '@babylonjs/core'**，只经 createSimEngine() 返回的
  * 窄接口。可见装配件只来自 model-svc GLB；加载失败显示错误，不生成可见盒子。
  */
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 import { fetchLine, fetchLineBom } from '@/api/lines';
 import { fetchTaktSimulation } from '@/api/takt';
-import type { ProductionLine } from '@assemble/domain';
+import { runOfflinePrecheck } from '@/api/interference';
+import type { InterferenceHit, InterferenceReport, ProductionLine } from '@assemble/domain';
 import { createSimEngine, type SimEngine } from '@/engine';
 import { deriveBomTreeState, stationsOf, type BomTreeModel } from '@/engine/bomtree';
 import { deriveTaktPanel, type TaktPanelModel } from '@/engine/taktpanel';
 import BomTreePanel from '@/components/BomTreePanel.vue';
+import InterferencePanel from '@/components/InterferencePanel.vue';
 import TaktPanel from '@/components/TaktPanel.vue';
 
 const UI_STATE_POLL_INTERVAL_MS = 120;
 
 const route = useRoute();
+const router = useRouter();
 const lineId = ref(String(route.params.lineId ?? ''));
 const canvasHost = ref<HTMLDivElement | null>(null);
 const engine = ref<SimEngine | null>(null);
@@ -46,6 +49,18 @@ const selectedPartId = ref('');
 const taktModel = ref<TaktPanelModel | null>(null);
 const taktState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle');
 const taktError = ref('');
+// C · 干涉处理：离线整线预检报告在装配工作台内可查看/定位/复检
+const precheckState = ref<'idle' | 'loading' | 'ok' | 'error'>('idle');
+const interferenceReport = ref<InterferenceReport | null>(null);
+const precheckError = ref('');
+const focusedHitKey = ref('');
+
+const partNameById = computed(() => {
+  const bom = engine.value?.assembly.bom;
+  const map: Record<string, string> = {};
+  for (const part of bom?.parts ?? []) map[part.id] = part.name;
+  return map;
+});
 
 let unmounted = false;
 let loadVersion = 0;
@@ -67,6 +82,10 @@ async function loadWorkbench(nextLineId: string) {
   taktModel.value = null;
   taktState.value = 'idle';
   taktError.value = '';
+  precheckState.value = 'idle';
+  interferenceReport.value = null;
+  precheckError.value = '';
+  focusedHitKey.value = '';
   assembledCount.value = 0;
   totalParts.value = 0;
   animProgress.value = 0;
@@ -107,6 +126,7 @@ async function loadWorkbench(nextLineId: string) {
       ? `已加载 ${health.totalParts} 个 GLB 零件 · 手动拖拽下一件装配（滚轮缩放 / 左键旋转）`
       : '当前环境无 WebGL，已回落 Noop 占位；请在浏览器中打开以启用 3D 渲染';
     void loadTakt(version, loadedLine);
+    void loadInterference(version, nextLineId);
   } catch (e) {
     eng?.dispose();
     if (version !== loadVersion) return;
@@ -282,13 +302,19 @@ function selectPart(partId: string) {
   selectedPartId.value = partId;
   const eng = engine.value;
   if (!eng) return;
+  eng.scene.highlightParts([], false);
+  focusedHitKey.value = '';
   eng.scene.frameToPart([partId]);
   refreshBomTree();
 }
 
 /** 恢复整条真实 GLB 产线的初始化最佳轴测视角。 */
 function frameAssembly() {
-  engine.value?.scene.frameToAssembly();
+  const eng = engine.value;
+  if (!eng) return;
+  eng.scene.highlightParts([], false);
+  focusedHitKey.value = '';
+  eng.scene.frameToAssembly();
 }
 
 /** S4 · 拉取节拍仿真（一次）：目标产能取瓶颈工位小时速率。 */
@@ -315,6 +341,46 @@ async function loadTakt(version: number, ln: ProductionLine) {
     taktState.value = 'error';
     taktError.value = e instanceof Error ? e.message : '节拍服务不可用';
   }
+}
+
+/** C · 拉取/复检该产线的离线整线干涉报告（真实 BOM/GLB 包络）。 */
+async function loadInterference(version: number, nextLineId: string): Promise<void> {
+  precheckState.value = 'loading';
+  precheckError.value = '';
+  interferenceReport.value = null;
+  try {
+    const report = await runOfflinePrecheck(nextLineId);
+    if (unmounted || version !== loadVersion) return;
+    interferenceReport.value = report;
+    precheckState.value = 'ok';
+  } catch (e) {
+    if (unmounted || version !== loadVersion) return;
+    precheckState.value = 'error';
+    precheckError.value = e instanceof Error ? e.message : '离线预检服务不可用';
+  }
+}
+
+/** C · 定位/高亮一组干涉命中零件。 */
+function focusInterference(hit: InterferenceHit): void {
+  const eng = engine.value;
+  if (!eng) return;
+  focusedHitKey.value = `${hit.firstPartId}->${hit.secondPartId}`;
+  eng.scene.highlightParts([hit.firstPartId, hit.secondPartId], true);
+  eng.scene.frameToPart([hit.firstPartId, hit.secondPartId]);
+}
+
+/** B-lite · 命中需要调整工位布局 → 去产线配置中心。 */
+function openInterferenceConfig(_hit: InterferenceHit): void {
+  const ln = line.value;
+  if (!ln) return;
+  void router.push({
+    name: 'line-config',
+    query: { lineId: ln.id, mode: 'interference', from: 'workbench' },
+  });
+}
+
+function recheckInterference(): void {
+  void loadInterference(loadVersion, lineId.value);
 }
 </script>
 
@@ -367,6 +433,16 @@ async function loadTakt(version: number, ln: ProductionLine) {
           </template>
         </div>
         <aside class="right aside-col">
+          <InterferencePanel
+            :report="interferenceReport"
+            :state="precheckState"
+            :error="precheckError"
+            :part-name-by-id="partNameById"
+            :active-hit-key="focusedHitKey"
+            @select="focusInterference"
+            @adjust="openInterferenceConfig"
+            @recheck="recheckInterference"
+          />
           <TaktPanel :model="taktModel" :state="taktState" :error="taktError" />
         </aside>
       </div>

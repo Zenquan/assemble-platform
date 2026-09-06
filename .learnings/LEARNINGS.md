@@ -759,3 +759,54 @@ S4 E2E 启动 `chromium.launch({headless:true})` 直接报「Executable doesn't 
 - **Notes**: 真实 GLB 装载后持久化目标点/包围半径/alpha/beta 基准，`frameAssembly` 恢复基准并按当前视口宽高比重算距离；前端按钮语义已闭合。
 
 ---
+
+## [LRN-20260906-021] knowledge_gap
+
+**Logged**: 2026-09-06T16:15:00+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: frontend / Web3D
+
+### Summary
+Babylon 相机 `attachControl` 的第二参数是 `noPreventDefault`，传 `true` 会让视口内滚轮/捏合缩放同时触发浏览器整页缩放。
+
+### Details
+装配工作台的 ArcRotateCamera 此前以 `attachControl(canvas, true)` 挂载。参数 `true` 表示“不调用 `preventDefault()`”，因此用户在 3D 工作区用滚轮/触控板捏合缩放时，浏览器默认页面缩放也一起发生，页面整体比例被改变。改为 `false` 后，Babylon 会在视口内对滚轮/pointer 事件调用 `preventDefault()`，页面保持 100% 缩放，只有 3D 相机距离变化。
+
+### Suggested Action
+视口内由 3D 相机消费的 wheel/pinch 交互一律使用 `attachControl(canvas, false)`；拖拽后恢复相机控制时保持同一参数，避免 `noPreventDefault` 配置不一致。
+
+### Metadata
+- Source: best_practice
+- Related Files: apps/sim-platform/src/engine/babylon.ts
+- Tags: babylon, camera, wheel, preventDefault, page-zoom
+
+---
+
+## [LRN-20260906-022] best_practice
+
+**Logged**: 2026-09-06T18:25:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: domain / clearance-core / interference-svc / sim-platform
+
+### Summary
+离线干涉预检要用真实 GLB 包络 + BOM 位姿（由测量脚本产出共享元数据），并且端面恰好相贴不能判为干涉；“处理干涉”闭环必须包含布局调整后的复检路径。
+
+### Details
+旧 interference-svc 用合成 OBB 夹具，命中 partId 与真实 BOM 对不上；产线卡“处理干涉”只能跳工作台，无法定位真实零件。本轮把资产包络元数据集中到 domain（`MODEL_ASSET_BOUNDS`），由 clearance-core `obbFromBomPart` 统一构造世界 OBB；工作台新增命中清单 + 3D 定位/高亮 + 配置中心 X/Y/Z/朝向调整，保存后回工作台重新预检。联调同时发现真实布局的转运段与设备按 0 间隙同缝贴合时被 SAT 判成干涉，修正为接触容差 `CONTACT_EPS`。
+
+### Suggested Action
+真实几何任务禁止在服务里复制前端坐标规则或继续使用合成夹具；资产包络变更必须重新跑 measure 脚本并同步 `MODEL_ASSET_BOUNDS`。布局调整要写回 BOM 可消费的产线配置（显式 `station.position/facingDeg`），而不是只在前端改视觉。
+
+### Metadata
+- Source: best_practice
+- Related Files: packages/domain/src/model.ts, packages/clearance-core/src/obbSat.ts, services/interference-svc/src/offlineCheck.ts, apps/sim-platform/src/components/InterferencePanel.vue
+- Tags: interference, clearance, glb, geometry, closed-loop, sat
+
+### Resolution
+- **Resolved**: 2026-09-06T18:25:00+08:00
+- **Commit**: `d6186ac`, `84b0960`, `d5f2218`
+- **Notes**: 真实包络/BOM 预检、工作台处理闭环、端面相贴容差均已实现并通过类型检查/单测/服务联调。
+
+---

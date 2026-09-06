@@ -99,6 +99,8 @@ export interface SceneManager {
   setCamera(viewId: CameraViewId): CameraPose;
   /** 以给定零件包围盒适配视野（"适配/聚焦"） */
   frameToPart(partIds: readonly string[]): void;
+  /** 高亮/清除一组零件的干涉命中外观；由引擎层统一消费，业务不 touch 场景。 */
+  highlightParts(partIds: readonly string[], on: boolean): void;
   /** 恢复初始化轴测方向，并按整条真实装配体重新适配视野 */
   frameToAssembly(): void;
   /** 请求一次渲染（手动重绘 / 测试用）；返回当前帧渲染是否成功 */

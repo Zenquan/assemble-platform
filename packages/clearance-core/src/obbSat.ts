@@ -18,6 +18,8 @@ import type { OBB, Vec3 } from '@assemble/domain';
  */
 
 const EPS = 1e-9;
+/** 端面接触容差（米）：恰好相贴不算干涉。 */
+const CONTACT_EPS = 1e-6;
 
 function dot(a: Vec3, b: Vec3): number {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -60,7 +62,8 @@ function separatedOnAxis(L: Vec3, a: ObbData, b: ObbData): boolean {
     b.center[2] - a.center[2],
   ];
   const dist = Math.abs(dot(t, L));
-  return dist > projectHalfWidth(a, L) + projectHalfWidth(b, L);
+  const overlap = projectHalfWidth(a, L) + projectHalfWidth(b, L) - dist;
+  return overlap <= CONTACT_EPS;
 }
 
 /** 叉积轴可能因平行退化，返回 null 则跳过 */

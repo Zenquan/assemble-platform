@@ -403,7 +403,9 @@ class BabylonScene implements SceneManager {
       new Vector3(0, 6, 0),
       this.scene,
     );
-    this.camera.attachControl(this.canvas, true);
+    // noPreventDefault=false：视口内的滚轮/捏合缩放由 Babylon preventDefault，
+    // 不会把浏览器整页一起放大（页面缩放比例保持不变）。
+    this.camera.attachControl(this.canvas, false);
     this.camera.lowerRadiusLimit = 8;
     this.camera.upperRadiusLimit = 300;
     this.camera.minZ = 0.1;
@@ -478,6 +480,7 @@ class BabylonScene implements SceneManager {
       minRadius: PART_FRAME_MIN_RADIUS,
       padding: PART_FRAME_PADDING,
     });
+    if (this.scene) this.scene.render();
   }
 
   requestRender(): boolean {
@@ -890,6 +893,26 @@ class BabylonScene implements SceneManager {
     this.scene?.render();
   }
 
+  /** 干涉处理面板联动：整组红高亮命中零件；关闭后还原当前装配态着色。 */
+  highlightParts(partIds: readonly string[], on: boolean): void {
+    if (!this.scene) return;
+    const ids = new Set(partIds);
+    if (on) {
+      for (const [partId, meshes] of this.visualMeshes) {
+        if (!ids.has(partId)) continue;
+        for (const mesh of meshes) {
+          mesh.renderOverlay = true;
+          mesh.overlayColor = new Color3(0.95, 0.2, 0.2);
+          mesh.overlayAlpha = 0.55;
+        }
+      }
+      this.scene.render();
+      return;
+    }
+    for (const partId of ids) this._restorePartStateOverlay(partId);
+    this.scene.render();
+  }
+
   /** 把相机取景到装配体（质心 + 包围半径 → 半径取景公式，见 LRN-005） */
   private _frameWholeAssembly(parts: RenderPart[]): void {
     if (!this.camera || parts.length === 0) return;
@@ -1075,9 +1098,10 @@ class BabylonScene implements SceneManager {
   /** 拖拽期间挂起/恢复相机轨道控制（避免旋转与零件拖拽冲突） */
   setCameraControlEnabled(on: boolean): void {
     if (!this.canvas || !this.camera) return;
-    // Babylon 9：detachControl 无参、attachControl(canvas, noPreventDefault)
+    // Babylon 9：detachControl 无参、attachControl(canvas, noPreventDefault)。
+    // noPreventDefault=false：工作区缩放时阻止页面默认缩放/滚动，页面比例保持 100%。
     if (!on) this.camera.detachControl();
-    else this.camera.attachControl(this.canvas, true);
+    else this.camera.attachControl(this.canvas, false);
   }
 }
 
