@@ -110,6 +110,9 @@ importers:
 
   services/assembly-svc:
     dependencies:
+      '@assemble/clearance-core':
+        specifier: workspace:*
+        version: link:../../packages/clearance-core
       '@assemble/domain':
         specifier: workspace:*
         version: link:../../packages/domain

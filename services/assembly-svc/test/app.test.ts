@@ -4,6 +4,7 @@ import type { AssemblyBom, ModelAssetId, ProductionLine } from '@assemble/domain
 import { createMemoryRepo } from '@assemble/storage';
 
 import { buildApp } from '../src/app.js';
+import { suggestStationLayout } from '../src/layoutSuggestion.js';
 import { buildBomForLine, buildSeedLines } from '../src/repositories/index.js';
 
 function line(
@@ -156,6 +157,51 @@ describe('GET /lines/:id/bom', () => {
 
     expect(devices[0]?.localPosition).toEqual([100, 1.2, -3]);
     expect(devices[1]?.localPosition).toEqual([200, 0.5, 4]);
+  });
+
+  it('自动避让建议回填后重新预检归零（分拣线 conveyor 与设备冲突）', () => {
+    const sorting = buildSeedLines().find((item) => item.id === 'line-sorting-01');
+    expect(sorting).toBeDefined();
+    const before = suggestStationLayout(sorting!, buildBomForLine(sorting!));
+
+    expect(before.hitCount).toBe(3);
+    expect(before.suggestions).toHaveLength(3);
+    expect(before.suggestions.every((item) => (item.position[1] ?? 0) > 0.7)).toBe(true);
+
+    const byStation = new Map(before.suggestions.map((item) => [item.stationId, item.position]));
+    const adjusted: ProductionLine = {
+      ...sorting!,
+      stations: sorting!.stations.map((station) => ({
+        ...station,
+        position: byStation.get(station.id) ?? station.position,
+      })),
+    };
+    const after = suggestStationLayout(adjusted, buildBomForLine(adjusted));
+    expect(after.hitCount).toBe(0);
+    expect(after.suggestions).toEqual([]);
+  });
+
+  it('GET /lines/:id/layout-suggestions 返回可回填工位的建议', async () => {
+    const sorting = buildSeedLines().find((item) => item.id === 'line-sorting-01');
+    const app = await appWith(sorting!);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/lines/line-sorting-01/layout-suggestions',
+    });
+    const body = response.json<{
+      data: {
+        hitCount: number;
+        suggestions: Array<{ stationId: string; position: readonly [number, number, number] }>;
+      };
+    }>();
+
+    expect(response.statusCode).toBe(200);
+    expect(body.data.hitCount).toBe(3);
+    expect(body.data.suggestions.map((item) => item.stationId).sort()).toEqual(
+      ['st-s1', 'st-s2', 'st-s3'],
+    );
+    expect(body.data.suggestions.every((item) => (item.position[1] ?? 0) > 0.7)).toBe(true);
+    await app.close();
   });
 
   it('未知流水线返回 404 信封错误', async () => {

@@ -19,6 +19,20 @@ export async function fetchLineBom(id: string): Promise<AssemblyBom> {
   return http.get<AssemblyBom>(`/lines/${encodeURIComponent(id)}/bom`);
 }
 
+export interface StationLayoutSuggestion {
+  stationId: string;
+  position: readonly [number, number, number];
+  note: string;
+}
+
+/** 自动计算可解决干涉的工位布局建议；返回后由配置中心回填表单。 */
+export async function fetchLayoutSuggestions(id: string): Promise<StationLayoutSuggestion[]> {
+  const res = await http.get<{ suggestions: StationLayoutSuggestion[]; hitCount: number }>(
+    `/lines/${encodeURIComponent(id)}/layout-suggestions`,
+  );
+  return res.suggestions;
+}
+
 export type LineWriteInput = Omit<ProductionLine, 'createdAt' | 'updatedAt'>;
 
 /** 保存一条产线配置；BOM 会由 assembly-svc 按最新工位配置重新生成。 */

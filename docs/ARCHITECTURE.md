@@ -85,7 +85,7 @@ Vue3 业务组件层（views/stores/components）   ← 只依赖 SimEngine 公�
 
 > 已实现要点：BVH 用中位切分轴循环剖分构建、self-collision 标准遍历保证候选对**无重复**；OBB-SAT 逐帧复用的无分配实现。基准用例：200 零部件 `runFull < 200ms`（见 `clearance-core/test`）。
 >
-> **真实几何（0.5.x）**：资产包络元数据集中在 `@assemble/domain` 的 `MODEL_ASSET_BOUNDS`（由 `scripts/gltf-gen/measure_glb.mjs` 对 GLB 实测）。interference-svc 直接用 BOM 位姿 + 该包络构造世界 OBB，不再用合成夹具；工作台「处理干涉」闭环 = 报告清单 → 3D 定位/红高亮 → 产线配置调整工位位置/朝向 → 重新预检归零。
+> **真实几何（0.5.x）**：资产包络元数据集中在 `@assemble/domain` 的 `MODEL_ASSET_BOUNDS`（由 `scripts/gltf-gen/measure_glb.mjs` 对 GLB 实测）。interference-svc 直接用 BOM 位姿 + 该包络构造世界 OBB，不再用合成夹具；工作台「处理干涉」闭环 = 报告清单 → 3D 定位/红高亮 → 产线配置调整工位位置/朝向 → 重新预检归零。assembly-svc 的 `layout-suggestions` 会按真实命中对计算最小避让位移，前端一键回填 `station.position` 后保存即可复检。
 
 ## 4. 后端架构：无状态微服务 + 降级存储
 

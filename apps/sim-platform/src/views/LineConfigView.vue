@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import { MODEL_ASSET_IDS, type ProductionLine } from '@assemble/domain';
 import AppHeader from '@/components/AppHeader.vue';
-import { createLine, fetchLines, updateLine, type LineWriteInput } from '@/api/lines';
+import { createLine, fetchLayoutSuggestions, fetchLines, updateLine, type LineWriteInput } from '@/api/lines';
 
 type LineForm = Omit<ProductionLine, 'createdAt' | 'updatedAt'>;
 
@@ -16,6 +16,7 @@ const form = ref<LineForm | null>(null);
 const state = ref<'loading' | 'ready' | 'saving' | 'error'>('loading');
 const errorMessage = ref('');
 const saveMessage = ref('');
+const suggesting = ref(false);
 
 const assetOptions = computed(() => [...MODEL_ASSET_IDS]);
 const isNew = computed(() => !form.value?.id);
@@ -82,6 +83,38 @@ function backToInterference(): void {
   const target = String(route.query.lineId ?? selectedId.value ?? form.value?.id ?? '');
   if (!target) return;
   void router.replace({ name: 'workbench', params: { lineId: target } });
+}
+
+/** 自动计算可避让布局并回填当前表单；用户确认后点“保存配置”完成。 */
+async function autoSuggestLayout(): Promise<void> {
+  const target = String(form.value?.id ?? selectedId.value ?? '');
+  if (!target || !form.value) return;
+  suggesting.value = true;
+  errorMessage.value = '';
+  saveMessage.value = '';
+  try {
+    const suggestions = await fetchLayoutSuggestions(target);
+    const current = form.value;
+    if (!current || current.id !== target) return;
+    if (suggestions.length === 0) {
+      saveMessage.value = '当前产线预检无干涉或无需调整';
+      return;
+    }
+    let applied = 0;
+    for (const suggestion of suggestions) {
+      const station = current.stations.find((item) => item.id === suggestion.stationId);
+      if (!station) continue;
+      station.position = [...suggestion.position];
+      applied += 1;
+    }
+    saveMessage.value = applied > 0
+      ? `已自动计算并回填 ${applied} 个工位位置，请核对后点击“保存配置”`
+      : '自动计算完成，但建议未匹配到可编辑工位';
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '自动避让计算失败';
+  } finally {
+    suggesting.value = false;
+  }
 }
 
 function selectLine(id: string): void {
@@ -298,7 +331,19 @@ onMounted(async () => {
 
             <div v-if="errorMessage" class="form-error">{{ errorMessage }}</div>
             <div v-if="saveMessage" class="form-success">{{ saveMessage }}</div>
-            <div class="editor-foot"><span class="hint">工位顺序决定物料流向与 BOM 步骤</span><button type="button" class="btn primary" :disabled="state === 'saving'" @click="save">{{ state === 'saving' ? '保存中…' : '保存配置' }}</button></div>
+            <div class="editor-foot">
+              <span class="hint">工位顺序决定物料流向与 BOM 步骤</span>
+              <div class="editor-actions">
+                <button
+                  v-if="form && !isNew"
+                  type="button"
+                  class="btn"
+                  :disabled="suggesting || state === 'saving'"
+                  @click="autoSuggestLayout"
+                >{{ suggesting ? '自动计算中…' : '自动计算避让' }}</button>
+                <button type="button" class="btn primary" :disabled="state === 'saving'" @click="save">{{ state === 'saving' ? '保存中…' : '保存配置' }}</button>
+              </div>
+            </div>
           </section>
         </div>
       </main>
@@ -311,6 +356,7 @@ onMounted(async () => {
 .config-shell { max-width: 1440px; margin: 0 auto; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); overflow: hidden; }
 .config-body { padding: 24px; }
 .config-toolbar, .station-head, .editor-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.editor-actions { display: flex; align-items: center; gap: 8px; }
 h1 { margin: 0; font-size: 18px; font-weight: 500; }
 p { margin: 6px 0 0; color: var(--mute); font-size: 12px; }
 .toolbar-actions { display: flex; gap: 8px; }

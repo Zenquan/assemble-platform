@@ -2,6 +2,7 @@ import { MODEL_ASSET_IDS, type ProductionLine } from '@assemble/domain';
 import { err, ok } from '@assemble/http';
 import type { FastifyInstance } from 'fastify';
 import { buildBomForLine, type AssemblyRepos } from '../repositories/index.js';
+import { suggestStationLayout } from '../layoutSuggestion.js';
 
 function validateLine(line: ProductionLine): string | null {
   if (!line.name || !line.kind || !Array.isArray(line.stations)) {
@@ -65,6 +66,15 @@ export function registerLineRoutes(app: FastifyInstance, repos: AssemblyRepos): 
       return reply.status(404).send(err('NOT_FOUND', `产线 ${req.params.id} 不存在`));
     }
     return ok(buildBomForLine(line));
+  });
+
+  // 自动避让建议：真实预检命中 → 返回可回填工位 position 的布局建议
+  app.get<{ Params: { id: string } }>('/lines/:id/layout-suggestions', async (req, reply) => {
+    const line = await repos.lines.get(req.params.id);
+    if (!line) {
+      return reply.status(404).send(err('NOT_FOUND', `产线 ${req.params.id} 不存在`));
+    }
+    return ok(suggestStationLayout(line, buildBomForLine(line)));
   });
 
   app.post<{ Body: Omit<ProductionLine, 'createdAt' | 'updatedAt'> }>(

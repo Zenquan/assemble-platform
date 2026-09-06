@@ -13,6 +13,7 @@
 - `@assemble/domain` 新增 `MODEL_ASSET_BOUNDS` 内置 GLB 实测包络元数据，替换离线预检合成 OBB 夹具。
 - `clearance-core` 新增 `obbFromBomPart`：按 Babylon 装配挂载口径，把 BOM 位姿 + 资产包络转成世界 OBB。
 - 产线配置中心工位表支持显式 X/Y/Z 安装锚点与朝向编辑；保存后回到工作台可重新预检。
+- assembly-svc 新增 `GET /lines/:id/layout-suggestions`：对真实命中自动计算可回填的工位位置建议；配置中心点「自动计算避让」回填后点保存即完成避让。
 
 ### Changed
 
