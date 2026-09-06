@@ -15,6 +15,7 @@ apps/*       前端（组件/逻辑测试优先，引擎门面 mock；E2E/截图
 - 单测放各包 `test/*.test.ts`，走根 `vitest.config.ts`（alias 到源码，**无需先 build**）。
 - 测试 import 一律走**包根导出**（`from '@assemble/clearance-core'`），验证公共接口而非内部私有实现 —— 逼出稳定的对外契约。
 - 描述用中文句子（what + 期望）：`describe('模块/类')` → `it('某行为')`。
+- 纯契约/骨架包（当前：`domain`/`storage`/`auth-svc`）暂无单测时，`test` 脚本用 `vitest run --passWithNoTests` 显式允许空套件，避免根 `pnpm test` / `pnpm test:services` 被空测试集退出 1 截断；有真用例后保留该开关即可。
 
 ## 2. 测试类型与责任
 

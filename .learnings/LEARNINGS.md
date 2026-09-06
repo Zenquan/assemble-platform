@@ -8,6 +8,18 @@ Corrections, insights, and knowledge gaps captured during development.
 
 ---
 
+## LRN-20260906-001
+
+- **Category**: best_practice
+- **Status**: resolved
+- **Context**: 全仓测试门禁反复被无测试文件的包截断：`domain`（ERR-20260904-033/043）、`storage`、`auth-svc` 的 `test` 脚本执行 `vitest run` 时 `No test files found` 退出 1，导致根 `pnpm test` / `pnpm test:services` 无法跑到后续包。
+- **Insight**: 纯契约/骨架包不必然有单测，但不能让它们阻塞全仓门禁；显式声明“允许空套件”比每次绕过根脚本更可维护。
+- **Action**: 空测试包 `test` 脚本统一加 `vitest run --passWithNoTests`，并在 `docs/TESTING.md` 固化约定。
+- **Related Files**: packages/domain/package.json, packages/storage/package.json, services/auth-svc/package.json, docs/TESTING.md
+- **Resolution**: 随 v0.4.1 发布提交 `d8784b1` 落地，全仓测试门禁恢复绿。
+
+---
+
 ## LRN-20260905-005
 
 - **Category**: best_practice
@@ -46,33 +58,36 @@ Corrections, insights, and knowledge gaps captured during development.
 ## LRN-20260905-002
 
 - **Category**: best_practice
-- **Status**: pending
+- **Status**: resolved
 - **Context**: CloudRun 云端构建（`tcb cloudrun deploy`）失败于 `ERR_PNPM_OUTDATED_LOCKFILE`：新增 workspace 包（`services/gateway`）后，`pnpm-lock.yaml` 没有该包的 importer 条目，云端 `pnpm install --frozen-lockfile` 直接拒绝。
 - **Insight**: Monorepo 新增 workspace 包后，必须先本地跑一次 `pnpm install`（本仓用 corepack pnpm.cjs + `--store-dir node_modules/.assemble-pnpm-store`）更新 lockfile 再部署；`--frozen-lockfile` 是 CI 默认，云端构建尤其敏感。
 - **Action**: 本仓约定「新增 services/* 或 packages/* 包 → 更新 lockfile → 提交」；`.deploy/` 快照由 `scripts/sync-deploy.mjs` 生成并同步 lockfile。
 - **Related Files**: pnpm-lock.yaml, Dockerfile, scripts/sync-deploy.mjs
+- **Resolution**: gateway importer 已由本地 `pnpm install` 写入 `pnpm-lock.yaml` 并随 v0.4.1 提交；约定已固化于 AGENTS.md「新增 workspace 包 → 更新 lockfile」。
 
 ---
 
 ## LRN-20260905-001
 
 - **Category**: knowledge_gap
-- **Status**: pending
+- **Status**: resolved
 - **Context**: CloudBase MCP 的 `manageCloudRun(deploy)` 强制 `targetPath` 在 MCP 进程 cwd 内；本会话 MCP 固化在旧项目目录（fastapi-app）且该目录被沙箱拒写，无法用 MCP 部署云托管。
 - **Insight**: 云托管部署的兜底路径是 CloudBase CLI：`tcb login --cloudbase-api-key <api_key>`（MCP `manageAppAuth(action="createApiKey", keyType="api_key")` 生成，注意 `publish_key` 是匿名客户端 key，CLI 登录会验证失败）+ `tcb cloudrun deploy -s <name> --source <dir> --port 3000`（source 不受 MCP cwd 限制）。CLI 装在 `/tmp/tcb-cli`（`npm install --prefix /tmp/tcb-cli --cache /tmp/npm-cache-user @cloudbase/cli`，绕开 `/opt/cache/npm` 权限问题）。
 - **Action**: 后续 CloudRun 部署统一走 CLI；`.deploy/cloudbaserc.json` 已配置 envId 与 cloudrun.name。
 - **Related Files**: .deploy/cloudbaserc.json, scripts/sync-deploy.mjs
+- **Resolution**: 已被 LRN-20260905-005 取代 —— 部署事实源改为 CloudBase「通过 Git 仓库部署」绑定 GitHub `main`，`.deploy/` 快照与 CLI 流程随 v0.4.1 移除，见 `docs/DEPLOYMENT.md`。
 
 ---
 
 ## LRN-20260904-021
 
 - **Category**: correction
-- **Status**: pending
+- **Status**: resolved
 - **Context**: 净菜线瓶颈节拍为 `6.8s` 时，服务将 `529.4 件/时` 向上取整为 `530 P/H`，页面因此显示未达产。
 - **Insight**: 自动推导的目标产能不能高于瓶颈理论产能；没有独立业务目标时应向下取整，避免制造虚假的超负荷。
 - **Action**: takt-svc 默认目标改为 `floor(3600 / bottleneckTakt)`，并用 `6.8s` 回归测试锁定 `529 P/H` 与达产状态。
 - **Related Files**: services/takt-svc/src/taktCore.ts, services/takt-svc/test/app.test.ts
+- **Resolution**: 已由 `3031b18` 落地并带 `6.8s` 回归用例，随 v0.4.1 发布。
 
 ---
 
@@ -737,5 +752,10 @@ S4 E2E 启动 `chromium.launch({headless:true})` 直接报「Executable doesn't 
 - Source: user_feedback
 - Related Files: apps/sim-platform/src/engine/babylon.ts, apps/sim-platform/src/views/WorkbenchView.vue
 - Tags: camera, framing, reset, babylon
+
+### Resolution
+- **Resolved**: 2026-09-06T16:00:00+08:00
+- **Commit**: `d0cca55`（`fix(sim-platform): 恢复初始化相机基准`，随 v0.4.1 发布）
+- **Notes**: 真实 GLB 装载后持久化目标点/包围半径/alpha/beta 基准，`frameAssembly` 恢复基准并按当前视口宽高比重算距离；前端按钮语义已闭合。
 
 ---
