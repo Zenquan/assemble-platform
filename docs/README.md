@@ -1,5 +1,7 @@
 # docs —— 工程文档导航
 
+> 项目总览、界面速览与快速上手见根目录 [README.md](../README.md)；本文是 `docs/` 内部文档索引。
+
 `assemble-platform/` 的文档集中在 `docs/`。按「先读哪份」排序：
 
 | 文档 | 内容 | 何时读 |
