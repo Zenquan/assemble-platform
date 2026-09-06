@@ -53,6 +53,7 @@ const taktError = ref('');
 const precheckState = ref<'idle' | 'loading' | 'ok' | 'error'>('idle');
 const interferenceReport = ref<InterferenceReport | null>(null);
 const precheckError = ref('');
+const focusedHitKey = ref('');
 
 const partNameById = computed(() => {
   const bom = engine.value?.assembly.bom;
@@ -84,6 +85,7 @@ async function loadWorkbench(nextLineId: string) {
   precheckState.value = 'idle';
   interferenceReport.value = null;
   precheckError.value = '';
+  focusedHitKey.value = '';
   assembledCount.value = 0;
   totalParts.value = 0;
   animProgress.value = 0;
@@ -301,6 +303,7 @@ function selectPart(partId: string) {
   const eng = engine.value;
   if (!eng) return;
   eng.scene.highlightParts([], false);
+  focusedHitKey.value = '';
   eng.scene.frameToPart([partId]);
   refreshBomTree();
 }
@@ -310,6 +313,7 @@ function frameAssembly() {
   const eng = engine.value;
   if (!eng) return;
   eng.scene.highlightParts([], false);
+  focusedHitKey.value = '';
   eng.scene.frameToAssembly();
 }
 
@@ -360,6 +364,7 @@ async function loadInterference(version: number, nextLineId: string): Promise<vo
 function focusInterference(hit: InterferenceHit): void {
   const eng = engine.value;
   if (!eng) return;
+  focusedHitKey.value = `${hit.firstPartId}->${hit.secondPartId}`;
   eng.scene.highlightParts([hit.firstPartId, hit.secondPartId], true);
   eng.scene.frameToPart([hit.firstPartId, hit.secondPartId]);
 }
@@ -433,6 +438,7 @@ function recheckInterference(): void {
             :state="precheckState"
             :error="precheckError"
             :part-name-by-id="partNameById"
+            :active-hit-key="focusedHitKey"
             @select="focusInterference"
             @adjust="openInterferenceConfig"
             @recheck="recheckInterference"

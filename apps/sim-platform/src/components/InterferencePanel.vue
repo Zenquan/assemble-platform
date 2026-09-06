@@ -18,6 +18,8 @@ const props = defineProps<{
   error?: string;
   /** BOM 零件 id → 名称（用于把领域 id 翻译成工位/设备可读名） */
   partNameById: Readonly<Record<string, string>>;
+  /** 当前已定位命中的稳定 key，用于行选中反馈。 */
+  activeHitKey?: string;
 }>();
 
 const emit = defineEmits<{
@@ -28,6 +30,10 @@ const emit = defineEmits<{
 
 function nameOf(partId: string): string {
   return props.partNameById[partId] ?? partId;
+}
+
+function hitKey(hit: InterferenceHit): string {
+  return `${hit.firstPartId}->${hit.secondPartId}`;
 }
 </script>
 
@@ -55,7 +61,12 @@ function nameOf(partId: string): string {
       </div>
 
       <ul v-if="report.hitCount > 0" class="ip-hits">
-        <li v-for="(hit, index) in report.hits" :key="`${hit.firstPartId}-${hit.secondPartId}`" class="ip-hit">
+        <li
+          v-for="(hit, index) in report.hits"
+          :key="`${hit.firstPartId}-${hit.secondPartId}`"
+          class="ip-hit"
+          :class="{ on: activeHitKey === hitKey(hit) }"
+        >
           <div class="ip-hit-head">
             <span class="ip-hit-no mono">{{ String(index + 1).padStart(2, '0') }}</span>
             <span class="ip-hit-sev">{{ hit.severity === 'error' ? 'ERROR' : 'WARN' }}</span>
@@ -155,6 +166,11 @@ function nameOf(partId: string): string {
   border-radius: 7px;
   background: rgba(13, 22, 38, 0.6);
   padding: 7px 9px;
+  transition: background 0.12s, border-color 0.12s;
+}
+.ip-hit.on {
+  border-color: var(--red);
+  background: rgba(244, 63, 94, 0.16);
 }
 .ip-hit-head {
   display: flex;

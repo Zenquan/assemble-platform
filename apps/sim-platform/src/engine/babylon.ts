@@ -480,6 +480,7 @@ class BabylonScene implements SceneManager {
       minRadius: PART_FRAME_MIN_RADIUS,
       padding: PART_FRAME_PADDING,
     });
+    if (this.scene) this.scene.render();
   }
 
   requestRender(): boolean {
