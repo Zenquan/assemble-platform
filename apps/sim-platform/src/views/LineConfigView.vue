@@ -23,7 +23,10 @@ const isNew = computed(() => !form.value?.id);
 function cloneLine(line: ProductionLine): LineForm {
   return structuredClone({
     ...line,
-    stations: line.stations.map((station) => ({ ...station })),
+    stations: line.stations.map((station) => ({
+      ...station,
+      ...(station.position ? { position: [...station.position] } : {}),
+    })),
   });
 }
 
@@ -46,8 +49,39 @@ function emptyLine(): LineForm {
       deviceKind: 'infeed-elevator',
       footprintLengthMeters: 3.49,
       facingDeg: 0,
+      position: [0, 0, 0],
     }],
   };
+}
+
+/** 手动修改工位安装锚点（x/y/z）；position 原来未显式声明时写为显式值。 */
+function setStationPosition(
+  station: LineForm['stations'][number],
+  axis: 0 | 1 | 2,
+  event: Event,
+): void {
+  const value = Number((event.target as HTMLInputElement).value);
+  const current: [number, number, number] = station.position
+    ? [...station.position]
+    : [0, 0, 0];
+  current[axis] = Number.isFinite(value) ? value : 0;
+  station.position = current;
+}
+
+function setStationFacing(station: LineForm['stations'][number], event: Event): void {
+  const value = Number((event.target as HTMLInputElement).value);
+  station.facingDeg = Number.isFinite(value) ? value : 0;
+}
+
+/** 保存后是否回到装配工作台继续“处理干涉”复检。 */
+const fromInterferenceWorkbench = computed(
+  () => route.query.from === 'workbench' && route.query.mode === 'interference',
+);
+
+function backToInterference(): void {
+  const target = String(route.query.lineId ?? selectedId.value ?? form.value?.id ?? '');
+  if (!target) return;
+  void router.replace({ name: 'workbench', params: { lineId: target } });
 }
 
 function selectLine(id: string): void {
@@ -56,7 +90,10 @@ function selectLine(id: string): void {
   selectedId.value = id;
   form.value = cloneLine(selected);
   saveMessage.value = '';
-  void router.replace({ query: { lineId: id } });
+  const query: Record<string, string> = { lineId: id };
+  if (route.query.mode) query.mode = String(route.query.mode);
+  if (route.query.from) query.from = String(route.query.from);
+  void router.replace({ query });
 }
 
 function openNew(): void {
@@ -125,7 +162,10 @@ async function save(): Promise<void> {
     form.value = cloneLine(saved);
     state.value = 'ready';
     saveMessage.value = '配置已保存，BOM 将按最新工位自动刷新';
-    void router.replace({ query: { lineId: saved.id } });
+    const query: Record<string, string> = { lineId: saved.id };
+    if (route.query.mode) query.mode = String(route.query.mode);
+    if (route.query.from) query.from = String(route.query.from);
+    void router.replace({ query });
   } catch (error) {
     state.value = 'error';
     errorMessage.value = error instanceof Error ? error.message : '配置保存失败';
@@ -157,6 +197,12 @@ onMounted(async () => {
           </div>
           <div class="toolbar-actions">
             <button type="button" class="btn" @click="router.push({ name: 'line-select' })">返回产线</button>
+            <button
+              v-if="fromInterferenceWorkbench"
+              type="button"
+              class="btn"
+              @click="backToInterference"
+            >返回干涉处理</button>
             <button type="button" class="btn primary" @click="openNew">＋ 新建产线</button>
           </div>
         </div>
@@ -206,7 +252,10 @@ onMounted(async () => {
               <button type="button" class="btn small" @click="addStation">＋ 添加工位</button>
             </div>
             <div class="station-table">
-              <div class="table-row table-head"><span>序号</span><span>工位名称</span><span>GLB 设备</span><span>节拍 s/件</span><span>占用长度 m</span><span></span></div>
+              <div class="table-row table-head">
+                <span>序号</span><span>工位名称</span><span>GLB 设备</span><span>节拍 s/件</span>
+                <span>占用长度 m</span><span>朝向°</span><span>X</span><span>Y</span><span>Z</span><span></span>
+              </div>
               <div v-for="(station, index) in form.stations" :key="station.id" class="table-row">
                 <span class="seq">{{ index + 1 }}</span>
                 <input v-model="station.name" type="text" />
@@ -215,6 +264,34 @@ onMounted(async () => {
                 </select>
                 <input v-model.number="station.taktSeconds" type="number" min="0.1" step="0.1" />
                 <input v-model.number="station.footprintLengthMeters" type="number" min="0.1" step="0.01" />
+                <input
+                  :value="station.facingDeg ?? 90"
+                  type="number"
+                  step="1"
+                  title="设备绕 Y 轴朝向（度）"
+                  @change="setStationFacing(station, $event)"
+                />
+                <input
+                  :value="station.position?.[0] ?? ''"
+                  type="number"
+                  step="0.01"
+                  title="安装锚点 X（米）；留空=自动推导"
+                  @change="setStationPosition(station, 0, $event)"
+                />
+                <input
+                  :value="station.position?.[1] ?? ''"
+                  type="number"
+                  step="0.01"
+                  title="安装锚点 Y（米）；留空=自动推导"
+                  @change="setStationPosition(station, 1, $event)"
+                />
+                <input
+                  :value="station.position?.[2] ?? ''"
+                  type="number"
+                  step="0.01"
+                  title="安装锚点 Z（米）；留空=自动推导"
+                  @change="setStationPosition(station, 2, $event)"
+                />
                 <button type="button" class="remove" title="删除工位" @click="removeStation(index)">×</button>
               </div>
             </div>
@@ -255,7 +332,7 @@ input, select { min-width: 0; border: 1px solid var(--line-3); border-radius: 5p
 .switch-field input { width: 18px; height: 18px; align-self: flex-start; accent-color: var(--cyan); }
 .station-head { border-bottom: 1px solid var(--line); padding-bottom: 7px; }
 .station-table { margin-top: 8px; overflow-x: auto; }
-.table-row { display: grid; grid-template-columns: 44px minmax(130px, 1.2fr) minmax(150px, 1.4fr) 110px 110px 30px; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid rgba(51, 65, 85, .45); }
+.table-row { display: grid; grid-template-columns: 44px minmax(110px, 1.2fr) minmax(150px, 1.4fr) 92px 92px 66px 62px 62px 62px 30px; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid rgba(51, 65, 85, .45); }
 .table-head { color: var(--ghost); font-size: 10px; }
 .table-row input, .table-row select { width: 100%; box-sizing: border-box; padding: 7px; font-size: 11px; }
 .seq { color: var(--cyan); font-family: var(--mono); text-align: center; }
