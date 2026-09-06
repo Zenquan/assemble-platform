@@ -236,8 +236,11 @@ export function buildBomForLine(line: ProductionLine): AssemblyBom {
   const compactPositions = hasFootprints
     ? compactStationPositions(stations, line.transferGapMeters ?? DEFAULT_TRANSFER_GAP_METERS)
     : null;
+  // 显式工位位置优先于紧凑/默认推导：供「处理干涉」时微调单个工位布局后复检。
   const positions = stations.map((station, index) =>
-    compactPositions?.get(station.id) ?? positionOf(station, index, stations.length),
+    station.position ??
+      compactPositions?.get(station.id) ??
+      positionOf(station, index, stations.length),
   );
   const basePosition: Vec3 = [
     positions.reduce((sum, position) => sum + position[0], 0) / positions.length,

@@ -127,6 +127,37 @@ describe('GET /lines/:id/bom', () => {
     await app.close();
   });
 
+  it('工位显式 position 优先于紧凑/默认推导，供干涉调整后保存布局', () => {
+    const line: ProductionLine = {
+      id: 'manual-layout',
+      name: '手动布局线',
+      kind: 'fresh-cut',
+      enabled: true,
+      modelVersion: 'fixture-v1',
+      createdAt: '2026-09-04T00:00:00.000Z',
+      updatedAt: '2026-09-04T00:00:00.000Z',
+      transferAssetId: 'transfer-conveyor',
+      transferGapMeters: 0.8,
+      stations: [
+        {
+          id: 'manual-s1', lineId: 'manual-layout', seq: 1, name: '工位 1',
+          taktSeconds: 5, deviceKind: 'bubble-washer', footprintLengthMeters: 4.5,
+          facingDeg: 0, position: [100, 1.2, -3],
+        },
+        {
+          id: 'manual-s2', lineId: 'manual-layout', seq: 2, name: '工位 2',
+          taktSeconds: 5, deviceKind: 'vegetable-cutter', footprintLengthMeters: 2.49,
+          facingDeg: 0, position: [200, 0.5, 4],
+        },
+      ],
+    };
+    const bom = buildBomForLine(line);
+    const devices = bom.parts.filter((part) => part.assetId !== 'transfer-conveyor');
+
+    expect(devices[0]?.localPosition).toEqual([100, 1.2, -3]);
+    expect(devices[1]?.localPosition).toEqual([200, 0.5, 4]);
+  });
+
   it('未知流水线返回 404 信封错误', async () => {
     const app = await appWith();
     const response = await app.inject({ method: 'GET', url: '/lines/missing/bom' });

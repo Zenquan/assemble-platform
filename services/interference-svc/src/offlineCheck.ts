@@ -1,7 +1,7 @@
 import { ClearanceDetector } from '@assemble/clearance-core';
-import type { InterferenceReport } from '@assemble/domain';
+import { MODEL_ASSET_BOUNDS, type AssemblyPart, type InterferenceReport } from '@assemble/domain';
+import { obbFromBomPart } from '@assemble/clearance-core';
 import { ok } from '@assemble/http';
-import { synthesizePartsForLine } from './geometryCatalog.js';
 
 export interface OfflineCheckResult {
   report: InterferenceReport;
@@ -9,23 +9,31 @@ export interface OfflineCheckResult {
 
 /**
  * 运行一次「离线整线批量干涉预检」：
- * 载入给定产线全量零件的 OBB，BVH self-collision + OBB-SAT 全量对撞，产出报告。
+ * 直接消费 assembly-svc 返回的 BOM 位姿 + domain 内置 GLB 实测包络，
+ * 用与 Babylon 视口一致的 OBB 构造，BVH self-collision + OBB-SAT 全量对撞。
  * 对应方案 3.3「服务端离线批量」（数千零件组合校验不压垮浏览器）。
  */
 export function runOfflineCheck(params: {
   lineId: string;
-  lineKind: string;
-  partCount: number;
+  parts: ReadonlyArray<Pick<AssemblyPart, 'id' | 'assetId' | 'localPosition' | 'localRotation'>>;
 }): OfflineCheckResult {
-  const parts = synthesizePartsForLine(params.lineKind, params.partCount);
   const detector = new ClearanceDetector();
-  detector.loadAll(parts.map((p) => ({ partId: p.partId, obb: p.obb })));
+  detector.loadAll(params.parts.map((part) => {
+    const envelope = MODEL_ASSET_BOUNDS[part.assetId];
+    if (!envelope) {
+      throw new Error(`资产 ${part.assetId} 缺少实测包络元数据，无法参与离线预检`);
+    }
+    return {
+      partId: part.id,
+      obb: obbFromBomPart(part, envelope.size),
+    };
+  }));
   const res = detector.runFull();
   const report: InterferenceReport = {
     reportId: `off-${Date.now()}`,
     lineId: params.lineId,
     source: 'offline',
-    totalPartCount: res.totalPartCount,
+    totalPartCount: params.parts.length,
     pairsChecked: res.pairsChecked,
     hitCount: res.hits.length,
     hits: res.hits,

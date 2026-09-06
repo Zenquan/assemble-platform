@@ -27,6 +27,16 @@ function validateLine(line: ProductionLine): string | null {
     if (station.footprintLengthMeters !== undefined && (!Number.isFinite(station.footprintLengthMeters) || station.footprintLengthMeters <= 0)) {
       return `工位 ${station.id} 的 footprintLengthMeters 无效`;
     }
+    if (
+      station.position !== undefined &&
+      (station.position.length !== 3 ||
+        station.position.some((value) => !Number.isFinite(value)))
+    ) {
+      return `工位 ${station.id} 的 position 必须是三个有限数`;
+    }
+    if (station.facingDeg !== undefined && !Number.isFinite(station.facingDeg)) {
+      return `工位 ${station.id} 的 facingDeg 无效`;
+    }
     stationIds.add(station.id);
   }
   if (line.transferGapMeters !== undefined && (!Number.isFinite(line.transferGapMeters) || line.transferGapMeters < 0)) {

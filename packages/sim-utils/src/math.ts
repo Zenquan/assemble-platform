@@ -95,6 +95,28 @@ export function quatIdentity(): Quat {
   return { x: 0, y: 0, z: 0, w: 1 };
 }
 
+/**
+ * 用单位四元数旋转向量（标准 qvq* 公式，与 Babylon/glTF 的 Y-up 约定一致）。
+ * 调用方需保证 q 已归一化；本实现不做归一化以保持纯计算可预测。
+ */
+export function quatRotate(v: Vec3, q: Quat): Vec3 {
+  const [x, y, z] = v;
+  const qx = q.x;
+  const qy = q.y;
+  const qz = q.z;
+  const qw = q.w;
+  // t = 2 * qv × v
+  const tx = 2 * (qy * (z ?? 0) - qz * (y ?? 0));
+  const ty = 2 * (qz * (x ?? 0) - qx * (z ?? 0));
+  const tz = 2 * (qx * (y ?? 0) - qy * (x ?? 0));
+  // v' = v + w*t + qv × t
+  return [
+    (x ?? 0) + qw * tx + (qy * tz - qz * ty),
+    (y ?? 0) + qw * ty + (qz * tx - qx * tz),
+    (z ?? 0) + qw * tz + (qx * ty - qy * tx),
+  ] as const;
+}
+
 /** 单位阵 */
 export function mat4Identity(): Matrix4 {
   return {

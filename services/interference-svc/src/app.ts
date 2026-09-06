@@ -1,4 +1,5 @@
 import { err, ok } from '@assemble/http';
+import type { AssemblyPart } from '@assemble/domain';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { runOfflineCheck } from './offlineCheck.js';
 
@@ -15,12 +16,11 @@ interface Envelope<T> {
 
 interface AssemblyLine {
   id: string;
-  kind: string;
 }
 
 interface AssemblyBom {
   lineId: string;
-  parts: Array<{ id: string }>;
+  parts: Array<Pick<AssemblyPart, 'id' | 'assetId' | 'localPosition' | 'localRotation'>>;
 }
 
 export interface InterferenceAppDeps {
@@ -75,8 +75,7 @@ export function buildApp(deps: InterferenceAppDeps = {}): FastifyInstance {
         const { line, bom } = await fetchAssemblyData(lineId, assemblyBaseUrl, fetchImpl);
         const { report } = runOfflineCheck({
           lineId,
-          lineKind: line.kind,
-          partCount: bom.parts.length,
+          parts: bom.parts,
         });
         return ok(report);
       } catch (error) {

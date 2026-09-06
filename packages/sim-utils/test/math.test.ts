@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { slerp, quatIdentity, vec3Dot, vec3Cross } from '../src/index.js';
+import { slerp, quatIdentity, quatRotate, vec3Dot, vec3Cross } from '../src/index.js';
 
 describe('sim-utils math', () => {
   it('vec3Dot / vec3Cross 正确', () => {
@@ -30,5 +30,13 @@ describe('sim-utils math', () => {
     expect(len).toBeCloseTo(1);
     // 绕 Z 转 45° 的一半约 22.5°，z 分量 = sin(22.5°)
     expect(mid.z).toBeCloseTo(Math.sin(Math.PI / 8), 4);
+  });
+
+  it('quatRotate 与 Babylon RotationYawPitchRoll 一致：Y 轴正转 90° 把 X 转到 -Z', () => {
+    const q = { x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 };
+    const out = quatRotate([1, 0, 0], q);
+    expect(out[0]).toBeCloseTo(0, 8);
+    expect(out[1]).toBeCloseTo(0, 8);
+    expect(out[2]).toBeCloseTo(-1, 8);
   });
 });

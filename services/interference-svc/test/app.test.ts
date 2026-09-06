@@ -8,7 +8,7 @@ function fetchForAssembly(): typeof fetch {
     if (url.endsWith('/lines/line-a')) {
       return new Response(JSON.stringify({
         ok: true,
-        data: { id: 'line-a', kind: 'fresh-cut' },
+        data: { id: 'line-a' },
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     if (url.endsWith('/lines/line-a/bom')) {
@@ -16,7 +16,26 @@ function fetchForAssembly(): typeof fetch {
         ok: true,
         data: {
           lineId: 'line-a',
-          parts: [{ id: 'part-1' }, { id: 'part-2' }, { id: 'part-3' }],
+          parts: [
+            {
+              id: 'part-1',
+              assetId: 'conveyor',
+              localPosition: [0, 0, 0],
+              localRotation: { x: 0, y: 0, z: 0, w: 1 },
+            },
+            {
+              id: 'part-2',
+              assetId: 'conveyor',
+              localPosition: [0.5, 0, 0],
+              localRotation: { x: 0, y: 0, z: 0, w: 1 },
+            },
+            {
+              id: 'part-3',
+              assetId: 'box-pack',
+              localPosition: [50, 0, 0],
+              localRotation: { x: 0, y: 0, z: 0, w: 1 },
+            },
+          ],
         },
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
@@ -25,18 +44,28 @@ function fetchForAssembly(): typeof fetch {
 }
 
 describe('POST /interference/offline', () => {
-  it('按 lineId 读取 assembly-svc BOM 并使用真实零件数生成报告', async () => {
+  it('按 lineId 读取真实 BOM，用实测包络检出命中且命中零件对可回溯', async () => {
     const app = buildApp({ assemblyBaseUrl: 'http://assembly.test', fetchImpl: fetchForAssembly() });
     const response = await app.inject({
       method: 'POST',
       url: '/interference/offline',
       payload: { lineId: 'line-a' },
     });
-    const body = response.json<{ data: { lineId: string; totalPartCount: number } }>();
+    const body = response.json<{
+      data: {
+        lineId: string;
+        totalPartCount: number;
+        hitCount: number;
+        hits: Array<{ firstPartId: string; secondPartId: string }>;
+      };
+    }>();
 
     expect(response.statusCode).toBe(200);
     expect(body.data.lineId).toBe('line-a');
     expect(body.data.totalPartCount).toBe(3);
+    expect(body.data.hitCount).toBe(1);
+    expect(body.data.hits[0]?.firstPartId).toBe('part-1');
+    expect(body.data.hits[0]?.secondPartId).toBe('part-2');
     await app.close();
   });
 
