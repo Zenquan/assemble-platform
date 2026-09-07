@@ -1,6 +1,6 @@
 # 安全、鉴权、审计与加密（SECURITY）
 
-> **状态**：S1（安全共享库）→ S2（auth-svc 真实签发 + 审计加固）→ S3（网关鉴权 + 前端凭证）待实现（0.5.x M4 加固 · 安全方向）
+> **状态**：S1（安全共享库）✅、S2（auth-svc 真实签发 + 审计加固）✅ 已落地；S3（网关鉴权 + 前端凭证）待实现（0.5.x M4 加固 · 安全方向）
 > **对应方案**：`产线3D装配仿真平台-工业级Web3D技术方案.md` §7（安全、鉴权、数据与容灾）
 > **关联文档**：`ARCHITECTURE.md`（模块边界）、`OBSERVABILITY.md`（request-id 链路）、`TESTING.md`（门禁）、`VERSIONING.md`（版本档）
 
@@ -93,7 +93,7 @@ flowchart TD
 | 切片 | 内容 | 交付物 | 状态 |
 |------|------|--------|------|
 | **S1** | 安全共享库 | `packages/security`（jwt / crypto / rbac / audit）+ 单测 | ✅ 已落地 |
-| **S2** | auth-svc 真实签发 + 审计加固 | `/auth/token` 真实 JWT、`/auth/verify`、审计全覆盖 + `/audit` 列表 + 哈希链 | ⬜ 待实现 |
+| **S2** | auth-svc 真实签发 + 审计加固 | `/auth/token` 真实 JWT、`/auth/verify`、审计全覆盖 + `/audit` 列表 + 哈希链 | ✅ 已落地 |
 | **S3** | 网关鉴权 + 前端凭证 | gateway `verifyJwt` + 路径权限映射（401/403）+ 白名单；前端 http.ts 凭证与 401 处理 | ⬜ 待实现 |
 
 每个切片完成即过 `typecheck` + `test`，一个逻辑单元一次 Conventional Commit。

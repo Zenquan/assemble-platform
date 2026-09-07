@@ -204,9 +204,15 @@ importers:
 
   services/gateway:
     dependencies:
+      '@assemble/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@assemble/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@assemble/security':
+        specifier: workspace:*
+        version: link:../../packages/security
     devDependencies:
       '@types/node':
         specifier: ^22.10.0

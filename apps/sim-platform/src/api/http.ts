@@ -33,13 +33,26 @@ interface EnvelopeLike<T> {
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
-  /** 是否带凭证（默认不带；后续网关鉴权再开） */
   headers?: Record<string, string>;
+}
+
+// ── 凭证管理：登录后 setAuthToken 注入，所有请求自动带 Authorization: Bearer ──
+let authToken: string | undefined;
+
+/** 设置访问令牌（登录成功后调用）；传 undefined 清除登录态 */
+export function setAuthToken(token: string | undefined): void {
+  authToken = token;
+}
+
+/** 读取当前令牌（供登录态判断 / 持久化） */
+export function getAuthToken(): string | undefined {
+  return authToken;
 }
 
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = opts.method ?? 'GET';
   const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
   let body: string | undefined;
   if (opts.body !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -51,6 +64,12 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     res = await fetch(path, { method, headers, body });
   } catch (cause) {
     throw new ApiError({ code: 'NETWORK_ERROR', message: '无法连接服务，请确认后端已启动', status: 0 });
+  }
+
+  // 401：凭证失效/未认证 → 清除本地令牌并抛统一错误，供路由层跳登录
+  if (res.status === 401) {
+    setAuthToken(undefined);
+    throw new ApiError({ code: 'UNAUTHORIZED', message: '登录已过期，请重新登录', status: 401 });
   }
 
   const text = await res.text();
