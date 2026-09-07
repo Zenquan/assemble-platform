@@ -281,3 +281,96 @@ describe('HA：liveness / readiness 双探针', () => {
     await app.close();
   });
 });
+
+describe('POST /lines 与 BOM（自定义资产设备全链路契约）', () => {
+  interface CustomStationSeed {
+    seq: number;
+    deviceSize?: [number, number, number];
+    position?: [number, number, number];
+  }
+
+  function customPayload(stations: CustomStationSeed[] = [{ seq: 1, deviceSize: [2.4, 1.8, 1.6] }]): ProductionLine {
+    const now = '2026-09-07T00:00:00.000Z';
+    return {
+      id: 'line-custom-01',
+      name: '自定义设备装配线',
+      kind: 'sorting',
+      baseAssetId: 'conveyor',
+      enabled: true,
+      modelVersion: 'custom-v1',
+      createdAt: now,
+      updatedAt: now,
+      stations: stations.map((seed) => ({
+        id: `line-custom-01-st-${seed.seq}`,
+        lineId: 'line-custom-01',
+        seq: seed.seq,
+        name: `CNC 工位 ${seed.seq}`,
+        taktSeconds: 3 + seed.seq,
+        deviceKind: 'custom-cnc-mill',
+        ...(seed.deviceSize ? { deviceSize: seed.deviceSize } : {}),
+        ...(seed.position ? { position: seed.position } : { position: [0, 0, 0] as [number, number, number] }),
+        facingDeg: 90,
+      })),
+    };
+  }
+
+  it('携带 deviceSize 的自定义设备工位可通过产线校验（201）', async () => {
+    const instance = await appWith();
+    const response = await instance.inject({ method: 'POST', url: '/lines', payload: customPayload() });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({ ok: true, data: { id: 'line-custom-01' } });
+
+    await instance.close();
+  });
+
+  it('自定义设备缺 deviceSize 时拒绝（400 VALIDATION_FAILED）', async () => {
+    const instance = await appWith();
+    const response = await instance.inject({
+      method: 'POST',
+      url: '/lines',
+      payload: customPayload([{ seq: 1 }]),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ ok: false, code: 'VALIDATION_FAILED' });
+
+    await instance.close();
+  });
+
+  it('自定义设备 deviceSize 含非正数时拒绝（400 VALIDATION_FAILED）', async () => {
+    const instance = await appWith();
+    const response = await instance.inject({
+      method: 'POST',
+      url: '/lines',
+      payload: customPayload([{ seq: 1, deviceSize: [2.4, 0, 1.6] }]),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ ok: false, code: 'VALIDATION_FAILED' });
+
+    await instance.close();
+  });
+
+  it('BOM 中自定义工位零件携带 envelopeSize=station.deviceSize，内置零件不带', () => {
+    const bom = buildBomForLine(customPayload());
+
+    const customPart = bom.parts.find((part) => part.assetId === 'custom-cnc-mill');
+    expect(customPart?.envelopeSize).toEqual([2.4, 1.8, 1.6]);
+
+    const basePart = bom.parts.find((part) => part.assetId === 'conveyor');
+    expect(basePart?.envelopeSize).toBeUndefined();
+  });
+
+  it('layout-suggestions 对重叠的自定义设备不抛「缺少包络」并能给出避让建议', async () => {
+    const linePayload = customPayload([
+      { seq: 1, deviceSize: [3.0, 2.0, 1.5], position: [0, 0, 0] },
+      { seq: 2, deviceSize: [3.0, 2.0, 1.5], position: [0.5, 0, 0] },
+    ]);
+    const bom = buildBomForLine(linePayload);
+    const result = suggestStationLayout(linePayload, bom);
+
+    expect(result.hitCount).toBeGreaterThan(0);
+    expect(result.suggestions.length).toBeGreaterThan(0);
+  });
+});
