@@ -106,4 +106,5 @@ export const http = {
   /** 二进制直传（application/octet-stream），用于 GLB 等原始文件上传 */
   putBinary: <T>(path: string, binaryBody: Blob | ArrayBuffer | ArrayBufferView) =>
     request<T>(path, { method: 'PUT', binaryBody }),
+  del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };
