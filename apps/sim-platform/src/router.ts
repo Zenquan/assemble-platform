@@ -20,6 +20,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/LineConfigView.vue'),
     meta: { title: '产线配置' },
   },
+  {
+    path: '/assets',
+    name: 'model-assets',
+    component: () => import('@/views/ModelAssetsView.vue'),
+    meta: { title: '模型资产' },
+  },
 ];
 
 export const router = createRouter({
