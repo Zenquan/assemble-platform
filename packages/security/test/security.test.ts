@@ -9,11 +9,13 @@ import {
   decryptString,
   deriveKey,
   encryptString,
+  extractBearerToken,
   hashEntry,
   hasPermission,
   nextPrevHash,
   permissionsFor,
   randomToken,
+  resolveJwtSecret,
   signJwt,
   verifyAuditChain,
   verifyJwt,
@@ -60,6 +62,26 @@ describe('jwt · HS256 签发与验证', () => {
     expect(() => verifyJwt('not-a-jwt', SECRET)).toThrow();
     const token = signJwt({ sub: 'u1' }, SECRET);
     expect(() => verifyJwt(token, 'wrong-secret')).toThrow(/签名/);
+  });
+
+  it('extractBearerToken 提取/拒绝各种形态', () => {
+    expect(extractBearerToken('Bearer abc.def.ghi')).toBe('abc.def.ghi');
+    expect(extractBearerToken('bearer abc.def.ghi')).toBe('abc.def.ghi');
+    expect(extractBearerToken('Bearer  abc  ')).toBe('abc');
+    expect(extractBearerToken('Basic abc')).toBeUndefined();
+    expect(extractBearerToken(undefined)).toBeUndefined();
+    expect(extractBearerToken('')).toBeUndefined();
+  });
+
+  it('resolveJwtSecret：显式密钥 / 开发回退 / 生产强约束', () => {
+    expect(resolveJwtSecret({ nodeEnv: 'production', explicit: 'x'.repeat(32) }).secret).toBe('x'.repeat(32));
+    expect(resolveJwtSecret({ nodeEnv: 'production', explicit: 'x'.repeat(32) }).usingDev).toBe(false);
+    expect(() => resolveJwtSecret({ nodeEnv: 'production' })).toThrow(/必须显式配置/);
+    expect(() => resolveJwtSecret({ nodeEnv: 'production', explicit: 'short' })).toThrow(/< 32/);
+    const dev = resolveJwtSecret({ nodeEnv: 'development' });
+    expect(dev.usingDev).toBe(true);
+    expect(dev.isProd).toBe(false);
+    expect(dev.secret.length).toBeGreaterThanOrEqual(32);
   });
 });
 

@@ -84,3 +84,47 @@ export function verifyJwt(
   }
   return claims;
 }
+
+/**
+ * 从 `Authorization` 头提取 Bearer token（大小写不敏感）。
+ * 无该头或格式非法时返回 undefined，供 auth-svc / gateway 统一复用。
+ */
+export function extractBearerToken(authorization: string | undefined): string | undefined {
+  if (!authorization) return undefined;
+  const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
+  return match?.[1]?.trim() || undefined;
+}
+
+/** 开发/测试环境默认密钥（本地自证安全；生产必须显式 AUTH_JWT_SECRET） */
+export const DEV_JWT_SECRET = 'assemble-dev-insecure-jwt-secret-000000';
+
+export interface ResolvedJwtSecret {
+  secret: string;
+  isProd: boolean;
+  /** 是否回退到了开发默认密钥（调用方应告警） */
+  usingDev: boolean;
+}
+
+/**
+ * 解析 JWT 签名密钥。auth-svc（签发）与 gateway（验证）共用同一份规则，杜绝漂移：
+ * - 显式提供 `explicit`（AUTH_JWT_SECRET）→ 使用；生产环境要求 ≥32 字节；
+ * - 生产未显式配置或过短 → 抛错（fail-fast，拒绝以弱密钥运行）；
+ * - 开发未配置 → 回退 `DEV_JWT_SECRET`（`usingDev=true`，调用方告警）。
+ */
+export function resolveJwtSecret(
+  opts: { nodeEnv?: string; explicit?: string } = {},
+): ResolvedJwtSecret {
+  const env = opts.nodeEnv ?? 'development';
+  const isProd = env === 'production';
+  const explicit = opts.explicit;
+  if (explicit) {
+    if (isProd && explicit.length < 32) {
+      throw new Error('AUTH_JWT_SECRET 长度 < 32 字节，生产环境拒绝');
+    }
+    return { secret: explicit, isProd, usingDev: false };
+  }
+  if (isProd) {
+    throw new Error('生产环境必须显式配置 AUTH_JWT_SECRET（≥32 字节）');
+  }
+  return { secret: DEV_JWT_SECRET, isProd, usingDev: true };
+}
