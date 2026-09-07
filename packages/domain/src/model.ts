@@ -26,6 +26,25 @@ export const MODEL_ASSET_IDS = [
 
 export type ModelAssetId = (typeof MODEL_ASSET_IDS)[number];
 
+/** 用户上传的自定义资产 id 统一前缀：与内置资产天然隔离，禁止覆盖内置命名。 */
+export const CUSTOM_ASSET_PREFIX = 'custom-';
+
+/** 自定义资产 id 规则：custom- 前缀 + 小写字母/数字/连字符，总长 ≤ 64。 */
+const CUSTOM_ASSET_ID_RE = /^custom-[a-z0-9][a-z0-9-]{0,56}$/;
+
+export function isBuiltinAssetId(assetId: string): boolean {
+  return (MODEL_ASSET_IDS as readonly string[]).includes(assetId);
+}
+
+export function isCustomAssetId(assetId: string): boolean {
+  return CUSTOM_ASSET_ID_RE.test(assetId);
+}
+
+/** 资产 id 合法性统一判定：内置白名单 ∪ 合法 custom- 自定义 id（model-svc 下载/上传与 assembly-svc 产线校验共享）。 */
+export function isValidModelAssetId(assetId: string): boolean {
+  return isBuiltinAssetId(assetId) || isCustomAssetId(assetId);
+}
+
 /**
  * 资产实测包络（米）。
  * size 取 GLB 世界 AABB 的 [x, y, z] 尺寸，由 `scripts/gltf-gen/measure_glb.mjs`
