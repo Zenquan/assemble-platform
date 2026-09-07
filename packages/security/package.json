@@ -1,0 +1,29 @@
+{
+  "name": "@assemble/security",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "轻量安全库：HS256 JWT 签发/验证、AES-256-GCM 字段加密、RBAC 矩阵、append-only 审计哈希链（零外部依赖，仅 node:crypto）",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@assemble/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

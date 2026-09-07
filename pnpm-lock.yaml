@@ -95,6 +95,22 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)
 
+  packages/security:
+    dependencies:
+      '@assemble/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)
+
   packages/sim-utils:
     dependencies:
       '@assemble/domain':
@@ -166,6 +182,9 @@ importers:
       '@assemble/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@assemble/security':
+        specifier: workspace:*
+        version: link:../../packages/security
       '@assemble/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -185,9 +204,15 @@ importers:
 
   services/gateway:
     dependencies:
+      '@assemble/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@assemble/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@assemble/security':
+        specifier: workspace:*
+        version: link:../../packages/security
     devDependencies:
       '@types/node':
         specifier: ^22.10.0

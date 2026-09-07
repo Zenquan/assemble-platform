@@ -32,10 +32,11 @@
 >
 > 进度注记：**0.2.0 出口两门禁、v0.3.0（M2 MVP）均已闭合发布**；**0.4.x（M3 平台化）已发布 v0.4.1**：真实 GLB 资产管线、净菜多产线（分拣 / 净菜 / 冷链 3 类 `kind`、5 条种子线共享 13 个 GLB 资产库）、后端归属 BOM / 节拍 / 物料流转、CloudBase 单容器 Git 部署。出口门禁「3 类产线复用」已具备；「资产复用 ≥70%」以资产库多线共享落地，度量口径已在 0.5.x 固化为可执行指标（`pnpm metrics`，复用率 75% 达标）。进入 **0.5.x（M4 加固期）**。
 >
-> **0.5.x（M4 加固）进行中**，已落地两个方向：
+> **0.5.x（M4 加固）进行中**，已落地三个方向：
 > - **测试与基准体系**：CI 门禁链（GitHub Actions，push/PR 自动 `build:all`+`typecheck:all`+`test:all`）、覆盖率门禁（核心算法包 lines/functions/statements ≥80%、branches ≥75%）、性能基准独立化（`pnpm bench` 产出可对比 JSON，`runFull.200 <200ms` 门禁）、资产复用率度量（`pnpm metrics`，复用率 75% 达标）+ E2E 视觉回归骨架。详见 `TESTING.md`。
 > - **监控与可观测性**：新增 `@assemble/observability` 纯 TS 指标库；5 服务接入 `/metrics` 与 `X-Request-Id` 跨服务透传；gateway 结构化访问日志 + `/metrics` 聚合 5 上游 + `/telemetry`；前端 `SimMonitor` 埋点（Web Vitals / FPS / 内存）节流批量上报。详见 `OBSERVABILITY.md`。
-> - 剩余方向：HA 部署编排、RBAC/审计/加密、容灾与告警推送（告警阈值已在 `OBSERVABILITY.md` 预留，接入留 HA 方向）。
+> - **RBAC/审计/加密（安全加固）**：新增 `@assemble/security` 共享库（HS256 JWT + AES-256-GCM + RBAC 矩阵 + 审计哈希链）；auth-svc 真实 JWT 签发与不可变审计；gateway 本地验签 + 路径权限映射（401/403）；前端凭证注入与 401 处理。详见 `SECURITY.md`。
+> - 剩余方向：HA 部署编排、容灾与告警推送（告警阈值已在 `OBSERVABILITY.md` 预留，接入留 HA 方向）。
 
 ## 2. 各阶段（0.x）的工程内落地指引
 

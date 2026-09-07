@@ -11,7 +11,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@assemble/observability": "workspace:*"
+    "@assemble/domain": "workspace:*",
+    "@assemble/observability": "workspace:*",
+    "@assemble/security": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

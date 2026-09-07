@@ -21,6 +21,7 @@ import {
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { REQUEST_ID_HEADER } from '@assemble/observability';
+import { resolveJwtSecret } from '@assemble/security';
 import {
   fetchUpstreamMetricsText,
   gatewayHttpMetrics,
@@ -37,6 +38,7 @@ import {
   matchRoute,
   UPSTREAM_SERVICES,
 } from './routing.js';
+import { authorizeRequest } from './auth.js';
 import { tryServeStaticFile } from './static.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -176,7 +178,7 @@ async function handleTelemetry(req: IncomingMessage, res: ServerResponse): Promi
 }
 
 /** 反向代理主服务（node:http，流式 pipe，不缓存响应体） */
-function startProxyServer(): void {
+function startProxyServer(jwtSecret: string): void {
   const server = createServer(async (req, res) => {
     const url = req.url ?? '/';
     // 仅取 pathname 参与路由；query string 原样透传给上游
@@ -238,6 +240,23 @@ function startProxyServer(): void {
       return;
     }
 
+    // 本地鉴权：/auth/* 免鉴权，其余前缀按路径→权限映射验签 + 断言（401/403）
+    const auth = authorizeRequest({
+      pathname,
+      method: req.method ?? 'GET',
+      authorization: req.headers.authorization,
+      jwtSecret,
+    });
+    if (!auth.ok) {
+      const body = JSON.stringify({ ok: false, code: auth.code, message: auth.message });
+      res.writeHead(auth.status, {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      });
+      res.end(body);
+      return;
+    }
+
     // 剥离 hop-by-hop 头，避免污染上游连接语义；其余头部透传
     const headers = { ...req.headers };
     for (const hop of ['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']) {
@@ -279,6 +298,13 @@ function startProxyServer(): void {
 }
 
 async function main(): Promise<void> {
+  // 本地鉴权密钥：生产必须显式 AUTH_JWT_SECRET（与 auth-svc 同源），缺失即 fail-fast
+  const { secret: jwtSecret, usingDev } = resolveJwtSecret({
+    nodeEnv: process.env['NODE_ENV'],
+    explicit: process.env['AUTH_JWT_SECRET'],
+  });
+  if (usingDev) logJson('warn', '未配置 AUTH_JWT_SECRET，使用开发默认密钥（仅限本地/测试环境）');
+
   spawnAll();
   try {
     await waitForUpstreams([...UPSTREAM_SERVICES]);
@@ -288,7 +314,7 @@ async function main(): Promise<void> {
     });
     process.exit(1);
   }
-  startProxyServer();
+  startProxyServer(jwtSecret);
 }
 
 await main();

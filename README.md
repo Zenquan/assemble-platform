@@ -95,7 +95,8 @@ assemble-platform/
 │  ├─ clearance-core/      # 干涉分析核心算法（BVH + OBB-SAT）
 │  ├─ storage/             # 内存 / 文件降级仓储
 │  ├─ http/                # 统一响应信封
-│  └─ observability/       # 轻量指标库（Counter/Histogram + Prometheus 文本 + request-id）
+│  ├─ observability/       # 轻量指标库（Counter/Histogram + Prometheus 文本 + request-id）
+│  └─ security/            # 安全库（HS256 JWT + AES-256-GCM + RBAC 矩阵 + 审计哈希链）
 ├─ docs/                   # 架构 / 版本 / 测试 / 协作文档
 ├─ scripts/                # dev 编排等工程脚本
 └─ Dockerfile              # CloudBase 单容器部署镜像
