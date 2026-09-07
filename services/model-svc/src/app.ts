@@ -1,6 +1,9 @@
 import {
-  MODEL_ASSET_IDS,
   type CompressionStrategy,
+  CUSTOM_ASSET_PREFIX,
+  isBuiltinAssetId,
+  isValidModelAssetId,
+  isCustomAssetId,
   type ModelAssetVersion,
 } from '@assemble/domain';
 import { err, ok } from '@assemble/http';
@@ -11,17 +14,22 @@ import {
   REQUEST_ID_HEADER,
   renderPrometheusText,
 } from '@assemble/observability';
-import Fastify, { type FastifyInstance } from 'fastify';
+import { createHash } from 'node:crypto';
+import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createModelRepos, type ModelRepos } from './repositories/index.js';
 
+/** 上传 GLB 大小上限（字节）：100MB，覆盖工业设备中精度模型，压缩管线落地后再收紧。 */
+export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+
 const CDN_BASE = process.env['ASSEMBLE_CDN_BASE'] ?? 'https://cdn.assemble.example/gltf';
 
 /** 设备 glb 资产目录（后端单一事实源；前端经 /model/assets/:id/glb 下载，不落 public） */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const GLB_DIR = process.env['ASSEMBLE_GLB_DIR'] ?? path.resolve(__dirname, '../assets/glb');
+const DEFAULT_GLB_DIR =
+  process.env['ASSEMBLE_GLB_DIR'] ?? path.resolve(__dirname, '../assets/glb');
 
 interface PresignBody {
   assetId: string;
@@ -43,13 +51,37 @@ export function buildApp(deps?: {
   /** OSS 回源基址：配置后 /model/glb/:file 从对象存储拉取并回源（云端部署）；缺省读本地文件 */
   glbOssBaseUrl?: string;
   fetchImpl?: typeof fetch;
+  /** GLB 落盘根目录（测试注入临时目录；缺省走 ASSEMBLE_GLB_DIR 或包内 assets/glb） */
+  glbDir?: string;
+  /** 上传大小上限（字节），默认 MAX_UPLOAD_BYTES；测试注入小值以覆盖 413 路径 */
+  maxUploadBytes?: number;
 }): FastifyInstance {
-  const app = Fastify({ logger: true, requestIdHeader: REQUEST_ID_HEADER });
+  const app = Fastify({
+    logger: true,
+    requestIdHeader: REQUEST_ID_HEADER,
+    bodyLimit: deps?.maxUploadBytes ?? MAX_UPLOAD_BYTES,
+  });
   const repos = deps?.repos ?? createModelRepos();
   const fetchImpl = deps?.fetchImpl ?? fetch;
+  const glbDir = deps?.glbDir ?? DEFAULT_GLB_DIR;
+  const maxUploadBytes = deps?.maxUploadBytes ?? MAX_UPLOAD_BYTES;
   const registry = new MetricsRegistry();
   const httpMetrics = createHttpMetrics(registry);
   const startedAt = new WeakMap<object, number>();
+
+  // 上传端点接收原始 GLB 二进制：显式注册 octet-stream 解析器（Fastify 默认只认 JSON/文本）
+  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_req, body, done) => {
+    done(null, body);
+  });
+  // 超限请求体在内容解析阶段即被 Fastify 以 413 中断，转成统一错误信封；其余错误保持默认行为
+  app.setErrorHandler((error: FastifyError, _req, reply) => {
+    if (error.statusCode === 413) {
+      return reply
+        .status(413)
+        .send(err('PAYLOAD_TOO_LARGE', `GLB 超过上传大小上限 ${maxUploadBytes} 字节`));
+    }
+    return reply.send(error);
+  });
 
   app.addHook('onRequest', async (req, reply) => {
     startedAt.set(req, httpMetrics.startRequest());
@@ -87,7 +119,7 @@ export function buildApp(deps?: {
   // 设备 glb 二进制直下：前端布景层从后端取真实设备模型，而非 public 静态副本。
   // 独立前缀 /model/glb/:file（file 形如 `conveyor.glb`）避开与 /model/assets/:assetId 的
   // 路径参数冲突；保留 `.glb` 后缀使 Babylon SceneLoader 能据 URL 扩展名识别 glTF 加载器。
-  // 返回 application/octet-stream + 附件名。
+  // 白名单 = 内置资产 ∪ 已注册自定义资产（custom- 前缀，落盘 glbDir/custom/）。
   app.get<{ Params: { file: string } }>('/model/glb/:file', async (req, reply) => {
     const file = req.params.file;
     // 仅接受 `*.glb`，解析出资产 id 做白名单校验，防路径穿越
@@ -95,8 +127,16 @@ export function buildApp(deps?: {
       return reply.status(404).send(err('NOT_FOUND', `仅支持 .glb 资产下载`));
     }
     const assetId = file.slice(0, -'.glb'.length);
-    if (!(MODEL_ASSET_IDS as readonly string[]).includes(assetId)) {
+    if (!isValidModelAssetId(assetId)) {
       return reply.status(404).send(err('NOT_FOUND', `设备资产 ${assetId} 不存在`));
+    }
+    const isBuiltin = isBuiltinAssetId(assetId);
+    if (!isBuiltin) {
+      // 自定义资产必须已注册（上传时写入仓储），未注册一律 404
+      const registered = (await repos.assets.list()).some((a) => a.assetId === assetId);
+      if (!registered) {
+        return reply.status(404).send(err('NOT_FOUND', `自定义资产 ${assetId} 未注册`));
+      }
     }
     const headers = (buf: Buffer) => {
       reply
@@ -105,6 +145,18 @@ export function buildApp(deps?: {
         .header('Content-Disposition', `attachment; filename="${file}"`)
         .header('Cache-Control', 'public, max-age=3600');
     };
+
+    // 自定义资产始终读本地 custom/ 目录（不经对象存储回源；云上直传 OSS 属后续迭代）
+    if (!isBuiltin) {
+      const filePath = path.join(glbDir, 'custom', file);
+      try {
+        const buf = await fs.readFile(filePath);
+        headers(buf);
+        return reply.send(buf);
+      } catch {
+        return reply.status(404).send(err('NOT_FOUND', `自定义资产文件 ${file} 缺失，请重新上传`));
+      }
+    }
 
     // OSS 回源：云端部署时从对象存储拉取并回给前端（同源、无跨域）；未配置则读本地文件
     if (glbOssBase) {
@@ -121,7 +173,7 @@ export function buildApp(deps?: {
       }
     }
 
-    const filePath = path.join(GLB_DIR, file);
+    const filePath = path.join(glbDir, file);
     try {
       const buf = await fs.readFile(filePath);
       headers(buf);
@@ -129,6 +181,63 @@ export function buildApp(deps?: {
     } catch {
       return reply.status(404).send(err('NOT_FOUND', `设备资产文件 ${file} 缺失`));
     }
+  });
+
+  // 自定义 GLB 上传：原始二进制直传（application/octet-stream），服务端校验后落盘并注册版本。
+  // 仅接受 custom- 前缀资产 id；内置资产受保护不可覆盖；真实压缩由后续 sim-model-pipe 管线接管。
+  app.put<{ Params: { assetId: string } }>('/model/glb/:assetId', async (req, reply) => {
+    const assetId = req.params.assetId;
+    if (isBuiltinAssetId(assetId)) {
+      return reply.status(409).send(err('CONFLICT', `内置资产 ${assetId} 受保护，不允许覆盖上传`));
+    }
+    if (!isCustomAssetId(assetId)) {
+      return reply.status(400).send(
+        err(
+          'VALIDATION_FAILED',
+          `assetId 须为 ${CUSTOM_ASSET_PREFIX} 前缀的小写字母/数字/连字符（总长 ≤ 64）`,
+        ),
+      );
+    }
+    const body = req.body;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      return reply
+        .status(400)
+        .send(err('VALIDATION_FAILED', '请求体须为非空 GLB 二进制（Content-Type: application/octet-stream）'));
+    }
+    if (body.length > maxUploadBytes) {
+      return reply
+        .status(413)
+        .send(err('PAYLOAD_TOO_LARGE', `GLB 超过上传大小上限 ${maxUploadBytes} 字节`));
+    }
+    if (body.subarray(0, 4).toString('ascii') !== 'glTF') {
+      return reply.status(400).send(err('VALIDATION_FAILED', '文件缺少 glTF magic 头，仅支持 .glb 二进制'));
+    }
+
+    const customDir = path.join(glbDir, 'custom');
+    await fs.mkdir(customDir, { recursive: true });
+    await fs.writeFile(path.join(customDir, `${assetId}.glb`), body);
+
+    const now = new Date().toISOString();
+    const asset: ModelAssetVersion = {
+      id: `sha256-${createHash('sha256').update(body).digest('hex').slice(0, 16)}`,
+      assetId,
+      filename: `${assetId}.glb`,
+      sourceSizeBytes: body.length,
+      sizeBytes: body.length,
+      compression: 'none',
+      lodLevel: 0,
+      precisionCritical: false,
+      cdnPath: `${assetId}/${assetId}.glb`,
+      createdAt: now,
+    };
+    const saved = await repos.assets.upsert(asset);
+    return reply.status(201).send(
+      ok({
+        asset: saved,
+        downloadUrl: `/model/glb/${assetId}.glb`,
+        note: '当前按原始体积入库（compression=none），压缩管线接入后自动转压缩版本',
+      }),
+    );
   });
 
   // 模型下载 CDN 签名直链：重型 glTF 不走网关代理（架构红线）

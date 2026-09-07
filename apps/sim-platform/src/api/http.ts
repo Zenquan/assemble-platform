@@ -31,8 +31,10 @@ interface EnvelopeLike<T> {
 }
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
+  /** 原始二进制请求体：直接透传并强制 application/octet-stream（不经 JSON 序列化），优先于 body */
+  binaryBody?: Blob | ArrayBuffer | ArrayBufferView;
   headers?: Record<string, string>;
 }
 
@@ -100,4 +102,8 @@ export const http = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body: unknown) => request<T>(path, { method: 'POST', body }),
   patch: <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body }),
+  put: <T>(path: string, body: unknown) => request<T>(path, { method: 'PUT', body }),
+  /** 二进制直传（application/octet-stream），用于 GLB 等原始文件上传 */
+  putBinary: <T>(path: string, binaryBody: Blob | ArrayBuffer | ArrayBufferView) =>
+    request<T>(path, { method: 'PUT', binaryBody }),
 };

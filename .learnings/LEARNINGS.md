@@ -822,3 +822,26 @@ Babylon 相机 `attachControl` 的第二参数是 `noPreventDefault`，传 `true
 - **Resolution**: commit `76c04d1`，全仓 typecheck + test 绿，inject 冒烟验证 `/metrics` 文本、X-Request-Id 回显、跨服务透传。
 
 ---
+
+## LRN-20260907-002
+
+- **Category**: knowledge_gap
+- **Status**: resolved
+- **Context**: 给长期无单测的 `packages/domain` 首次补测试，把 `*.test.ts` 放 `src/` 下，`vitest run` 报 `No test files found`。
+- **Insight**: 根 `vitest.config.ts` 的 include 只收 `**/test/**/*.test.ts` 与 `**/tests/**/*.test.ts`；vitest 会向上冒泡找根配置，所以**单包测试必须放 `<pkg>/test/`（或 tests/）目录**，放 `src/` 下不会被执行。`domain` 之前 `--passWithNoTests` 掩盖了这一点。
+- **Action**: 测试文件移入 `packages/domain/test/`（import 相对路径同步为 `../src/model.js`）。后续新包补单测直接落 `test/`。
+- **Related Files**: packages/domain/test/model.test.ts, vitest.config.ts
+- **Resolution**: domain 6/6 通过。
+
+---
+
+## LRN-20260907-003
+
+- **Category**: best_practice
+- **Status**: resolved
+- **Context**: model-svc 新增「自定义 GLB 上传」端点（model.ts: PUT /model/glb/:assetId 原始二进制直传），落地一套 Fastify v5 二进制上传配方。
+- **Insight**: ① Fastify v5 默认不解析 `application/octet-stream`，需 `addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, ...)` 显式注册，`req.body` 才是 `Buffer`。② 上传上限用构造参数 `bodyLimit`，超限由 Fastify 以 `FST_ERR_CTP_BODY_TOO_LARGE`(413) 中断内容解析，需 `setErrorHandler` 转统一信封——v5 该回调 `error` 参数类型为 `unknown`，须显式标 `FastifyError`。③ 服务消费的 `@assemble/domain` 若新增导出，服务 tsc 解析的是 `dist`（非 src），必须先 `pnpm --filter @assemble/domain build` 再服务 typecheck。
+- **Action**: 上传端点校验顺序固定为「内置 409 保护 → custom- 前缀规则 → 空体/超限 → glTF magic」；文件落 `glbDir/custom/`，版本记录走 `repos.assets.upsert`（content-hash 作版本 id，compression=none 待压缩管线）。下载白名单统一走 domain `isValidModelAssetId`。
+- **Related Files**: services/model-svc/src/app.ts, packages/domain/src/model.ts, services/model-svc/test/app.test.ts
+- **Resolution**: model-svc 12/12、全仓 typecheck/test 绿（clearance perf 在全仓并行下 218ms 超 200ms 为 CPU 争抢 flake，单独跑 24/24 绿）。
+
