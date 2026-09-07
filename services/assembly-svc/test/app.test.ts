@@ -267,3 +267,17 @@ describe('可观测性：/metrics 与 X-Request-Id', () => {
     await app.close();
   });
 });
+
+describe('HA：liveness / readiness 双探针', () => {
+  it('/healthz 恒 200 且 /readyz 无外部依赖时 200 ready', async () => {
+    const app = await appWith();
+    const health = await app.inject({ method: 'GET', url: '/healthz' });
+    const ready = await app.inject({ method: 'GET', url: '/readyz' });
+
+    expect(health.statusCode).toBe(200);
+    expect(health.json()).toMatchObject({ status: 'ok', service: 'assembly-svc' });
+    expect(ready.statusCode).toBe(200);
+    expect(ready.json()).toMatchObject({ status: 'ready', service: 'assembly-svc', ready: true });
+    await app.close();
+  });
+});

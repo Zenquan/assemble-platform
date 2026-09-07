@@ -12,6 +12,7 @@ export default defineConfig({
       '@assemble/clearance-core': r('./packages/clearance-core/src/index.ts'),
       '@assemble/observability': r('./packages/observability/src/index.ts'),
       '@assemble/security': r('./packages/security/src/index.ts'),
+      '@assemble/health': r('./packages/health/src/index.ts'),
     },
   },
   test: {

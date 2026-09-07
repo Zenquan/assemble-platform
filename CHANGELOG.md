@@ -27,6 +27,8 @@
 - 安全 S1（`@assemble/security` 共享库）：纯 TS 零外部依赖（仅 `node:crypto`），提供 HS256 JWT 签发/验证（常量时间验签、验期、可选验 iss）、AES-256-GCM 字段加解密、scrypt 派生、常量时间比较、RBAC 角色→权限矩阵（单一事实源）、append-only 审计哈希链（`hash=SHA256(prevHash+canonical)`，可全链校验篡改）。
 - 安全 S2（auth-svc 真实签发 + 审计加固）：`/auth/token` 改为真实 HS256 JWT 签发（`AUTH_JWT_SECRET`，开发回退默认密钥 + 生产 fail-fast），新增 `/auth/verify`；审计 `writeAudit` 接入哈希链 + 串行化锁防并发断链；新增 `GET /audit`（actorId/action 过滤 + 全链校验）；RBAC 矩阵迁入 `@assemble/security`。
 - 安全 S3（网关本地鉴权 + 前端凭证）：gateway 新增路径→权限映射（读/写按 HTTP 方法、interference offline/run 细分）+ 本地 `verifyJwt` + 401/403 决策；`/auth/*` 免鉴权、`/audit` 需 `audit:view`、业务前缀按权限断言；前端 `http.ts` 支持 `setAuthToken` 凭证注入（自动附 `Authorization: Bearer`）+ 401 统一清除令牌。
+- HA 需求共识文档（`docs/HA.md`）：高可用代码层前置件方案（优雅停机 / readiness 分离 / 上游健康池 / 配置化）+ Mermaid 数据流图 + S1–S3 实施切片与关键设计决策。
+- HA S1（服务优雅停机 + readiness 分离）：新增 `@assemble/health` 共享库（liveness/readiness 双探针路由注册 + `SIGTERM/SIGINT` 优雅停机编排 `readiness→down → drain → app.close → 退出` + `httpUpstreamProbe` 依赖可达性探针）；5 个后端服务 `/healthz` 恒 200、`/readyz` 依赖就绪才 200（interference/takt 探活 assembly-svc，不可达 503；assembly/model/auth 无外部依赖恒就绪）；各 `server.ts` 接入优雅停机。
 
 ### Changed
 

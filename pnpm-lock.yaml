@@ -80,6 +80,22 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)
 
+  packages/health:
+    dependencies:
+      fastify:
+        specifier: ^5.2.0
+        version: 5.12.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)
+
   packages/http:
     devDependencies:
       typescript:
@@ -148,6 +164,9 @@ importers:
       '@assemble/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@assemble/health':
+        specifier: workspace:*
+        version: link:../../packages/health
       '@assemble/http':
         specifier: workspace:*
         version: link:../../packages/http
@@ -176,6 +195,9 @@ importers:
       '@assemble/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@assemble/health':
+        specifier: workspace:*
+        version: link:../../packages/health
       '@assemble/http':
         specifier: workspace:*
         version: link:../../packages/http
@@ -232,6 +254,9 @@ importers:
       '@assemble/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@assemble/health':
+        specifier: workspace:*
+        version: link:../../packages/health
       '@assemble/http':
         specifier: workspace:*
         version: link:../../packages/http
@@ -260,6 +285,9 @@ importers:
       '@assemble/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@assemble/health':
+        specifier: workspace:*
+        version: link:../../packages/health
       '@assemble/http':
         specifier: workspace:*
         version: link:../../packages/http
@@ -288,6 +316,9 @@ importers:
       '@assemble/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@assemble/health':
+        specifier: workspace:*
+        version: link:../../packages/health
       '@assemble/http':
         specifier: workspace:*
         version: link:../../packages/http

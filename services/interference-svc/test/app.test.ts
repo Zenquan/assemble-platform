@@ -39,6 +39,9 @@ function fetchForAssembly(): typeof fetch {
         },
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
+    if (url.endsWith('/healthz')) {
+      return new Response(JSON.stringify({ status: 'ok' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
     return new Response(JSON.stringify({ ok: false, code: 'NOT_FOUND', message: '未找到' }), { status: 404 });
   };
 }
@@ -90,6 +93,28 @@ describe('POST /interference/offline', () => {
 
     expect(response.statusCode).toBe(502);
     expect(response.json()).toMatchObject({ ok: false, code: 'DEPENDENCY_UNAVAILABLE' });
+    await app.close();
+  });
+});
+
+describe('HA：readiness 依赖探针', () => {
+  it('assembly-svc 不可达时 /readyz 返回 503 not_ready', async () => {
+    const app = buildApp({
+      fetchImpl: async () => { throw new Error('connection refused'); },
+    });
+    const res = await app.inject({ method: 'GET', url: '/readyz' });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toMatchObject({ status: 'not_ready', service: 'interference-svc', ready: false, depsReady: false });
+    await app.close();
+  });
+
+  it('assembly-svc 可达时 /readyz 返回 200 ready', async () => {
+    const app = buildApp({ assemblyBaseUrl: 'http://assembly.test', fetchImpl: fetchForAssembly() });
+    const res = await app.inject({ method: 'GET', url: '/readyz' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ status: 'ready', ready: true, depsReady: true });
     await app.close();
   });
 });

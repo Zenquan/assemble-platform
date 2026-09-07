@@ -1,0 +1,29 @@
+{
+  "name": "@assemble/health",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "轻量健康检查与优雅停机：liveness/readiness 双探针路由注册 + SIGTERM/SIGINT 优雅停机编排（drain → close → exit）",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

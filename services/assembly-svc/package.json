@@ -13,6 +13,7 @@
   "dependencies": {
     "@assemble/clearance-core": "workspace:*",
     "@assemble/domain": "workspace:*",
+    "@assemble/health": "workspace:*",
     "@assemble/http": "workspace:*",
     "@assemble/observability": "workspace:*",
     "@assemble/storage": "workspace:*",
