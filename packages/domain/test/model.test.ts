@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CUSTOM_ASSET_PREFIX,
   MODEL_ASSET_IDS,
+  MODEL_ASSET_LABELS,
   isBuiltinAssetId,
   isCustomAssetId,
   isValidModelAssetId,
@@ -35,6 +36,21 @@ describe('自定义资产 id 规则', () => {
     expect(isCustomAssetId('custom-下料机')).toBe(false);
     expect(isCustomAssetId('custom-a b')).toBe(false);
     expect(isCustomAssetId(`custom-${'a'.repeat(58)}`)).toBe(false);
+  });
+});
+
+describe('内置资产中文名 MODEL_ASSET_LABELS', () => {
+  it('每个内置资产都有非空中文名（一一对应）', () => {
+    for (const id of MODEL_ASSET_IDS) {
+      const label = MODEL_ASSET_LABELS[id];
+      expect(label).toBeDefined();
+      expect(label!.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('常见条目语义正确', () => {
+    expect(MODEL_ASSET_LABELS['vision-module']).toBe('视觉分拣模块');
+    expect(MODEL_ASSET_LABELS['transfer-conveyor']).toBe('转运输送段');
   });
 });
 
