@@ -46,4 +46,8 @@ export interface AuditLogEntry {
   resource: string;
   detail: string;
   ip?: string;
+  /** append-only 哈希链：本条摘要（SHA-256），防篡改（见 @assemble/security） */
+  hash?: string;
+  /** append-only 哈希链：前一条摘要（首条为 GENESIS） */
+  prevHash?: string;
 }

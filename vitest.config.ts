@@ -11,6 +11,7 @@ export default defineConfig({
       '@assemble/sim-utils': r('./packages/sim-utils/src/index.ts'),
       '@assemble/clearance-core': r('./packages/clearance-core/src/index.ts'),
       '@assemble/observability': r('./packages/observability/src/index.ts'),
+      '@assemble/security': r('./packages/security/src/index.ts'),
     },
   },
   test: {
