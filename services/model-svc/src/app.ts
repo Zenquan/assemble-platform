@@ -185,8 +185,14 @@ export function buildApp(deps?: {
 
   // 自定义 GLB 上传：原始二进制直传（application/octet-stream），服务端校验后落盘并注册版本。
   // 仅接受 custom- 前缀资产 id；内置资产受保护不可覆盖；真实压缩由后续 sim-model-pipe 管线接管。
-  app.put<{ Params: { assetId: string } }>('/model/glb/:assetId', async (req, reply) => {
-    const assetId = req.params.assetId;
+  app.put<{ Params: { assetId: string }; Querystring: { displayName?: string } }>(
+    '/model/glb/:assetId',
+    async (req, reply) => {
+      const assetId = req.params.assetId;
+      const displayName = req.query?.displayName?.trim();
+      if (displayName && displayName.length > 40) {
+        return reply.status(400).send(err('VALIDATION_FAILED', 'displayName 不能超过 40 字符'));
+      }
     if (isBuiltinAssetId(assetId)) {
       return reply.status(409).send(err('CONFLICT', `内置资产 ${assetId} 受保护，不允许覆盖上传`));
     }
@@ -221,6 +227,7 @@ export function buildApp(deps?: {
     const asset: ModelAssetVersion = {
       id: `sha256-${createHash('sha256').update(body).digest('hex').slice(0, 16)}`,
       assetId,
+      ...(displayName ? { displayName } : {}),
       filename: `${assetId}.glb`,
       sourceSizeBytes: body.length,
       sizeBytes: body.length,

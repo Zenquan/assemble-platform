@@ -26,6 +26,23 @@ export const MODEL_ASSET_IDS = [
 
 export type ModelAssetId = (typeof MODEL_ASSET_IDS)[number];
 
+/** 内置资产中文名（UI 展示用）：与 MODEL_ASSET_IDS 一一对应，业务引用仍走英文 id。 */
+export const MODEL_ASSET_LABELS: Record<ModelAssetId, string> = {
+  conveyor: '输送机',
+  'transfer-conveyor': '转运输送段',
+  feeder: '上料器',
+  'vision-module': '视觉分拣模块',
+  'gantry-arm': '龙门机械臂',
+  'box-pack': '装箱机',
+  'infeed-elevator': '提升上料机',
+  'bubble-washer': '气泡清洗机',
+  'inspection-conveyor': '检验输送机',
+  'vegetable-cutter': '蔬菜切分机',
+  'vibratory-dewaterer': '振动沥水机',
+  'weigh-packer': '称重包装机',
+  'metal-detector': '金属检测机',
+};
+
 /** 用户上传的自定义资产 id 统一前缀：与内置资产天然隔离，禁止覆盖内置命名。 */
 export const CUSTOM_ASSET_PREFIX = 'custom-';
 
@@ -80,6 +97,8 @@ export interface ModelAssetVersion {
   /** 稳定逻辑 id（业务引用不变，底层版本可更新） */
   assetId: string;
   partId?: string;
+  /** 中文/展示名（自定义资产上传时录入；内置资产 UI 用 MODEL_ASSET_LABELS） */
+  displayName?: string;
   /** 文件名/源 */
   filename: string;
   /** 压缩后体积（字节） */

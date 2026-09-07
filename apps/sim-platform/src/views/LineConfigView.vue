@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { MODEL_ASSET_IDS, type ProductionLine } from '@assemble/domain';
 import AppHeader from '@/components/AppHeader.vue';
 import { createLine, fetchLayoutSuggestions, fetchLines, updateLine, type LineWriteInput } from '@/api/lines';
+import { builtinAssetLabel } from '@/api/model';
 
 type LineForm = Omit<ProductionLine, 'createdAt' | 'updatedAt'>;
 
@@ -274,7 +275,7 @@ onMounted(async () => {
               <label>卫生转运资产
                 <select v-model="form.transferAssetId">
                   <option :value="undefined">不自动生成</option>
-                  <option value="transfer-conveyor">transfer-conveyor</option>
+                  <option value="transfer-conveyor">{{ builtinAssetLabel('transfer-conveyor') }}</option>
                 </select>
               </label>
               <label>设备间隙（米）<input v-model.number="form.transferGapMeters" type="number" min="0" step="0.05" /></label>
@@ -293,7 +294,9 @@ onMounted(async () => {
                 <span class="seq">{{ index + 1 }}</span>
                 <input v-model="station.name" type="text" />
                 <select v-model="station.deviceKind">
-                  <option v-for="assetId in assetOptions" :key="assetId" :value="assetId">{{ assetId }}</option>
+                  <option v-for="assetId in assetOptions" :key="assetId" :value="assetId" :title="assetId">
+                    {{ builtinAssetLabel(assetId) }}
+                  </option>
                 </select>
                 <input v-model.number="station.taktSeconds" type="number" min="0.1" step="0.1" />
                 <input v-model.number="station.footprintLengthMeters" type="number" min="0.1" step="0.01" />

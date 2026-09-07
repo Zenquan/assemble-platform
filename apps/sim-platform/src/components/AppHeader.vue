@@ -105,4 +105,23 @@ const router = useRouter();
   opacity: 0.55;
   cursor: not-allowed;
 }
+/* 页面经 actions 插槽自定义的按钮复用同一视觉（scoped CSS 用 :slotted 命中父作用域节点） */
+.hbtns :slotted(.hbtn) {
+  font-size: 12px;
+  color: #cbd5e1;
+  border: 1px solid #2a3a5c;
+  background: #111a2e;
+  padding: 7px 14px;
+  border-radius: 7px;
+}
+.hbtns :slotted(.hbtn.prim) {
+  color: #04121f;
+  background: var(--grad);
+  border-color: transparent;
+  font-weight: 500;
+}
+.hbtns :slotted(.hbtn:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 </style>
