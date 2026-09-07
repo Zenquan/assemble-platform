@@ -29,6 +29,7 @@
 - 安全 S3（网关本地鉴权 + 前端凭证）：gateway 新增路径→权限映射（读/写按 HTTP 方法、interference offline/run 细分）+ 本地 `verifyJwt` + 401/403 决策；`/auth/*` 免鉴权、`/audit` 需 `audit:view`、业务前缀按权限断言；前端 `http.ts` 支持 `setAuthToken` 凭证注入（自动附 `Authorization: Bearer`）+ 401 统一清除令牌。
 - HA 需求共识文档（`docs/HA.md`）：高可用代码层前置件方案（优雅停机 / readiness 分离 / 上游健康池 / 配置化）+ Mermaid 数据流图 + S1–S3 实施切片与关键设计决策。
 - HA S1（服务优雅停机 + readiness 分离）：新增 `@assemble/health` 共享库（liveness/readiness 双探针路由注册 + `SIGTERM/SIGINT` 优雅停机编排 `readiness→down → drain → app.close → 退出` + `httpUpstreamProbe` 依赖可达性探针）；5 个后端服务 `/healthz` 恒 200、`/readyz` 依赖就绪才 200（interference/takt 探活 assembly-svc，不可达 503；assembly/model/auth 无外部依赖恒就绪）；各 `server.ts` 接入优雅停机。
+- HA S2（gateway 上游健康池 + failover）：gateway 新增 `UpstreamHealthPool`（`add`/`pick` 轮询选址 /`markUnhealthy` 摘流 /`refresh` 恢复 /`snapshot` 快照，纯逻辑注入探针）；转发改为「健康池选地址 + 失败 failover 重试一次」（请求体 ≤5MB 缓冲支持重放，无健康副本 502）；`/healthz` 聚合读健康池快照，周期探活（默认 5s）自动恢复入池。
 
 ### Changed
 

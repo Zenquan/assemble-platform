@@ -1,6 +1,6 @@
 # HA —— 高可用部署与进程编排
 
-> **状态**：S1（服务优雅停机 + readiness 分离）✅ 已落地 → S2（gateway 上游健康池 + failover）→ S3（副本配置化 + 进程编排加固）待实现（0.5.x M4 加固 · HA 部署编排方向）
+> **状态**：S1（服务优雅停机 + readiness 分离）✅ + S2（gateway 上游健康池 + failover）✅ 已落地 → S3（副本配置化 + 进程编排加固）待实现（0.5.x M4 加固 · HA 部署编排方向）
 
 ## 1. 需求共识
 
@@ -39,7 +39,7 @@
 
 - [x] 各服务 `SIGTERM` 后：停止接新连接 → drain 在途（默认 3s）→ 退出，`/readyz` 先返回 503
 - [x] `/healthz`（liveness）恒 200；`/readyz`（readiness）依赖不健康时 503
-- [ ] gateway 上游健康池：某副本故障 → 该地址摘流、请求自动 failover 到健康副本；恢复后重新入池
+- [x] gateway 上游健康池：某副本故障 → 该地址摘流、请求自动 failover 到健康副本；恢复后重新入池
 - [ ] 副本数/端口/上游地址均 env 可配，缺省回退当前单副本 `127.0.0.1:7101–7105`
 - [ ] gateway 子进程异常退出不再整体 `process.exit(1)`，而是退避重启
 - [ ] 全仓 typecheck + test 绿
@@ -71,7 +71,7 @@ flowchart TB
 | 切片 | 内容 | 状态 |
 |------|------|------|
 | **S1** | 服务优雅停机 + readiness 分离 | ✅ 已落地 |
-| **S2** | gateway 上游健康池 + failover | ⬜ 待实现 |
+| **S2** | gateway 上游健康池 + failover | ✅ 已落地 |
 | **S3** | 副本配置化 + 进程编排加固 | ⬜ 待实现 |
 
 ### S1 详情
@@ -83,8 +83,10 @@ flowchart TB
 
 ### S2 详情
 
-- gateway 内新增 `healthPool.ts`：`Map<service, UpstreamTarget[]>`、探测（复用 `isUpstreamReady`）、摘流/恢复、`pickTarget()` 轮询返回健康地址。
-- `server.ts` 转发改为「健康池选地址 + 失败 failover 重试一次」。
+- gateway 内新增 `healthPool.ts`：`UpstreamHealthPool`（`add`/`pick` 轮询选址 /`markUnhealthy` 摘流 /`refresh` 恢复 /`snapshot` 快照），探针通过构造注入（纯逻辑，6 单测覆盖轮询、摘流、恢复、快照）。
+- `server.ts` 转发改为「健康池选地址 + 失败 failover 重试一次」：请求体缓冲（≤5MB）支持重放；首次连接失败 → 摘流 → 再 pick 重试一次；无健康副本返回 502。
+- `/healthz` 聚合改为读健康池快照（`service/host/port/ready`）；启动 `waitForUpstreams` 走 `pool.refresh()`；周期探活（默认 5s）让恢复的上游自动重新入池。
+- 多副本地址（≥2 目标才有真正的跨副本 failover）由 S3 的 `UPSTREAM_TARGETS` env 提供。
 
 ### S3 详情
 
