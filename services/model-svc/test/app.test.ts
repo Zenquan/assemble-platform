@@ -168,6 +168,44 @@ describe('PUT /model/glb/:assetId（自定义资产上传）', () => {
     await instance.close();
   });
 
+  it('上传携带 displayName（中文名）时写入资产记录', async () => {
+    const glbDir = await tempGlbDir();
+    const repos = { assets: createMemoryRepo<ModelAssetVersion>() };
+    const instance = app({ repos, glbDir });
+
+    const upload = await instance.inject({
+      method: 'PUT',
+      url: '/model/glb/custom-press?displayName=%E6%95%B0%E6%8E%A7%E6%9C%BA%E5%BA%8A',
+      headers: { 'content-type': 'application/octet-stream' },
+      payload: fakeGlb('press-binary'),
+    });
+
+    expect(upload.statusCode).toBe(201);
+    expect(upload.json().data.asset.displayName).toBe('数控机床');
+
+    const listed = await repos.assets.list();
+    expect(listed[0]?.displayName).toBe('数控机床');
+
+    await instance.close();
+    await rm(glbDir, { recursive: true, force: true });
+  });
+
+  it('displayName 超过 40 字符时拒绝（400）', async () => {
+    const instance = app({ glbDir: await tempGlbDir() });
+
+    const response = await instance.inject({
+      method: 'PUT',
+      url: `/model/glb/custom-press?displayName=${'长'.repeat(41)}`,
+      headers: { 'content-type': 'application/octet-stream' },
+      payload: fakeGlb('x'),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ ok: false, code: 'VALIDATION_FAILED' });
+
+    await instance.close();
+  });
+
   it('重复上传同 id 覆盖文件并新增版本记录（幂等 upsert）', async () => {
     const glbDir = await tempGlbDir();
     const repos = { assets: createMemoryRepo<ModelAssetVersion>() };
