@@ -275,7 +275,7 @@ onMounted(async () => {
               <label>卫生转运资产
                 <select v-model="form.transferAssetId">
                   <option :value="undefined">不自动生成</option>
-                  <option value="transfer-conveyor">{{ builtinAssetLabel('transfer-conveyor') }} · transfer-conveyor</option>
+                  <option value="transfer-conveyor">{{ builtinAssetLabel('transfer-conveyor') }}</option>
                 </select>
               </label>
               <label>设备间隙（米）<input v-model.number="form.transferGapMeters" type="number" min="0" step="0.05" /></label>

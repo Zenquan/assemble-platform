@@ -140,7 +140,11 @@ onMounted(() => {
   <div class="page">
     <div class="gridbg" aria-hidden="true"></div>
     <div class="shell">
-      <AppHeader subtitle="MODEL ASSET LIBRARY" />
+      <AppHeader title="模型资产库" subtitle="MODEL ASSET LIBRARY">
+        <template #actions>
+          <button class="hbtn" type="button" @click="router.push({ name: 'line-select' })">← 返回产线</button>
+        </template>
+      </AppHeader>
 
       <div class="body">
         <!-- 上传卡片 -->
