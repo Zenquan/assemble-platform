@@ -2,10 +2,10 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
-import { MODEL_ASSET_IDS, type ProductionLine } from '@assemble/domain';
+import { MODEL_ASSET_IDS, type ModelAssetVersion, type ProductionLine } from '@assemble/domain';
 import AppHeader from '@/components/AppHeader.vue';
 import { createLine, fetchLayoutSuggestions, fetchLines, updateLine, type LineWriteInput } from '@/api/lines';
-import { builtinAssetLabel } from '@/api/model';
+import { assetDisplayName, builtinAssetLabel, fetchModelAssets } from '@/api/model';
 
 type LineForm = Omit<ProductionLine, 'createdAt' | 'updatedAt'>;
 
@@ -19,7 +19,35 @@ const errorMessage = ref('');
 const saveMessage = ref('');
 const suggesting = ref(false);
 
-const assetOptions = computed(() => [...MODEL_ASSET_IDS]);
+/** 设备下拉候选：内置资产 + 已上传且实测过包络的自定义资产（缺包络无法参与产线/干涉计算，不列出）。 */
+const customAssets = ref<ModelAssetVersion[]>([]);
+const customByAssetId = computed(() => {
+  const map = new Map<string, ModelAssetVersion>();
+  for (const asset of customAssets.value) {
+    if (asset.envelope) map.set(asset.assetId, asset);
+  }
+  return map;
+});
+const assetOptions = computed(() => [...MODEL_ASSET_IDS, ...customByAssetId.value.keys()]);
+
+/** 设备下拉显示中文名：内置走标签表；自定义取上传时 displayName，回退 id。 */
+function deviceOptionLabel(assetId: string): string {
+  if ((MODEL_ASSET_IDS as readonly string[]).includes(assetId)) return builtinAssetLabel(assetId);
+  const custom = customByAssetId.value.get(assetId);
+  return custom ? assetDisplayName(custom) : assetId;
+}
+
+/** 设备下拉切换：自定义资产自动带出上传量测的包络尺寸（deviceSize 供 BOM/预检消费）；切回内置则清除。 */
+function onDevicePick(station: LineForm['stations'][number], event: Event): void {
+  const next = (event.target as HTMLSelectElement).value;
+  const custom = customByAssetId.value.get(next);
+  if (custom?.envelope) {
+    station.deviceSize = custom.envelope.size;
+    if (typeof custom.envelope.size[0] === 'number') station.footprintLengthMeters = custom.envelope.size[0];
+  } else {
+    delete station.deviceSize;
+  }
+}
 const isNew = computed(() => !form.value?.id);
 
 function cloneLine(line: ProductionLine): LineForm {
@@ -207,6 +235,10 @@ async function save(): Promise<void> {
 }
 
 onMounted(async () => {
+  // 资产库加载独立于产线主流程：失败仅意味着自定义资产不出现在下拉，不阻塞配置页。
+  void fetchModelAssets()
+    .then((assets) => { customAssets.value = assets; })
+    .catch(() => { /* 忽略：模型服务不可用时仅内置资产可选 */ });
   try {
     lines.value = await fetchLines();
     if (route.query.new === '1') openNew();
@@ -293,9 +325,9 @@ onMounted(async () => {
               <div v-for="(station, index) in form.stations" :key="station.id" class="table-row">
                 <span class="seq">{{ index + 1 }}</span>
                 <input v-model="station.name" type="text" />
-                <select v-model="station.deviceKind">
+                <select v-model="station.deviceKind" @change="onDevicePick(station, $event)">
                   <option v-for="assetId in assetOptions" :key="assetId" :value="assetId" :title="assetId">
-                    {{ builtinAssetLabel(assetId) }}
+                    {{ deviceOptionLabel(assetId) }}
                   </option>
                 </select>
                 <input v-model.number="station.taktSeconds" type="number" min="0.1" step="0.1" />
