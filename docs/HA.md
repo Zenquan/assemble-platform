@@ -1,6 +1,6 @@
 # HA —— 高可用部署与进程编排
 
-> **状态**：S1（服务优雅停机 + readiness 分离）✅ + S2（gateway 上游健康池 + failover）✅ 已落地 → S3（副本配置化 + 进程编排加固）待实现（0.5.x M4 加固 · HA 部署编排方向）
+> **状态**：S1（服务优雅停机 + readiness 分离）✅ + S2（gateway 上游健康池 + failover）✅ + S3（副本配置化 + 进程编排加固）✅ 已全部落地（0.5.x M4 加固 · HA 部署编排方向）
 
 ## 1. 需求共识
 
@@ -40,9 +40,9 @@
 - [x] 各服务 `SIGTERM` 后：停止接新连接 → drain 在途（默认 3s）→ 退出，`/readyz` 先返回 503
 - [x] `/healthz`（liveness）恒 200；`/readyz`（readiness）依赖不健康时 503
 - [x] gateway 上游健康池：某副本故障 → 该地址摘流、请求自动 failover 到健康副本；恢复后重新入池
-- [ ] 副本数/端口/上游地址均 env 可配，缺省回退当前单副本 `127.0.0.1:7101–7105`
-- [ ] gateway 子进程异常退出不再整体 `process.exit(1)`，而是退避重启
-- [ ] 全仓 typecheck + test 绿
+- [x] 副本数/端口/上游地址均 env 可配，缺省回退当前单副本 `127.0.0.1:7101–7105`
+- [x] gateway 子进程异常退出不再整体 `process.exit(1)`，而是退避重启
+- [x] 全仓 typecheck + test 绿
 
 ## 2. 鉴权/部署数据流（现状 → 目标）
 
@@ -72,7 +72,7 @@ flowchart TB
 |------|------|------|
 | **S1** | 服务优雅停机 + readiness 分离 | ✅ 已落地 |
 | **S2** | gateway 上游健康池 + failover | ✅ 已落地 |
-| **S3** | 副本配置化 + 进程编排加固 | ⬜ 待实现 |
+| **S3** | 副本配置化 + 进程编排加固 | ✅ 已落地 |
 
 ### S1 详情
 
@@ -90,5 +90,7 @@ flowchart TB
 
 ### S3 详情
 
-- `routing.ts` 支持 env 读 `UPSTREAM_TARGETS`（逗号分隔 `service=host:port,...`），缺省回退单副本。
-- `spawnUpstream` 子进程退避重启替代 `process.exit(1)`。
+- `routing.ts` 新增 `parseUpstreamTargets`（解析 `UPSTREAM_TARGETS` 逗号分隔 `service=host:port,...`，非法条目静默跳过）+ `resolveUpstreams`（显式配置原样使用、`spawnLocal=false`；缺省回退单副本 `127.0.0.1:7101–7105`、`spawnLocal=true`）。
+- 新增 `supervisor.ts` `UpstreamSupervisor`：spawn 本地子进程 + 异常退出**指数退避重启**（`backoffDelayMs` 纯函数：base 500ms、封顶 15s、上限 10 次）替代 `process.exit(1)` 整体崩溃；`stopAll()` 优雅关闭传播（停止重启 + SIGTERM 存活子进程）。
+- `server.ts`：健康池目标改由 `resolveUpstreams` 驱动（多副本/外部地址可配）；显式配置外部上游时不 spawn、纯反代；新增 `installGatewayShutdown`（SIGTERM/SIGINT → 关代理 → SIGTERM 子进程 → 退出，超时兜底 5s）。
+- 单测：`routing.test.ts` 补 `parseUpstreamTargets`/`resolveUpstreams` 用例、新增 `supervisor.test.ts`（退避曲线、重启、超限放弃、stopAll、spawn 抛错重试）。

@@ -12,13 +12,15 @@
  * assembly-svc），不 import 彼此源码。
  *
  * HA（0.5.x）：转发经 `UpstreamHealthPool` 选健康地址，失败摘流并 failover 重试一次；
- * 周期探活让恢复的上游重新入池。多副本地址配置（UPSTREAM_TARGETS）见 S3。
+ * 周期探活让恢复的上游重新入池；多副本地址经 `UPSTREAM_TARGETS` env 配置化，
+ * 子进程由 `UpstreamSupervisor` 监管（异常退避重启 + 优雅关闭传播）。
  */
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import {
   createServer,
   request as httpRequest,
   type IncomingMessage,
+  type Server,
   type ServerResponse,
 } from 'node:http';
 import * as path from 'node:path';
@@ -40,9 +42,11 @@ import {
 import {
   GATEWAY_OWN_PATHS,
   matchRoute,
+  resolveUpstreams,
   type ServiceRoute,
   UPSTREAM_SERVICES,
 } from './routing.js';
+import { UpstreamSupervisor, type SpawnFn } from './supervisor.js';
 import { authorizeRequest } from './auth.js';
 import { tryServeStaticFile } from './static.js';
 
@@ -54,26 +58,21 @@ const STATIC_DIR =
 const READY_TIMEOUT_MS = Number(process.env['GATEWAY_READY_TIMEOUT_MS'] ?? 30_000);
 const READY_POLL_MS = Number(process.env['GATEWAY_READY_POLL_MS'] ?? 300);
 const POOL_REFRESH_MS = Number(process.env['GATEWAY_HEALTH_REFRESH_MS'] ?? 5_000);
+/** 优雅关闭兜底超时（ms）；server.close 挂起超过该值强制退出 */
+const SHUTDOWN_TIMEOUT_MS = Number(process.env['GATEWAY_SHUTDOWN_TIMEOUT_MS'] ?? 5_000);
 /** 转发请求体缓冲上限；超过则不做 failover 重试（直接 413） */
 const MAX_FORWARD_BODY_BYTES = 5 * 1024 * 1024;
 
 const log = (msg: string): void => logJson('info', msg);
 
-/** 启动一个上游服务子进程（继承 stdout/stderr；端口/监听地址由 env 覆盖） */
-function spawnUpstream(service: (typeof UPSTREAM_SERVICES)[number]): ChildProcess {
+/** 真实 spawn 上游服务子进程（继承 stdout/stderr；端口/监听地址由 env 覆盖） */
+const spawnUpstreamFn: SpawnFn = (service) => {
   const serverJs = path.resolve(__dirname, service.serverJsRelative);
-  const child = spawn(process.execPath, [serverJs], {
+  return spawn(process.execPath, [serverJs], {
     env: { ...process.env, PORT: String(service.port), HOST: '127.0.0.1' },
     stdio: 'inherit',
   });
-  log(`spawned ${service.service} (pid=${child.pid ?? '?'}, port=${service.port})`);
-  child.on('exit', (code, signal) => {
-    // 任一上游退出即整体退出，交由云托管容器重启策略恢复
-    log(`${service.service} exited (code=${code}, signal=${signal ?? 'none'})`);
-    process.exit(1);
-  });
-  return child;
-}
+};
 
 /** 探测单个上游 /healthz（就绪返回 true） */
 async function isUpstreamReady(host: string, port: number): Promise<boolean> {
@@ -131,8 +130,6 @@ async function aggregateHealth(pool: UpstreamHealthPool): Promise<Record<string,
     time: new Date().toISOString(),
   };
 }
-
-const spawnAll = (): ChildProcess[] => UPSTREAM_SERVICES.map(spawnUpstream);
 
 /** 聚合 /metrics：gateway 自身指标 + 上拉各上游 /metrics 注入 service 标签合并 */
 async function handleMetrics(res: ServerResponse): Promise<void> {
@@ -298,7 +295,7 @@ async function forwardToUpstream(
 }
 
 /** 反向代理主服务（node:http；健康池选址 + failover；静态托管兜底） */
-function startProxyServer(jwtSecret: string, pool: UpstreamHealthPool): void {
+function startProxyServer(jwtSecret: string, pool: UpstreamHealthPool): Server {
   const server = createServer(async (req, res) => {
     const url = req.url ?? '/';
     // 仅取 pathname 参与路由；query string 原样透传给上游
@@ -391,6 +388,31 @@ function startProxyServer(jwtSecret: string, pool: UpstreamHealthPool): void {
   server.listen(PORT, HOST, () => {
     log(`gateway listening on http://${HOST}:${PORT}`);
   });
+
+  return server;
+}
+
+/**
+ * 网关优雅关闭传播：SIGTERM/SIGINT → 关代理（停止接新连接 + drain 在途）→
+ * SIGTERM 子进程 → 退出；server.close 挂起超过 SHUTDOWN_TIMEOUT_MS 强制退出兜底。
+ */
+function installGatewayShutdown(server: Server, supervisor: UpstreamSupervisor | null): void {
+  let shuttingDown = false;
+  const shutdown = (signal: string): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log(`received ${signal}, shutting down gateway gracefully`);
+    server.close(() => {
+      supervisor?.stopAll();
+      process.exit(0);
+    });
+    setTimeout(() => {
+      supervisor?.stopAll();
+      process.exit(0);
+    }, SHUTDOWN_TIMEOUT_MS).unref?.();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 async function main(): Promise<void> {
@@ -401,22 +423,30 @@ async function main(): Promise<void> {
   });
   if (usingDev) logJson('warn', '未配置 AUTH_JWT_SECRET，使用开发默认密钥（仅限本地/测试环境）');
 
-  // 上游健康池：默认单副本 127.0.0.1:7101–7105（S3 由 UPSTREAM_TARGETS env 扩展多副本）
+  // 上游健康池：env 可配多副本（UPSTREAM_TARGETS），缺省回退单副本 127.0.0.1:7101–7105
+  const { targets, spawnLocal } = resolveUpstreams(process.env['UPSTREAM_TARGETS']);
   const pool = new UpstreamHealthPool(isUpstreamReady);
-  for (const s of UPSTREAM_SERVICES) {
-    pool.add(s.service, '127.0.0.1', s.port);
-  }
+  for (const t of targets) pool.add(t.service, t.host, t.port);
 
-  spawnAll();
+  // 本地子进程监管器（默认单容器形态）；显式配置外部上游时不 spawn，纯反向代理
+  const supervisor = spawnLocal
+    ? new UpstreamSupervisor(UPSTREAM_SERVICES, spawnUpstreamFn, {
+        onEvent: (level, msg, extra) => logJson(level, msg, extra),
+      })
+    : null;
+  supervisor?.start();
+
   try {
     await waitForUpstreams(pool);
   } catch (err) {
     logJson('error', 'gateway startup failed', {
       error: err instanceof Error ? err.message : String(err),
     });
+    supervisor?.stopAll();
     process.exit(1);
   }
-  startProxyServer(jwtSecret, pool);
+  const server = startProxyServer(jwtSecret, pool);
+  installGatewayShutdown(server, supervisor);
 
   // 周期探活：摘流的上游恢复后自动重新入池（failover 恢复）
   setInterval(() => {

@@ -36,7 +36,8 @@
 > - **测试与基准体系**：CI 门禁链（GitHub Actions，push/PR 自动 `build:all`+`typecheck:all`+`test:all`）、覆盖率门禁（核心算法包 lines/functions/statements ≥80%、branches ≥75%）、性能基准独立化（`pnpm bench` 产出可对比 JSON，`runFull.200 <200ms` 门禁）、资产复用率度量（`pnpm metrics`，复用率 75% 达标）+ E2E 视觉回归骨架。详见 `TESTING.md`。
 > - **监控与可观测性**：新增 `@assemble/observability` 纯 TS 指标库；5 服务接入 `/metrics` 与 `X-Request-Id` 跨服务透传；gateway 结构化访问日志 + `/metrics` 聚合 5 上游 + `/telemetry`；前端 `SimMonitor` 埋点（Web Vitals / FPS / 内存）节流批量上报。详见 `OBSERVABILITY.md`。
 > - **RBAC/审计/加密（安全加固）**：新增 `@assemble/security` 共享库（HS256 JWT + AES-256-GCM + RBAC 矩阵 + 审计哈希链）；auth-svc 真实 JWT 签发与不可变审计；gateway 本地验签 + 路径权限映射（401/403）；前端凭证注入与 401 处理。详见 `SECURITY.md`。
-> - 剩余方向：HA 部署编排、容灾与告警推送（告警阈值已在 `OBSERVABILITY.md` 预留，接入留 HA 方向）。
+> - **HA 部署编排**：新增 `@assemble/health`（liveness/readiness 双探针 + 优雅停机）；5 服务 `/healthz` 恒 200、`/readyz` 依赖就绪才 200；gateway 上游健康池 + failover + 副本配置化（`UPSTREAM_TARGETS`）+ 子进程退避重启 + 优雅关闭传播。详见 `HA.md`。
+> - 剩余方向：容灾与告警推送（告警阈值已在 `OBSERVABILITY.md` 预留，接入留后续方向）。
 
 ## 2. 各阶段（0.x）的工程内落地指引
 
