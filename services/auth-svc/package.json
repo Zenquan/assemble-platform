@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@assemble/domain": "workspace:*",
+    "@assemble/health": "workspace:*",
     "@assemble/http": "workspace:*",
     "@assemble/observability": "workspace:*",
     "@assemble/security": "workspace:*",

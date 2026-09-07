@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   GATEWAY_OWN_PATHS,
   matchRoute,
+  parseUpstreamTargets,
+  resolveUpstreams,
   SERVICE_ROUTES,
   UPSTREAM_SERVICES,
 } from '../src/routing.js';
@@ -53,5 +55,58 @@ describe('路由表一致性', () => {
 describe('网关自有路径', () => {
   it('/healthz 由网关自己应答', () => {
     expect(GATEWAY_OWN_PATHS).toContain('/healthz');
+  });
+});
+
+describe('parseUpstreamTargets', () => {
+  it('解析逗号分隔的 service=host:port，同名多副本保留', () => {
+    const targets = parseUpstreamTargets(
+      'assembly-svc=127.0.0.1:7101,assembly-svc=127.0.0.1:7111,model-svc=10.0.0.5:7103',
+    );
+    expect(targets).toEqual([
+      { service: 'assembly-svc', host: '127.0.0.1', port: 7101 },
+      { service: 'assembly-svc', host: '127.0.0.1', port: 7111 },
+      { service: 'model-svc', host: '10.0.0.5', port: 7103 },
+    ]);
+  });
+
+  it('空串 / undefined 返回空数组', () => {
+    expect(parseUpstreamTargets(undefined)).toEqual([]);
+    expect(parseUpstreamTargets('')).toEqual([]);
+    expect(parseUpstreamTargets('   ')).toEqual([]);
+  });
+
+  it('非法条目（缺 =、非法端口、空 host/service）静默跳过', () => {
+    const targets = parseUpstreamTargets(
+      'assembly-svc=127.0.0.1:7101,bad-entry,model-svc=:7103,takt-svc=127.0.0.1:notaport,=1.2.3.4:7104',
+    );
+    expect(targets).toEqual([{ service: 'assembly-svc', host: '127.0.0.1', port: 7101 }]);
+  });
+});
+
+describe('resolveUpstreams', () => {
+  it('未配置时回退单副本 127.0.0.1:7101–7105 且 spawnLocal=true', () => {
+    const { targets, spawnLocal } = resolveUpstreams(undefined);
+    expect(spawnLocal).toBe(true);
+    expect(targets.map((t) => t.port)).toEqual([7101, 7102, 7103, 7104, 7105]);
+    expect(targets.every((t) => t.host === '127.0.0.1')).toBe(true);
+    expect(targets.map((t) => t.service)).toEqual([
+      'assembly-svc',
+      'interference-svc',
+      'model-svc',
+      'takt-svc',
+      'auth-svc',
+    ]);
+  });
+
+  it('显式配置时原样使用且 spawnLocal=false', () => {
+    const { targets, spawnLocal } = resolveUpstreams(
+      'assembly-svc=10.0.0.1:7101,assembly-svc=10.0.0.2:7101',
+    );
+    expect(spawnLocal).toBe(false);
+    expect(targets).toEqual([
+      { service: 'assembly-svc', host: '10.0.0.1', port: 7101 },
+      { service: 'assembly-svc', host: '10.0.0.2', port: 7101 },
+    ]);
   });
 });

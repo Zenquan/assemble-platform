@@ -58,3 +58,65 @@ export const UPSTREAM_SERVICES: readonly UpstreamService[] = [
   { service: 'takt-svc', port: 7104, serverJsRelative: '../../takt-svc/dist/server.js' },
   { service: 'auth-svc', port: 7105, serverJsRelative: '../../auth-svc/dist/server.js' },
 ];
+
+/** 上游目标配置（`UPSTREAM_TARGETS` env 解析产物） */
+export interface UpstreamTargetConfig {
+  service: string;
+  host: string;
+  port: number;
+}
+
+/**
+ * 解析 `UPSTREAM_TARGETS` env：逗号分隔的 `service=host:port` 条目；
+ * 同一 service 出现多次即多副本（多目标，供健康池 failover 选址）。
+ * 未配置或空串返回空数组（调用方回退默认单副本 127.0.0.1:7101–7105）。
+ *
+ * 例：`assembly-svc=127.0.0.1:7101,assembly-svc=127.0.0.1:7111,model-svc=127.0.0.1:7103`
+ * 非法条目（缺 `=`、非法端口）静默跳过。
+ */
+export function parseUpstreamTargets(raw: string | undefined): UpstreamTargetConfig[] {
+  if (!raw || raw.trim() === '') return [];
+  const result: UpstreamTargetConfig[] = [];
+  for (const entry of raw.split(',')) {
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) continue;
+    const service = trimmed.slice(0, eq).trim();
+    const addr = trimmed.slice(eq + 1).trim();
+    const colon = addr.lastIndexOf(':');
+    if (colon <= 0) continue;
+    const host = addr.slice(0, colon).trim();
+    const port = Number(addr.slice(colon + 1).trim());
+    if (!service || !host || !Number.isInteger(port) || port <= 0 || port > 65535) continue;
+    result.push({ service, host, port });
+  }
+  return result;
+}
+
+/** 上游目标解析产物 + 是否由 gateway 负责 spawn 本地子进程 */
+export interface ResolvedUpstreams {
+  /** 上游目标清单（含副本） */
+  targets: UpstreamTargetConfig[];
+  /** true = 未显式配置外部上游，gateway spawn 本地子进程（单容器形态） */
+  spawnLocal: boolean;
+}
+
+/**
+ * 解析上游目标：显式配置 `UPSTREAM_TARGETS`（多副本/外部地址）时原样使用；
+ * 否则回退默认单副本 `127.0.0.1:7101–7105`（gateway spawn 本地子进程）。
+ */
+export function resolveUpstreams(raw: string | undefined): ResolvedUpstreams {
+  const configured = parseUpstreamTargets(raw);
+  if (configured.length > 0) {
+    return { targets: configured, spawnLocal: false };
+  }
+  return {
+    targets: UPSTREAM_SERVICES.map((s) => ({
+      service: s.service,
+      host: '127.0.0.1',
+      port: s.port,
+    })),
+    spawnLocal: true,
+  };
+}

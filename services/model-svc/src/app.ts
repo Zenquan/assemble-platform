@@ -4,6 +4,7 @@ import {
   type ModelAssetVersion,
 } from '@assemble/domain';
 import { err, ok } from '@assemble/http';
+import { createReadinessState, registerHealthRoutes } from '@assemble/health';
 import {
   createHttpMetrics,
   MetricsRegistry,
@@ -62,11 +63,10 @@ export function buildApp(deps?: {
   // 前端（免浏览器跨域）。未配置时保持本地文件路径（本地开发行为不变）。
   const glbOssBase = deps?.glbOssBaseUrl ?? process.env['ASSEMBLE_GLB_BASE_URL']?.replace(/\/+$/, '');
 
-  app.get('/healthz', async () => ({
-    status: 'ok',
-    service: 'model-svc',
-    time: new Date().toISOString(),
-  }));
+  // liveness / readiness 双探针（无外部依赖，readiness 恒就绪，优雅停机时转 not_ready）
+  const readinessState = createReadinessState();
+  registerHealthRoutes(app, { service: 'model-svc' }, readinessState);
+  app.decorate('readinessState', readinessState);
 
   app.get('/metrics', async (_req, reply) => {
     reply.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');

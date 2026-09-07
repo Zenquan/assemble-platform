@@ -1,4 +1,5 @@
 import { errToStatus } from '@assemble/http';
+import { createReadinessState, registerHealthRoutes } from '@assemble/health';
 import {
   createHttpMetrics,
   MetricsRegistry,
@@ -39,11 +40,10 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
     return payload;
   });
 
-  app.get('/healthz', async () => ({
-    status: 'ok',
-    service: 'assembly-svc',
-    time: new Date().toISOString(),
-  }));
+  // liveness / readiness 双探针（`@assemble/health`）：/healthz 恒 200、/readyz 依赖就绪才 200
+  const readinessState = createReadinessState();
+  registerHealthRoutes(app, { service: 'assembly-svc' }, readinessState);
+  app.decorate('readinessState', readinessState);
 
   app.get('/metrics', async (_req, reply) => {
     reply.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');

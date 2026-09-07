@@ -1,4 +1,5 @@
 import { err, ok } from '@assemble/http';
+import { createReadinessState, httpUpstreamProbe, registerHealthRoutes } from '@assemble/health';
 import {
   createHttpMetrics,
   MetricsRegistry,
@@ -62,11 +63,13 @@ export function buildApp(deps: TaktAppDeps = {}): FastifyInstance {
     httpMetrics.record(t0, req.method, req.routeOptions.url ?? req.url ?? '', reply.statusCode);
   });
 
-  app.get('/healthz', async () => ({
-    status: 'ok',
+  // liveness / readiness 双探针：/readyz 依赖 assembly-svc 可达才就绪
+  const readinessState = createReadinessState();
+  registerHealthRoutes(app, {
     service: 'takt-svc',
-    time: new Date().toISOString(),
-  }));
+    readiness: httpUpstreamProbe(`${assemblyBaseUrl}/healthz`, fetchImpl),
+  }, readinessState);
+  app.decorate('readinessState', readinessState);
 
   app.get('/metrics', async (_req, reply) => {
     reply.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
