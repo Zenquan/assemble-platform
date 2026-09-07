@@ -1342,3 +1342,60 @@ browser is not defined
 - Related Files: none
 
 ---
+
+## [ERR-20260907-001] sandbox_localhost_bind_and_curl
+
+**Logged**: 2026-09-07T14:05:00+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+沙箱 Bash 内 `run_in_background` 起的 Fastify 服务无法绑定 localhost 端口（进程空转无监听），且 `curl 127.0.0.1` 一律失败——需在**沙箱外**执行。
+
+### Error
+```text
+curl: (7) Failed to connect to 127.0.0.1 port 7103 ... Connection refused
+# 走代理时（HTTP_PROXY 已注入）：upstream connect failed: Connection refused (os error 61)
+```
+
+### Context
+- 本环境所有 Bash 都注入了 `HTTP(S)_PROXY=http://127.0.0.1:53110`，普通 curl 会经代理转发到代理自己的 loopback，永远够不到宿主机已监听的 7103。
+- 即使 `--noproxy '*'` 直连，沙箱网络命名空间内 127.0.0.1 也无人监听；服务进程用 `(node ... &)` 子 shell 拉起会在父 shell 退出时被回收。
+
+### Suggested Fix
+起本地服务用「后台 + dangerouslyDisableSandbox」双开关（run_in_background + disable sandbox），探活/curl 验证同样带 dangerouslyDisableSandbox；命令尾缀 `--noproxy '*'` 规避代理注入。子 shell `&` 起服务不可靠，进程随父退出。
+
+### Metadata
+- Reproducible: yes
+- Related Files: services/model-svc（本地联调通用）
+
+---
+
+## [ERR-20260907-002] root_script_pnpm_not_on_path
+
+**Logged**: 2026-09-07T14:06:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tooling
+
+### Summary
+根 `pnpm run typecheck:all / test:all / build:all` 脚本内部执行 `pnpm -r ...`，而本机 pnpm 不在 PATH（只能 node 直调 corepack），报 `sh: pnpm: command not found`。
+
+### Error
+```text
+> pnpm -r run typecheck
+sh: pnpm: command not found
+ELIFECYCLE Command failed.
+```
+
+### Suggested Fix
+建 PATH shim 再跑聚合脚本：
+```bash
+mkdir -p /tmp/pnpmshim && ln -sf /Users/zenquan/.workbuddy/binaries/corepack/v1/pnpm/9.15.4/bin/pnpm.cjs /tmp/pnpmshim/pnpm
+export PATH=/tmp/pnpmshim:$PATH && env -u NODE_OPTIONS pnpm run typecheck:all
+```
+
+### Metadata
+- Reproducible: yes
+- Related Files: 根 package.json 聚合脚本（CI 环境无此问题，仅本机 shell）
