@@ -394,6 +394,7 @@ function recheckInterference(): void {
           <div class="wb-sub">SIMULATION WORKBENCH · 0.4 动态 BOM + GLB 装配</div>
         </div>
         <span class="engline" :class="backend"><i class="dot"></i>{{ engineState }}</span>
+        <button class="wb-back" type="button" @click="router.push({ name: 'line-select' })">← 返回产线列表</button>
       </header>
 
       <div class="wb-body">
@@ -514,6 +515,19 @@ function recheckInterference(): void {
 .engline.noop .dot {
   background: var(--amber);
   box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.16);
+}
+.wb-back {
+  font-size: 12px;
+  color: #cbd5e1;
+  border: 1px solid #2a3a5c;
+  background: #111a2e;
+  padding: 7px 14px;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+.wb-back:hover {
+  border-color: var(--blue);
+  color: var(--ink);
 }
 .wb-body {
   display: grid;

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveCustomAssetId, modelGlbUrl } from './model';
+import {
+  assetDisplayName,
+  builtinAssetLabel,
+  deriveCustomAssetId,
+  modelGlbUrl,
+  suggestChineseName,
+} from './model';
 
 describe('modelGlbUrl', () => {
   it('使用产线模型版本隔离浏览器 GLB 缓存', () => {
@@ -38,5 +44,40 @@ describe('deriveCustomAssetId', () => {
     const id = deriveCustomAssetId(`${'a'.repeat(80)}.glb`);
     expect(id.length).toBeLessThanOrEqual(64);
     expect(id.startsWith('custom-')).toBe(true);
+  });
+});
+
+describe('展示名：内置标签 / displayName', () => {
+  it('内置资产返回中文标签，未知 id 回退原样', () => {
+    expect(builtinAssetLabel('vision-module')).toBe('视觉分拣模块');
+    expect(builtinAssetLabel('transfer-conveyor')).toBe('转运输送段');
+    expect(builtinAssetLabel('custom-press')).toBe('custom-press');
+  });
+
+  it('assetDisplayName 优先级：displayName → 内置中文 → assetId', () => {
+    expect(assetDisplayName({ assetId: 'custom-press', displayName: '数控冲压机' })).toBe('数控冲压机');
+    expect(assetDisplayName({ assetId: 'conveyor' })).toBe('输送机');
+    expect(assetDisplayName({ assetId: 'custom-press' })).toBe('custom-press');
+    expect(assetDisplayName({ assetId: 'custom-press', displayName: '   ' })).toBe('custom-press');
+  });
+});
+
+describe('suggestChineseName：上传时英文名 → 中文建议', () => {
+  it('整句词库命中（CNC Mill / Metal Detector）', () => {
+    expect(suggestChineseName('CNC Mill.glb')).toBe('数控铣床');
+    expect(suggestChineseName('Metal Detector.glb')).toBe('金属检测机');
+    expect(suggestChineseName('robotic_arm_v2.glb')).toBe('机械臂');
+  });
+
+  it('逐词映射兜底拼接（cnc + press）', () => {
+    expect(suggestChineseName('cnc press.glb')).toBe('数控冲压机');
+  });
+
+  it('文件名已含中文时原样返回', () => {
+    expect(suggestChineseName('自动封箱机.glb')).toBe('自动封箱机');
+  });
+
+  it('无词库命中的英文返回空串（交给用户手填）', () => {
+    expect(suggestChineseName('quantum-widget.glb')).toBe('');
   });
 });

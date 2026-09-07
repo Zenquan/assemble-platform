@@ -5,16 +5,20 @@
  * 页面只编排状态与表单，id 推导/校验等纯逻辑在 api/model.ts。
  */
 import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import AppHeader from '@/components/AppHeader.vue';
 import { ApiError } from '@/api/http';
 import {
+  assetDisplayName,
   deriveCustomAssetId,
   fetchModelAssets,
+  suggestChineseName,
   uploadModelAsset,
 } from '@/api/model';
 import { isCustomAssetId, MODEL_ASSET_IDS, type ModelAssetVersion } from '@assemble/domain';
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+const router = useRouter();
 
 const state = ref<{ loading: boolean; error: string; assets: ModelAssetVersion[] }>({
   loading: false,
@@ -25,10 +29,18 @@ const state = ref<{ loading: boolean; error: string; assets: ModelAssetVersion[]
 // 上传表单状态
 const file = ref<File | null>(null);
 const assetIdInput = ref('');
+const displayNameInput = ref('');
 const uploading = ref(false);
 const uploadMessage = ref('');
 const uploadError = ref('');
 const fileInput = ref<HTMLInputElement | null>(null);
+
+/** 选中文件后自动建议：id 从文件名推导，中文名由词库翻译建议（可手改）。 */
+function stageFile(picked: File): void {
+  file.value = picked;
+  assetIdInput.value = deriveCustomAssetId(picked.name);
+  displayNameInput.value = suggestChineseName(picked.name);
+}
 
 const isCustom = (a: ModelAssetVersion): boolean => a.assetId.startsWith('custom-');
 const customAssets = computed(() => state.value.assets.filter(isCustom));
@@ -73,8 +85,8 @@ function onPickFile(event: Event): void {
   const picked = input.files?.[0] ?? null;
   uploadMessage.value = '';
   uploadError.value = '';
-  file.value = picked;
-  assetIdInput.value = picked ? deriveCustomAssetId(picked.name) : '';
+  if (!picked) return;
+  stageFile(picked);
 }
 
 function onDrop(event: DragEvent): void {
@@ -82,8 +94,7 @@ function onDrop(event: DragEvent): void {
   uploadMessage.value = '';
   uploadError.value = '';
   if (!picked) return;
-  file.value = picked;
-  assetIdInput.value = deriveCustomAssetId(picked.name);
+  stageFile(picked);
 }
 
 const idValid = computed(() => isCustomAssetId(assetIdInput.value));
@@ -99,10 +110,15 @@ async function submitUpload(): Promise<void> {
   uploadMessage.value = '';
   uploadError.value = '';
   try {
-    const result = await uploadModelAsset(assetIdInput.value, file.value);
-    uploadMessage.value = `已上传 ${result.asset.assetId}（${formatBytes(result.asset.sizeBytes)}），可直接下载`;
+    const result = await uploadModelAsset(
+      assetIdInput.value,
+      file.value,
+      displayNameInput.value.trim() || undefined,
+    );
+    uploadMessage.value = `已上传 ${result.asset.displayName ?? result.asset.assetId}（${formatBytes(result.asset.sizeBytes)}），可直接下载`;
     file.value = null;
     assetIdInput.value = '';
+    displayNameInput.value = '';
     if (fileInput.value) fileInput.value.value = '';
     await refresh();
   } catch (cause) {
@@ -152,20 +168,31 @@ onMounted(() => {
             <input ref="fileInput" id="asset-file" type="file" accept=".glb" hidden @change="onPickFile" />
 
             <div class="idbox">
-              <input
-                v-model="assetIdInput"
-                class="idinput mono"
-                :class="{ bad: assetIdInput !== '' && !idValid }"
-                type="text"
-                placeholder="custom-asset-id"
-                spellcheck="false"
-              />
+              <div class="fields">
+                <input
+                  v-model="displayNameInput"
+                  class="nameinput"
+                  type="text"
+                  placeholder="中文名（如：数控机床）"
+                  spellcheck="false"
+                />
+                <input
+                  v-model="assetIdInput"
+                  class="idinput mono"
+                  :class="{ bad: assetIdInput !== '' && !idValid }"
+                  type="text"
+                  placeholder="custom-asset-id"
+                  spellcheck="false"
+                />
+              </div>
               <div v-if="assetIdInput !== '' && !idValid" class="hint bad">
                 资产 id 须为 custom- 前缀的小写字母/数字/连字符
               </div>
               <div v-else-if="file && !fileValid" class="hint bad">仅支持 .glb 文件</div>
               <div v-else-if="file && !sizeValid" class="hint bad">文件超过 100MB 上限</div>
-              <div v-else class="hint">资产 id（上传后即可在资产库下载）</div>
+              <div v-else class="hint">
+                资产 id 由文件名自动推导；中文名已按文件名给出建议，可修改
+              </div>
             </div>
 
             <button class="btn prim" type="button" :disabled="!canUpload" @click="submitUpload">
@@ -194,10 +221,13 @@ onMounted(() => {
 
         <div v-else class="table">
           <div class="thead">
-            <span>资产 ID</span><span>来源</span><span>体积</span><span>压缩</span><span>入库时间</span><span>操作</span>
+            <span>资产（中文名 · ID）</span><span>来源</span><span>体积</span><span>压缩</span><span>入库时间</span><span>操作</span>
           </div>
           <div v-for="a in customAssets" :key="a.assetId" class="trow custom">
-            <span class="mono id custom-id">{{ a.assetId }}</span>
+            <span class="idcell">
+              <span class="cn custom-cn">{{ assetDisplayName(a) }}</span>
+              <span class="id mono custom-id">{{ a.assetId }}</span>
+            </span>
             <span><i class="tag tag-custom">自定义</i></span>
             <span class="mono">{{ formatBytes(a.sizeBytes) }}</span>
             <span class="mono">{{ a.compression }}</span>
@@ -205,7 +235,10 @@ onMounted(() => {
             <span><a class="mono" :href="`/model/glb/${encodeURIComponent(a.assetId)}.glb`" download>下载 GLB</a></span>
           </div>
           <div v-for="a in builtinEntries" :key="a.assetId" class="trow">
-            <span class="mono id">{{ a.assetId }}</span>
+            <span class="idcell">
+              <span class="cn">{{ assetDisplayName(a) }}</span>
+              <span class="id mono">{{ a.assetId }}</span>
+            </span>
             <span><i class="tag">内置</i></span>
             <span class="mono">{{ formatBytes(a.sizeBytes) }}</span>
             <span class="mono">{{ a.compression ?? '—' }}</span>
@@ -315,19 +348,31 @@ onMounted(() => {
 }
 .idbox {
   flex: 1;
-  min-width: 220px;
+  min-width: 240px;
 }
-.idinput {
-  width: 100%;
+.fields {
+  display: flex;
+  gap: 12px;
+}
+.idinput,
+.nameinput {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
-  color: var(--cyan);
   background: var(--panel);
   border: 1px solid var(--line-2);
   border-radius: 7px;
   padding: 9px 12px;
   outline: none;
 }
-.idinput:focus {
+.idinput {
+  color: var(--cyan);
+}
+.nameinput {
+  color: var(--ink);
+}
+.idinput:focus,
+.nameinput:focus {
   border-color: var(--blue);
 }
 .idinput.bad {
@@ -421,7 +466,27 @@ onMounted(() => {
 .id {
   color: var(--ink-2);
 }
+.idcell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cn {
+  font-size: 12.5px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.idcell .id {
+  font-size: 10.5px;
+  color: var(--mute);
+}
 .custom-id {
+  color: var(--cyan);
+}
+.custom-cn {
   color: var(--cyan);
 }
 .tag {
