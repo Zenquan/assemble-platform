@@ -55,15 +55,18 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = opts.method ?? 'GET';
   const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
   if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
-  let body: string | undefined;
+  let bodyInit: BodyInit | undefined;
   if (opts.body !== undefined) {
     headers['Content-Type'] = 'application/json';
-    body = JSON.stringify(opts.body);
+    bodyInit = JSON.stringify(opts.body);
+  } else if (opts.binaryBody !== undefined) {
+    headers['Content-Type'] = 'application/octet-stream';
+    bodyInit = opts.binaryBody as unknown as BodyInit;
   }
 
   let res: Response;
   try {
-    res = await fetch(path, { method, headers, body });
+    res = await fetch(path, { method, headers, body: bodyInit });
   } catch (cause) {
     throw new ApiError({ code: 'NETWORK_ERROR', message: '无法连接服务，请确认后端已启动', status: 0 });
   }
