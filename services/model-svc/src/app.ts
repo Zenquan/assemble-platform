@@ -260,6 +260,36 @@ export function buildApp(deps?: {
     );
   });
 
+  // 删除自定义 GLB 资产：移除磁盘文件 + 撤销全部注册版本记录，随后资产列表/下载均不可达。
+  // 内置资产受保护不可删除；未注册资产 404。产线引用防护由前端承担（删除前查产线列表），
+  // 服务端按资产自治原则不反向依赖 assembly-svc。
+  app.delete<{ Params: { assetId: string } }>('/model/glb/:assetId', async (req, reply) => {
+    const assetId = req.params.assetId;
+    if (isBuiltinAssetId(assetId)) {
+      return reply.status(409).send(err('CONFLICT', `内置资产 ${assetId} 受保护，不允许删除`));
+    }
+    if (!isCustomAssetId(assetId)) {
+      return reply
+        .status(400)
+        .send(
+          err(
+            'VALIDATION_FAILED',
+            `assetId 须为 ${CUSTOM_ASSET_PREFIX} 前缀的小写字母/数字/连字符（总长 ≤ 64）`,
+          ),
+        );
+    }
+    const versions = (await repos.assets.list()).filter((version) => version.assetId === assetId);
+    if (versions.length === 0) {
+      return reply.status(404).send(err('NOT_FOUND', `自定义资产 ${assetId} 未注册，无需删除`));
+    }
+    // 文件缺失也继续删除记录（rm force 吞 ENOENT）：删除语义以资产注册为准，避免半删残留
+    await fs.rm(path.join(glbDir, 'custom', `${assetId}.glb`), { force: true });
+    for (const version of versions) {
+      await repos.assets.delete(version.id);
+    }
+    return reply.send(ok({ assetId, removedVersions: versions.length }));
+  });
+
   // 模型下载 CDN 签名直链：重型 glTF 不走网关代理（架构红线）
   app.post<{ Body: PresignBody }>('/model/assets/presign', async (req, reply) => {
     const assetId = req.body?.assetId;
