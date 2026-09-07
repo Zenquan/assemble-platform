@@ -20,6 +20,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createModelRepos, type ModelRepos } from './repositories/index.js';
+import { measureGlb, type GlbMeasureResult } from './gltf/measure.js';
 
 /** 上传 GLB 大小上限（字节）：100MB，覆盖工业设备中精度模型，压缩管线落地后再收紧。 */
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -218,6 +219,17 @@ export function buildApp(deps?: {
     if (body.subarray(0, 4).toString('ascii') !== 'glTF') {
       return reply.status(400).send(err('VALIDATION_FAILED', '文件缺少 glTF magic 头，仅支持 .glb 二进制'));
     }
+    // 实测世界 AABB 包络（米）：assembly/interference/布局消费点都依赖包络尺寸，量测失败
+    // 的 GLB（缺 JSON chunk / 节点悬空 / 无可量测 POSITION）一律拒绝，避免无包络资产流入产线链路。
+    let measure: GlbMeasureResult;
+    try {
+      measure = measureGlb(body, assetId);
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      return reply
+        .status(400)
+        .send(err('VALIDATION_FAILED', `GLB 解析/包络量测失败：${detail}`));
+    }
 
     const customDir = path.join(glbDir, 'custom');
     await fs.mkdir(customDir, { recursive: true });
@@ -229,6 +241,7 @@ export function buildApp(deps?: {
       assetId,
       ...(displayName ? { displayName } : {}),
       filename: `${assetId}.glb`,
+      envelope: { size: measure.size },
       sourceSizeBytes: body.length,
       sizeBytes: body.length,
       compression: 'none',

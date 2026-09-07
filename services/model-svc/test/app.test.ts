@@ -2,14 +2,32 @@ import { describe, expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { MODEL_ASSET_IDS, type ModelAssetVersion } from '@assemble/domain';
+import { MODEL_ASSET_BOUNDS, MODEL_ASSET_IDS, type ModelAssetVersion } from '@assemble/domain';
 import { createMemoryRepo } from '@assemble/storage';
 
 import { buildApp } from '../src/app.js';
 
 function app(deps?: Parameters<typeof buildApp>[0]) {
   return buildApp(deps ?? { repos: { assets: createMemoryRepo<ModelAssetVersion>() } });
+}
+
+/** 真实内置 GLB fixture：上传成功路径必须以可量测 GLB 验证（量测失败会 400 拒绝） */
+const FIXTURE_GLB_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../assets/glb');
+function readFixtureGlb(name: string): Promise<Buffer> {
+  return readFile(path.join(FIXTURE_GLB_DIR, `${name}.glb`));
+}
+
+/** 逐轴近似断言包络尺寸（静态表为 .2f 四舍五入值，容差 0.05m） */
+function expectEnvelopeCloseTo(
+  envelope: { size: number[] } | undefined,
+  expected: readonly number[],
+): void {
+  expect(envelope).toBeDefined();
+  expected.forEach((value, axis) => {
+    expect(envelope?.size[axis]).toBeCloseTo(value, 1);
+  });
 }
 
 const GLB_MAGIC = Buffer.from('glTF');
@@ -62,15 +80,15 @@ describe('PUT /model/glb/:assetId（自定义资产上传）', () => {
     return mkdtemp(path.join(tmpdir(), 'model-svc-upload-'));
   }
 
-  it('上传合法 GLB → 201，落盘并注册版本，可随即下载', async () => {
+  it('上传合法 GLB → 201，落盘并注册版本（含实测包络），可随即下载', async () => {
     const glbDir = await tempGlbDir();
     const repos = { assets: createMemoryRepo<ModelAssetVersion>() };
     const instance = app({ repos, glbDir });
-    const bytes = fakeGlb('custom-press-binary');
+    const bytes = await readFixtureGlb('conveyor');
 
     const upload = await instance.inject({
       method: 'PUT',
-      url: '/model/glb/custom-press',
+      url: '/model/glb/custom-conveyor',
       headers: { 'content-type': 'application/octet-stream' },
       payload: bytes,
     });
@@ -79,23 +97,26 @@ describe('PUT /model/glb/:assetId（自定义资产上传）', () => {
     const body = upload.json();
     expect(body).toMatchObject({
       ok: true,
-      data: { downloadUrl: '/model/glb/custom-press.glb' },
+      data: { downloadUrl: '/model/glb/custom-conveyor.glb' },
     });
     expect(body.data.asset).toMatchObject({
-      assetId: 'custom-press',
+      assetId: 'custom-conveyor',
       compression: 'none',
       sourceSizeBytes: bytes.length,
       sizeBytes: bytes.length,
     });
+    // 上传时实测包络写入版本记录，数值与内置权威表一致（同源量测）
+    expectEnvelopeCloseTo(body.data.asset.envelope, MODEL_ASSET_BOUNDS.conveyor.size);
 
     const saved = await repos.assets.list();
     expect(saved).toHaveLength(1);
-    expect(saved[0]?.assetId).toBe('custom-press');
+    expect(saved[0]?.assetId).toBe('custom-conveyor');
+    expectEnvelopeCloseTo(saved[0]?.envelope, MODEL_ASSET_BOUNDS.conveyor.size);
 
-    const onDisk = await readFile(path.join(glbDir, 'custom', 'custom-press.glb'));
+    const onDisk = await readFile(path.join(glbDir, 'custom', 'custom-conveyor.glb'));
     expect(onDisk).toEqual(bytes);
 
-    const download = await instance.inject({ method: 'GET', url: '/model/glb/custom-press.glb' });
+    const download = await instance.inject({ method: 'GET', url: '/model/glb/custom-conveyor.glb' });
     expect(download.statusCode).toBe(200);
     expect(Buffer.from(download.rawPayload)).toEqual(bytes);
 
@@ -177,14 +198,16 @@ describe('PUT /model/glb/:assetId（自定义资产上传）', () => {
       method: 'PUT',
       url: '/model/glb/custom-press?displayName=%E6%95%B0%E6%8E%A7%E6%9C%BA%E5%BA%8A',
       headers: { 'content-type': 'application/octet-stream' },
-      payload: fakeGlb('press-binary'),
+      payload: await readFixtureGlb('box-pack'),
     });
 
     expect(upload.statusCode).toBe(201);
     expect(upload.json().data.asset.displayName).toBe('数控机床');
+    expectEnvelopeCloseTo(upload.json().data.asset.envelope, MODEL_ASSET_BOUNDS['box-pack'].size);
 
     const listed = await repos.assets.list();
     expect(listed[0]?.displayName).toBe('数控机床');
+    expectEnvelopeCloseTo(listed[0]?.envelope, MODEL_ASSET_BOUNDS['box-pack'].size);
 
     await instance.close();
     await rm(glbDir, { recursive: true, force: true });
@@ -206,20 +229,45 @@ describe('PUT /model/glb/:assetId（自定义资产上传）', () => {
     await instance.close();
   });
 
-  it('重复上传同 id 覆盖文件并新增版本记录（幂等 upsert）', async () => {
+  it('重复上传同 id 以不同内容覆盖文件并累计版本记录（内容寻址）', async () => {
     const glbDir = await tempGlbDir();
     const repos = { assets: createMemoryRepo<ModelAssetVersion>() };
     const instance = app({ repos, glbDir });
     const headers = { 'content-type': 'application/octet-stream' };
+    const first = await readFixtureGlb('conveyor');
+    const second = await readFixtureGlb('feeder');
 
-    await instance.inject({ method: 'PUT', url: '/model/glb/custom-press', headers, payload: fakeGlb('v1') });
-    const second = await instance.inject({ method: 'PUT', url: '/model/glb/custom-press', headers, payload: fakeGlb('v2-longer') });
+    await instance.inject({ method: 'PUT', url: '/model/glb/custom-press', headers, payload: first });
+    const upload = await instance.inject({ method: 'PUT', url: '/model/glb/custom-press', headers, payload: second });
 
-    expect(second.statusCode).toBe(201);
+    expect(upload.statusCode).toBe(201);
+    // 两次内容不同 → 内容寻址版本 id 不同，累计两条版本记录；磁盘文件为最新内容
     const saved = await repos.assets.list();
     expect(saved).toHaveLength(2);
+    expect(new Set(saved.map((v) => v.id)).size).toBe(2);
     const onDisk = await readFile(path.join(glbDir, 'custom', 'custom-press.glb'));
-    expect(onDisk).toEqual(fakeGlb('v2-longer'));
+    expect(onDisk).toEqual(second);
+    expectEnvelopeCloseTo(saved[1]?.envelope, MODEL_ASSET_BOUNDS.feeder.size);
+
+    await instance.close();
+    await rm(glbDir, { recursive: true, force: true });
+  });
+
+  it('magic 头合法但无可量测 JSON chunk → 400 拒绝且不落盘不注册', async () => {
+    const glbDir = await tempGlbDir();
+    const repos = { assets: createMemoryRepo<ModelAssetVersion>() };
+    const instance = app({ repos, glbDir });
+
+    const response = await instance.inject({
+      method: 'PUT',
+      url: '/model/glb/custom-broken',
+      headers: { 'content-type': 'application/octet-stream' },
+      payload: fakeGlb(''),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ ok: false, code: 'VALIDATION_FAILED' });
+    expect((await repos.assets.list())).toHaveLength(0);
 
     await instance.close();
     await rm(glbDir, { recursive: true, force: true });
