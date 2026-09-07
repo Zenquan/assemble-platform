@@ -9,6 +9,7 @@
 
 ### Added
 
+- 自定义模型上传闭环：model-svc 新增 `PUT /model/glb/:assetId` 接收原始 GLB 二进制（校验 glTF magic/≤100MB/`custom-` 前缀资产 id，内置资产 409 保护），落盘 `custom/` 目录并注册 `ModelAssetVersion`（compression=none，压缩管线接入后自动升级）；下载白名单扩展为「内置 ∪ 已注册自定义」；`@assemble/domain` 新增 `CUSTOM_ASSET_PREFIX`/`isValidModelAssetId` 统一资产 id 校验契约；sim-platform 新增「模型资产」页（`/assets`，上传 + 资产库总览 + 下载），顶栏「导入模型」入口指向该页。
 - 干涉处理闭环：产线卡「处理干涉」进入工作台后展示真实命中清单，支持 3D 定位/红高亮、重新预检与跳转产线配置调整工位位置/朝向后再复检。
 - `@assemble/domain` 新增 `MODEL_ASSET_BOUNDS` 内置 GLB 实测包络元数据，替换离线预检合成 OBB 夹具。
 - `clearance-core` 新增 `obbFromBomPart`：按 Babylon 装配挂载口径，把 BOM 位姿 + 资产包络转成世界 OBB。
