@@ -23,6 +23,10 @@
 - 可观测性 M1（指标库 + request-id + `/metrics`）：新增 `@assemble/observability` 纯 TS 指标库（Counter/Histogram 内存聚合 + Prometheus 文本序列化，零 Node/fastify 依赖）；5 个后端服务接入 `/metrics` 与 `X-Request-Id`（Fastify `requestIdHeader` 采纳上游 id + 跨服务透传，interference/takt 调 assembly 带上 request-id）。
 - 可观测性 M2（gateway 改造）：`console.log` 裸输出改为结构化 JSON 访问日志（method/path/status/durationMs/requestId/upstream）；gateway 生成/透传 `X-Request-Id`（回显响应头 + 透传上游）；新增 `/metrics` 聚合 5 上游（`@assemble/observability` 的 `injectServiceLabel` 给同名指标注入 `service` 标签）；新增 `/telemetry` 端点接收前端 SimMonitor 上报并内存聚合。
 - 可观测性 M3（前端 SimMonitor）：sim-platform 新增 `src/monitor` 埋点 SDK，一条 rAF 循环同时驱动 FPS（`render.fps`）+ 内存采样（`memory.js_heap_used/total`）并周期 flush，`PerformanceObserver` 采 Web Vitals（`webvitals.lcp/cls/fid`），节流批量 POST 到 gateway `/telemetry`（`{ samples:[{name,value}] }`）；核心编排与浏览器宿主分离（`createSimMonitor(host)` 纯逻辑 + `createBrowserHost()` 绑定），失败静默丢弃不阻塞业务，`main.ts` 入口 `initSimMonitor()` 一键启动。
+- 安全与鉴权需求共识文档（`docs/SECURITY.md`）：鉴权/RBAC/审计/加密轻量自研方案 + Mermaid 鉴权数据流图 + S1–S3 实施切片与关键设计决策。
+- 安全 S1（`@assemble/security` 共享库）：纯 TS 零外部依赖（仅 `node:crypto`），提供 HS256 JWT 签发/验证（常量时间验签、验期、可选验 iss）、AES-256-GCM 字段加解密、scrypt 派生、常量时间比较、RBAC 角色→权限矩阵（单一事实源）、append-only 审计哈希链（`hash=SHA256(prevHash+canonical)`，可全链校验篡改）。
+- 安全 S2（auth-svc 真实签发 + 审计加固）：`/auth/token` 改为真实 HS256 JWT 签发（`AUTH_JWT_SECRET`，开发回退默认密钥 + 生产 fail-fast），新增 `/auth/verify`；审计 `writeAudit` 接入哈希链 + 串行化锁防并发断链；新增 `GET /audit`（actorId/action 过滤 + 全链校验）；RBAC 矩阵迁入 `@assemble/security`。
+- 安全 S3（网关本地鉴权 + 前端凭证）：gateway 新增路径→权限映射（读/写按 HTTP 方法、interference offline/run 细分）+ 本地 `verifyJwt` + 401/403 决策；`/auth/*` 免鉴权、`/audit` 需 `audit:view`、业务前缀按权限断言；前端 `http.ts` 支持 `setAuthToken` 凭证注入（自动附 `Authorization: Bearer`）+ 401 统一清除令牌。
 
 ### Changed
 

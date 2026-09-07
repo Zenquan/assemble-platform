@@ -43,11 +43,11 @@
 
 **验收标准**
 
-- [ ] `packages/security` 单测全绿；JWT 篡改/过期必被拒，字段加解密往返一致，常量时间比较通过
-- [ ] `POST /auth/token` 返回真实可验签的 JWT；`/auth/verify` 能还原 principal
-- [ ] 无凭证访问受保护 API → 401；凭证权限不足 → 403；白名单路径可匿名访问
-- [ ] 审计链 `verifyAuditChain` 全绿；篡改任一条目 → 校验失败
-- [ ] 全仓 typecheck + test 绿
+- [x] `packages/security` 单测全绿；JWT 篡改/过期必被拒，字段加解密往返一致，常量时间比较通过
+- [x] `POST /auth/token` 返回真实可验签的 JWT；`/auth/verify` 能还原 principal
+- [x] 无凭证访问受保护 API → 401；凭证权限不足 → 403；白名单路径可匿名访问
+- [x] 审计链 `verifyAuditChain` 全绿；篡改任一条目 → 校验失败
+- [x] 全仓 typecheck + test 绿
 
 **影响范围**：`packages/security`（新增）、`services/auth-svc`、`services/gateway`、`apps/sim-platform`（http.ts）、`packages/domain`（`AuditLogEntry` 增可选哈希字段，向后兼容）、docs。
 
@@ -94,7 +94,7 @@ flowchart TD
 |------|------|--------|------|
 | **S1** | 安全共享库 | `packages/security`（jwt / crypto / rbac / audit）+ 单测 | ✅ 已落地 |
 | **S2** | auth-svc 真实签发 + 审计加固 | `/auth/token` 真实 JWT、`/auth/verify`、审计全覆盖 + `/audit` 列表 + 哈希链 | ✅ 已落地 |
-| **S3** | 网关鉴权 + 前端凭证 | gateway `verifyJwt` + 路径权限映射（401/403）+ 白名单；前端 http.ts 凭证与 401 处理 | ⬜ 待实现 |
+| **S3** | 网关鉴权 + 前端凭证 | gateway `verifyJwt` + 路径权限映射（401/403）+ 白名单；前端 http.ts 凭证与 401 处理 | ✅ 已落地 |
 
 每个切片完成即过 `typecheck` + `test`，一个逻辑单元一次 Conventional Commit。
 

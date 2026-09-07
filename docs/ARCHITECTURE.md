@@ -24,7 +24,8 @@ assemble-platform/
 │  ├─ clearance-core/  # 干涉分析核心算法（前端实时 + 后端离线复用）
 │  ├─ storage/         # 降级仓储层（内存/文件/未来 DB）
 │  ├─ http/            # 服务统一响应信封（成功 `{ok,data}` / 失败 `{ok,code,message}`）
-│  └─ observability/   # 轻量可观测性指标库（Counter/Histogram + Prometheus 文本 + request-id，零 Node 依赖，前后端同源）
+│  ├─ observability/   # 轻量可观测性指标库（Counter/Histogram + Prometheus 文本 + request-id，零 Node 依赖，前后端同源）
+│  └─ security/        # 轻量安全库（HS256 JWT + AES-256-GCM + RBAC 矩阵 + 审计哈希链，Node-only）
 ├─ Dockerfile       # 单容器聚合镜像（CloudBase Git 仓库部署的构建入口）
 ├─ infra/           # 中间件与基础设施配置占位（MySQL/Redis/MQ/ES/CDN）
 ├─ docs/            # 文档（本文件所在）
@@ -152,7 +153,7 @@ AssemblyBom(parts + steps.stationId)
 |----|------|
 | 模块导出 | 每个 `package` 通过 `src/index.ts` 聚合导出；外部只用包入口，不深路径 `import 包/src/...` |
 | TS 配置 | 统一继承根 `tsconfig.base.json`；`strict + noUncheckedIndexedAccess + noImplicitOverride` |
-| 纯代码 vs 依赖 | `sim-utils`、`clearance-core`、`domain`、`observability` 保持**无 DOM/Node 专属依赖**，浏览器与后端一致可用 |
+| 纯代码 vs 依赖 | `sim-utils`、`clearance-core`、`domain`、`observability` 保持**无 DOM/Node 专属依赖**，浏览器与后端一致可用；`security` 依赖 `node:crypto`，**仅服务端用**（浏览器只存/发 token，不做密码学） |
 | 包内脚本 | 统一提供 `build` / `typecheck` / `test`（vitest） |
 | 测试 | 单测放各包 `test/`，走根 `vitest.config.ts`（alias 到源码，无需先 build） |
 

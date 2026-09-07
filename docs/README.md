@@ -13,6 +13,7 @@
 | `GIT_GUIDE.md` | Git 分支模型 / Conventional Commits / PR / tag 发版规则 | 每次提交/开分支前对照 |
 | `TESTING.md` | 测试策略：分层/类型/性能基准门禁/提交门禁 | 动手改核心算法前必读 |
 | `OBSERVABILITY.md` | 监控与可观测性：request-id 链路、`/metrics` 指标、结构化访问日志、前端 SimMonitor 埋点 | 0.5.x M4 加固「监控告警」方向已落地；扩展或排查链路/metrics 时读 |
+| `SECURITY.md` | 安全与鉴权：HS256 JWT 签发/验证、RBAC 矩阵、审计哈希链、网关鉴权、字段加密 | 0.5.x M4 加固「安全」方向已落地；扩展鉴权/审计/加密时读 |
 | `sim-platform-design.md` | sim-platform 关键页（产线选择/装配工作台）**深色科技扁平**设计稿说明 + 配色令牌（高保真稿见 `apps/sim-platform/design/sim-platform-tech-mockup.html`） | 0.2.x 落地前端组件前必读 |
 | `FRESHCUT_ASSET_SPEC.md` | 果蔬/净菜加工线设备清单、尺寸、坐标、节点、材质与浏览器预算 | 新增或重做净菜设备 GLB 前必读 |
 | `DEPLOYMENT.md` | CloudBase 云托管 Git 仓库绑定部署：单容器形态、首次绑定步骤、触发与注意事项 | 部署/上线、改 Docker 或 gateway 前必读 |
