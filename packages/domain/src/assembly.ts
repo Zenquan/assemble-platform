@@ -1,5 +1,5 @@
 import type { Vec3, Quat } from './geometry.js';
-import type { ModelAssetId } from './model.js';
+import type { ModelAssetId, ModelAssetRef } from './model.js';
 
 /** 产线类型 —— 与简历口径一致（平台复用于三类产线） */
 export type ProductionLineKind = 'sorting' | 'fresh-cut' | 'cold-chain';
@@ -40,7 +40,12 @@ export interface Station {
    * 由产线配置填实；缺省视为该工位没有独立可见设备。
    * assembly-svc 依此生成该工位的 BOM 零件，不再由前端按 seq 猜测。
    */
-  deviceKind?: ModelAssetId;
+  deviceKind?: ModelAssetRef;
+  /**
+   * 自定义设备的 GLB 实测三向包络尺寸（米，[x,y,z]），仅当 deviceKind 为 custom- 资产时由
+   * 前端按上传量测结果写入并随产线持久化；内置资产忽略该字段（权威表 MODEL_ASSET_BOUNDS）。
+   */
+  deviceSize?: Vec3;
   /** 设备沿物料流向的实际占用长度（米），用于平台化紧凑排布。 */
   footprintLengthMeters?: number;
   /**
@@ -82,11 +87,16 @@ export interface Constraint {
 export interface AssemblyPart {
   id: string;
   name: string;
-  /** 来源 glTF 节点名 / 资源 id */
-  assetId: ModelAssetId;
+  /** 来源 glTF 节点名 / 资源 id（内置或自定义资产） */
+  assetId: ModelAssetRef;
   /** 初始/基准姿态；GLB 以包围盒底面中心对齐此位置 */
   localPosition: Vec3;
   localRotation: Quat;
+  /**
+   * 自定义资产的三向包络尺寸（米），仅当 assetId 为 custom- 时携带；
+   * 内置资产缺省，服务端干涉/布局消费时回退权威静态表 MODEL_ASSET_BOUNDS。
+   */
+  envelopeSize?: Vec3;
   /** 是否为可动装配件 */
   isMovable: boolean;
   /** 父级零件 id（构建父子层级树） */

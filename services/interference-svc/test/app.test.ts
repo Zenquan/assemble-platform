@@ -118,3 +118,61 @@ describe('HA：readiness 依赖探针', () => {
     await app.close();
   });
 });
+
+describe('POST /interference/offline（自定义资产包络来源）', () => {
+  function fetchWithCustom(parts: unknown[]): typeof fetch {
+    return async (input) => {
+      const url = String(input);
+      if (url.endsWith('/lines/line-c')) {
+        return new Response(JSON.stringify({ ok: true, data: { id: 'line-c' } }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.endsWith('/lines/line-c/bom')) {
+        return new Response(JSON.stringify({ ok: true, data: { lineId: 'line-c', parts } }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.endsWith('/healthz')) {
+        return new Response(JSON.stringify({ status: 'ok' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ ok: false, code: 'NOT_FOUND', message: '未找到' }), { status: 404 });
+    };
+  }
+
+  function customPart(id: string, x: number, envelopeSize?: [number, number, number]) {
+    return {
+      id,
+      assetId: 'custom-cnc-mill',
+      localPosition: [x, 0, 0],
+      localRotation: { x: 0, y: 0, z: 0, w: 1 },
+      ...(envelopeSize ? { envelopeSize } : {}),
+    };
+  }
+
+  it('自定义资产带 envelopeSize 时正常预检（200，不再抛「缺少包络」）', async () => {
+    const app = buildApp({
+      assemblyBaseUrl: 'http://assembly.test',
+      fetchImpl: fetchWithCustom([
+        customPart('cp-1', 0, [3.0, 2.0, 1.5]),
+        customPart('cp-2', 0.5, [3.0, 2.0, 1.5]),
+      ]),
+    });
+    const response = await app.inject({ method: 'POST', url: '/interference/offline', payload: { lineId: 'line-c' } });
+    const body = response.json<{ data: { totalPartCount: number; hitCount: number } }>();
+
+    expect(response.statusCode).toBe(200);
+    expect(body.data.totalPartCount).toBe(2);
+    expect(body.data.hitCount).toBe(1);
+    await app.close();
+  });
+
+  it('自定义资产缺 envelopeSize 时返回 502 依赖错误（含缺包络信息）', async () => {
+    const app = buildApp({
+      assemblyBaseUrl: 'http://assembly.test',
+      fetchImpl: fetchWithCustom([customPart('cp-1', 0)]),
+    });
+    const response = await app.inject({ method: 'POST', url: '/interference/offline', payload: { lineId: 'line-c' } });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toMatchObject({ ok: false, code: 'DEPENDENCY_UNAVAILABLE' });
+    expect(JSON.stringify(response.json())).toContain('缺少实测包络');
+    await app.close();
+  });
+});

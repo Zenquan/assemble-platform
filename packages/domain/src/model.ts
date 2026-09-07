@@ -26,6 +26,13 @@ export const MODEL_ASSET_IDS = [
 
 export type ModelAssetId = (typeof MODEL_ASSET_IDS)[number];
 
+/**
+ * 资产引用：内置 ModelAssetId ∪ 合法自定义资产（custom- 前缀）。
+ * `ModelAssetId | (string & {})` 在 TS 中折叠为 string，但保留书写内置字面量时的补全；
+ * 用于产线工位 deviceKind / BOM part.assetId 等可承载自定义资产的字段。
+ */
+export type ModelAssetRef = ModelAssetId | (string & {});
+
 /** 内置资产中文名（UI 展示用）：与 MODEL_ASSET_IDS 一一对应，业务引用仍走英文 id。 */
 export const MODEL_ASSET_LABELS: Record<ModelAssetId, string> = {
   conveyor: '输送机',
@@ -101,6 +108,8 @@ export interface ModelAssetVersion {
   displayName?: string;
   /** 文件名/源 */
   filename: string;
+  /** 上传时对 GLB 实测的世界 AABB 包络（米）；内置资产不落版本记录（权威表 MODEL_ASSET_BOUNDS） */
+  envelope?: ModelAssetEnvelope;
   /** 压缩后体积（字节） */
   sizeBytes: number;
   /** 压缩前体积（字节） */

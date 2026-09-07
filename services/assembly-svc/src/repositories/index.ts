@@ -1,4 +1,5 @@
 import type { AssemblyBom, ProductionLine, Quat, Station, Vec3 } from '@assemble/domain';
+import { isCustomAssetId } from '@assemble/domain';
 import { createRepo, resolveBackend, type Repository } from '@assemble/storage';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -276,6 +277,10 @@ export function buildBomForLine(line: ProductionLine): AssemblyBom {
       id: partId,
       name: `${station.name}设备`,
       assetId: station.deviceKind,
+      // 自定义资产由产线携带上传量测的包络（米）；内置资产缺省，消费端回退 MODEL_ASSET_BOUNDS
+      ...(isCustomAssetId(station.deviceKind) && station.deviceSize
+        ? { envelopeSize: station.deviceSize }
+        : {}),
       localPosition: positions[index] ?? [0, 0, 0],
       localRotation: rotationAroundY(station.facingDeg),
       isMovable: true,

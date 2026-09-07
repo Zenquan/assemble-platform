@@ -1,4 +1,4 @@
-import { MODEL_ASSET_IDS, type ProductionLine } from '@assemble/domain';
+import { isBuiltinAssetId, isCustomAssetId, type ProductionLine } from '@assemble/domain';
 import { err, ok } from '@assemble/http';
 import type { FastifyInstance } from 'fastify';
 import { buildBomForLine, type AssemblyRepos } from '../repositories/index.js';
@@ -8,10 +8,10 @@ function validateLine(line: ProductionLine): string | null {
   if (!line.name || !line.kind || !Array.isArray(line.stations)) {
     return '产线缺少 name/kind/stations';
   }
-  if (line.baseAssetId && !(MODEL_ASSET_IDS as readonly string[]).includes(line.baseAssetId)) {
+  if (line.baseAssetId && !isBuiltinAssetId(line.baseAssetId)) {
     return `产线基座资产 ${line.baseAssetId} 不存在`;
   }
-  if (line.transferAssetId && !(MODEL_ASSET_IDS as readonly string[]).includes(line.transferAssetId)) {
+  if (line.transferAssetId && !isBuiltinAssetId(line.transferAssetId)) {
     return `转运资产 ${line.transferAssetId} 不存在`;
   }
   const stationIds = new Set<string>();
@@ -22,8 +22,18 @@ function validateLine(line: ProductionLine): string | null {
     if (!Number.isInteger(station.seq) || station.seq < 1 || !Number.isFinite(station.taktSeconds) || station.taktSeconds <= 0) {
       return `工位 ${station.id} 的 seq/taktSeconds 无效`;
     }
-    if (station.deviceKind && !(MODEL_ASSET_IDS as readonly string[]).includes(station.deviceKind)) {
-      return `工位 ${station.id} 的设备资产不存在`;
+    if (station.deviceKind) {
+      if (isBuiltinAssetId(station.deviceKind)) {
+        // 内置资产走权威静态表 MODEL_ASSET_BOUNDS；携带的 deviceSize 一律忽略
+      } else if (isCustomAssetId(station.deviceKind)) {
+        // 自定义资产必须携带上传量测的 deviceSize（米，三向有限正数），供 BOM/干涉/布局消费
+        const size = station.deviceSize;
+        if (!size || size.length !== 3 || size.some((value) => !Number.isFinite(value) || value <= 0)) {
+          return `自定义设备 ${station.deviceKind} 必须携带 3 个有限正数的 deviceSize（米，来自上传量测）`;
+        }
+      } else {
+        return `工位 ${station.id} 的设备资产 ${station.deviceKind} 不存在或非合法自定义资产`;
+      }
     }
     if (station.footprintLengthMeters !== undefined && (!Number.isFinite(station.footprintLengthMeters) || station.footprintLengthMeters <= 0)) {
       return `工位 ${station.id} 的 footprintLengthMeters 无效`;

@@ -3,6 +3,7 @@ import {
   MODEL_ASSET_BOUNDS,
   type AssemblyBom,
   type AssemblyPart,
+  type ModelAssetEnvelope,
   type OBB,
   type ProductionLine,
   type Station,
@@ -33,6 +34,18 @@ interface PartGeom {
 
 const CLEARANCE_METERS = 0.05;
 
+/** 解析 part 包络尺寸：自定义资产取 BOM 携带的 envelopeSize，内置回退权威静态表。 */
+function resolveEnvelopeSize(
+  part: Pick<AssemblyPart, 'assetId' | 'envelopeSize'>,
+): Vec3 {
+  if (part.envelopeSize) return part.envelopeSize;
+  const envelope = (MODEL_ASSET_BOUNDS as Partial<Record<string, ModelAssetEnvelope>>)[
+    part.assetId
+  ];
+  if (!envelope) throw new Error(`资产 ${part.assetId} 缺少实测包络元数据`);
+  return envelope.size;
+}
+
 function stationByDevicePartId(line: ProductionLine, bom: AssemblyBom): Map<string, Station> {
   const map = new Map<string, Station>();
   const partIds = new Set(bom.parts.map((part) => part.id));
@@ -45,17 +58,19 @@ function stationByDevicePartId(line: ProductionLine, bom: AssemblyBom): Map<stri
 }
 
 function buildGeom(
-  part: Pick<AssemblyPart, 'id' | 'name' | 'isMovable' | 'assetId' | 'localPosition' | 'localRotation'>,
+  part: Pick<
+    AssemblyPart,
+    'id' | 'name' | 'isMovable' | 'assetId' | 'localPosition' | 'localRotation' | 'envelopeSize'
+  >,
   stationId?: string,
 ): PartGeom {
-  const envelope = MODEL_ASSET_BOUNDS[part.assetId];
-  if (!envelope) throw new Error(`资产 ${part.assetId} 缺少实测包络元数据`);
+  const size = resolveEnvelopeSize(part);
   return {
     partId: part.id,
     isMovable: part.isMovable,
     stationId,
     position: part.localPosition as Vec3,
-    obb: obbFromBomPart(part, envelope.size),
+    obb: obbFromBomPart(part, size),
     name: part.name,
   };
 }
