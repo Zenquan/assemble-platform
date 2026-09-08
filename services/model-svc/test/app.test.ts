@@ -274,6 +274,94 @@ describe('PUT /model/glb/:assetId（自定义资产上传）', () => {
   });
 });
 
+describe('DELETE /model/glb/:assetId（自定义资产删除）', () => {
+  async function tempGlbDir(): Promise<string> {
+    return mkdtemp(path.join(tmpdir(), 'model-svc-delete-'));
+  }
+
+  async function uploadFixture(
+    instance: ReturnType<typeof app>,
+    assetId: string,
+    fixture: string,
+  ): Promise<void> {
+    const upload = await instance.inject({
+      method: 'PUT',
+      url: `/model/glb/${assetId}`,
+      headers: { 'content-type': 'application/octet-stream' },
+      payload: await readFixtureGlb(fixture),
+    });
+    expect(upload.statusCode).toBe(201);
+  }
+
+  it('删除已注册自定义资产 → 200，文件与全部版本记录移除，随即下载/列表不可达', async () => {
+    const glbDir = await tempGlbDir();
+    const repos = { assets: createMemoryRepo<ModelAssetVersion>() };
+    const instance = app({ repos, glbDir });
+    await uploadFixture(instance, 'custom-press', 'conveyor');
+
+    const remove = await instance.inject({ method: 'DELETE', url: '/model/glb/custom-press' });
+
+    expect(remove.statusCode).toBe(200);
+    expect(remove.json()).toMatchObject({ ok: true, data: { assetId: 'custom-press', removedVersions: 1 } });
+    expect(await repos.assets.list()).toHaveLength(0);
+
+    // 磁盘文件已移除
+    await expect(readFile(path.join(glbDir, 'custom', 'custom-press.glb'))).rejects.toThrow();
+    // 下载与资产详情均不可达
+    const download = await instance.inject({ method: 'GET', url: '/model/glb/custom-press.glb' });
+    expect(download.statusCode).toBe(404);
+    const detail = await instance.inject({ method: 'GET', url: '/model/assets/custom-press' });
+    expect(detail.statusCode).toBe(404);
+
+    await instance.close();
+    await rm(glbDir, { recursive: true, force: true });
+  });
+
+  it('多次覆盖上传累计的多个版本记录一次全部撤销', async () => {
+    const glbDir = await tempGlbDir();
+    const repos = { assets: createMemoryRepo<ModelAssetVersion>() };
+    const instance = app({ repos, glbDir });
+    await uploadFixture(instance, 'custom-press', 'conveyor');
+    await uploadFixture(instance, 'custom-press', 'feeder');
+    expect(await repos.assets.list()).toHaveLength(2);
+
+    const remove = await instance.inject({ method: 'DELETE', url: '/model/glb/custom-press' });
+
+    expect(remove.json()).toMatchObject({ ok: true, data: { removedVersions: 2 } });
+    expect(await repos.assets.list()).toHaveLength(0);
+
+    await instance.close();
+    await rm(glbDir, { recursive: true, force: true });
+  });
+
+  it('拒绝删除内置资产（409 CONFLICT）', async () => {
+    const instance = app({ glbDir: await tempGlbDir() });
+
+    const response = await instance.inject({ method: 'DELETE', url: '/model/glb/conveyor' });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ ok: false, code: 'CONFLICT' });
+
+    await instance.close();
+  });
+
+  it('删除未注册的自定义资产返回 404，拒绝非法 id 返回 400', async () => {
+    const glbDir = await tempGlbDir();
+    const instance = app({ glbDir });
+
+    const missing = await instance.inject({ method: 'DELETE', url: '/model/glb/custom-nope' });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toMatchObject({ ok: false, code: 'NOT_FOUND' });
+
+    const invalid = await instance.inject({ method: 'DELETE', url: '/model/glb/press' });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toMatchObject({ ok: false, code: 'VALIDATION_FAILED' });
+
+    await instance.close();
+    await rm(glbDir, { recursive: true, force: true });
+  });
+});
+
 describe('GET /model/glb/:file（OSS 回源）', () => {
   const ossBase = 'https://assets.example/glb';
   const ossBytes = Buffer.from('oss-binary-payload');

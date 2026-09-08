@@ -27,6 +27,17 @@ export interface UploadAssetResult {
   note?: string;
 }
 
+export interface DeleteAssetResult {
+  assetId: string;
+  removedVersions: number;
+}
+
+/** 删除自定义资产：服务端移除磁盘文件并撤销全部注册版本记录；内置资产受保护不可删。
+ *  前端应在调用前先查产线引用（见 ModelAssetsView），被引用的资产删除会被 UI 拦截。 */
+export async function deleteModelAsset(assetId: string): Promise<DeleteAssetResult> {
+  return http.del<DeleteAssetResult>(`${MODEL_API_PREFIX}/glb/${encodeURIComponent(assetId)}`);
+}
+
 /** 上传自定义 GLB：原始二进制 PUT，服务端校验 magic/大小/assetId 规则后落盘注册。
  *  displayName 为可选中文/展示名，经 query 透传（URL 编码）。 */
 export async function uploadModelAsset(

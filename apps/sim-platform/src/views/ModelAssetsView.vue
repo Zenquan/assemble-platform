@@ -7,14 +7,17 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppHeader from '@/components/AppHeader.vue';
+import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { ApiError } from '@/api/http';
 import {
   assetDisplayName,
+  deleteModelAsset,
   deriveCustomAssetId,
   fetchModelAssets,
   suggestChineseName,
   uploadModelAsset,
 } from '@/api/model';
+import { fetchLines } from '@/api/lines';
 import { isCustomAssetId, MODEL_ASSET_IDS, type ModelAssetVersion } from '@assemble/domain';
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -131,6 +134,74 @@ async function submitUpload(): Promise<void> {
   }
 }
 
+// 删除资产状态（列表区反馈与上传区分开）
+const deleting = ref('');
+const actionMessage = ref('');
+/** 报错弹窗文案：非空时以 alert 弹窗提示（引用拦截 / 删除失败等） */
+const errorMessage = ref('');
+/** 待确认删除的资产：非空时弹出二次确认模态（取代原生 confirm） */
+const pendingDelete = ref<ModelAssetVersion | null>(null);
+/** 弹窗显隐：与 pendingDelete 同步，供 ConfirmDialog 的 v-model:visible 双向绑定 */
+const deleteVisible = computed({
+  get: () => pendingDelete.value !== null,
+  set: (v: boolean) => {
+    if (!v) pendingDelete.value = null;
+  },
+});
+/** 报错弹窗显隐：与 errorMessage 同步，供 ConfirmDialog(alert) 的 v-model:visible 双向绑定 */
+const errorVisible = computed({
+  get: () => errorMessage.value !== '',
+  set: (v: boolean) => {
+    if (!v) errorMessage.value = '';
+  },
+});
+
+/**
+ * 删除自定义资产前的引用防护：先查产线列表，被任一产线工位引用的资产禁止删除，
+ * 提示用户先到产线配置更换设备（避免运行态出现指向不存在资产的产线）。
+ * 未引用则弹出自定义确认模态，用户确认后再执行删除。
+ */
+async function onDeleteAsset(asset: ModelAssetVersion): Promise<void> {
+  if (deleting.value) return;
+  actionMessage.value = '';
+  errorMessage.value = '';
+  try {
+    const lines = await fetchLines();
+    const refs = lines.filter((line) =>
+      line.stations.some((station) => station.deviceKind === asset.assetId),
+    );
+    if (refs.length > 0) {
+      errorMessage.value =
+        `无法删除：资产已被产线 ${refs.map((line) => `「${line.name}」`).join('、')} 的工位引用，` +
+        '请先在产线配置中更换该设备后再删除';
+      return;
+    }
+  } catch {
+    // 产线服务不可达时不阻断删除尝试：服务端仍会做存在性校验
+  }
+  pendingDelete.value = asset;
+}
+
+function cancelDelete(): void {
+  if (!deleting.value) pendingDelete.value = null;
+}
+
+async function confirmDelete(): Promise<void> {
+  const asset = pendingDelete.value;
+  if (!asset || deleting.value) return;
+  deleting.value = asset.assetId;
+  try {
+    const result = await deleteModelAsset(asset.assetId);
+    actionMessage.value = `已删除资产「${assetDisplayName(asset)}」（撤销 ${result.removedVersions} 个版本记录）`;
+    await refresh();
+  } catch (cause) {
+    errorMessage.value =
+      cause instanceof ApiError ? `删除失败：${cause.message}` : '删除失败，请确认 model-svc 已启动';
+  } finally {
+    deleting.value = '';
+  }
+}
+
 onMounted(() => {
   void refresh();
 });
@@ -214,6 +285,7 @@ onMounted(() => {
           </div>
           <div class="sub2">内置 {{ builtinEntries.length }} · 自定义 {{ customAssets.length }}</div>
         </div>
+        <div v-if="actionMessage" class="action-msg ok">{{ actionMessage }}</div>
 
         <div v-if="state.loading && state.assets.length === 0" class="statebox">
           正在加载模型资产库…
@@ -236,7 +308,15 @@ onMounted(() => {
             <span class="mono">{{ formatBytes(a.sizeBytes) }}</span>
             <span class="mono">{{ a.compression }}</span>
             <span class="mono">{{ formatTime(a.createdAt) }}</span>
-            <span><a class="mono" :href="`/model/glb/${encodeURIComponent(a.assetId)}.glb`" download>下载 GLB</a></span>
+            <span class="ops">
+              <a class="mono" :href="`/model/glb/${encodeURIComponent(a.assetId)}.glb`" download>下载 GLB</a>
+              <button
+                class="del"
+                type="button"
+                :disabled="deleting === a.assetId"
+                @click="onDeleteAsset(a)"
+              >{{ deleting === a.assetId ? '删除中…' : '删除' }}</button>
+            </span>
           </div>
           <div v-for="a in builtinEntries" :key="a.assetId" class="trow">
             <span class="idcell">
@@ -252,6 +332,37 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- 删除二次确认模态 -->
+    <ConfirmDialog
+      v-model:visible="deleteVisible"
+      title="删除自定义资产"
+      danger
+      :loading="deleting !== ''"
+      confirm-text="确认删除"
+      @confirm="confirmDelete"
+      @cancel="cancelDelete"
+    >
+      <template v-if="pendingDelete">
+        <div class="m-name">{{ assetDisplayName(pendingDelete) }}</div>
+        <div class="m-id mono">{{ pendingDelete.assetId }}</div>
+        <div class="m-warn">
+          该资产的 GLB 文件与全部版本记录将被永久移除，不可恢复。
+          若某条产线的工位仍引用此资产，将无法正常参与装配与预检。
+        </div>
+      </template>
+    </ConfirmDialog>
+
+    <!-- 报错提示弹窗（引用拦截 / 删除失败等） -->
+    <ConfirmDialog
+      v-model:visible="errorVisible"
+      title="无法删除"
+      danger
+      mode="alert"
+      confirm-text="知道了"
+    >
+      <div class="m-err">{{ errorMessage }}</div>
+    </ConfirmDialog>
   </div>
 </template>
 
@@ -418,6 +529,35 @@ onMounted(() => {
 .upload-msg.bad {
   color: var(--red);
 }
+.action-msg {
+  font-size: 12px;
+  margin: -4px 0 10px;
+}
+.action-msg.ok {
+  color: var(--green);
+}
+/* 列表行操作（下载 + 删除自定义） */
+.ops {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.del {
+  font-size: 12px;
+  color: var(--red);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
+  border-radius: 6px;
+  padding: 2px 9px;
+  cursor: pointer;
+}
+.del:hover {
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+.del:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 /* 列表 */
 .list-bar {
   display: flex;
@@ -513,5 +653,29 @@ a {
 }
 a:hover {
   text-decoration: underline;
+}
+/* 删除确认弹窗内业务内容（外壳由 ConfirmDialog 组件自持） */
+.m-name {
+  font-size: 16px;
+  color: var(--ink);
+}
+.m-id {
+  font-size: 12px;
+  color: var(--cyan);
+  margin: 4px 0 12px;
+}
+.m-warn {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-3);
+  border-left: 2px solid color-mix(in srgb, var(--red) 55%, transparent);
+  background: color-mix(in srgb, var(--red) 7%, transparent);
+  padding: 8px 12px;
+  border-radius: 0 8px 8px 0;
+}
+.m-err {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-3);
 }
 </style>
