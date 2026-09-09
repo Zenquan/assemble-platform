@@ -190,7 +190,7 @@ const SERVICES = process.argv.includes('--all')
   ? ALL_SERVICES
   : ALL_SERVICES.filter((s) => CORE.has(s.name));
 const serviceByName = new Map(ALL_SERVICES.map((service) => [service.name, service]));
-const VITE_PORT = configuredPort('VITE_DEV_PORT', 5173);
+const VITE_PORT = configuredPort('VITE_DEV_PORT', 5177);
 const VITE = { name: 'vite', dir: join(ROOT, 'apps/sim-platform'), port: VITE_PORT, health: `${origin(VITE_PORT)}/` };
 const MODE = process.argv.includes('--all') ? '全量(5 服务)' : '精简(assembly+interference+model+takt)';
 
