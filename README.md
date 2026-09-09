@@ -106,7 +106,7 @@ assemble-platform/
 │  ├─ interference-svc/    # 服务端离线整线预检（7102）
 │  ├─ model-svc/           # GLB 资产版本与下发（7103）
 │  ├─ takt-svc/            # 节拍计算与瓶颈识别（7104）
-│  └─ auth-svc/            # OIDC / RBAC / 审计（7105）
+│  └─ auth-svc/            # HS256 JWT 签发 / RBAC / 审计哈希链（7105）
 ├─ packages/               # 前后端唯一共享层
 │  ├─ domain/              # 领域类型契约（单一事实源）
 │  ├─ sim-utils/           # 纯数学 / 几何工具
@@ -114,6 +114,7 @@ assemble-platform/
 │  ├─ storage/             # 内存 / 文件降级仓储
 │  ├─ http/                # 统一响应信封
 │  ├─ observability/       # 轻量指标库（Counter/Histogram + Prometheus 文本 + request-id）
+│  ├─ health/              # 健康检查共享库（liveness/readiness 双探针 + 优雅停机）
 │  └─ security/            # 安全库（HS256 JWT + AES-256-GCM + RBAC 矩阵 + 审计哈希链）
 ├─ docs/                   # 架构 / 版本 / 测试 / 协作文档
 ├─ scripts/                # dev 编排等工程脚本
@@ -224,8 +225,9 @@ pnpm dev:auth
 
 版本策略与里程碑出口详见 `docs/VERSIONING.md`。当前主线处于 **M4 加固（0.5.x）**：
 0.4.x（M3 平台化，v0.4.1）的多产线复用、真实 GLB 资产链路、产线配置中心与节拍观测已发布；
-M4 加固已落地「测试与基准体系」与「监控与可观测性」两个方向，剩余 HA 部署编排、RBAC/审计/加密、
-容灾与告警推送，之后进入 M5 试点上线。
+M4 加固已落地**四个方向**：测试与基准体系、监控与可观测性、RBAC/审计/加密（安全加固）、
+HA 部署编排（liveness/readiness 双探针 + 优雅停机 + gateway 健康池 / failover / 副本配置化）；
+剩余「容灾与告警推送」（需求共识已产出，代码待实现），之后进入 M5 试点上线。
 
 ## 协作约定
 
