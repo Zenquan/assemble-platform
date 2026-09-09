@@ -16,7 +16,7 @@ import {
   MEMORY_TOTAL_METRIC,
   MEMORY_USED_METRIC,
 } from '@/monitor/simMonitor';
-import type { SimMonitorHost, TelemetrySample } from '@/monitor/types';
+import type { SimMonitorHost, SimMonitorSnapshot, TelemetrySample } from '@/monitor/types';
 
 const USED_HEAP = 128 * 1024 * 1024;
 const TOTAL_HEAP = 256 * 1024 * 1024;
@@ -234,6 +234,23 @@ describe('SimMonitor · 前端埋点 SDK（M3）', () => {
     expect(m.stats.lastError).toBeInstanceOf(Error);
   });
 
+  it('503（网关未就绪）静默丢弃，不记 lastError', async () => {
+    const rig = makeRig();
+    const unavailable: SimMonitorHost = {
+      ...rig.host,
+      fetchFn: async () => new Response('{"ok":false}', { status: 503 }),
+    };
+    const m = createSimMonitor(unavailable, { flushIntervalMs: 100_000 });
+    m.start();
+
+    m.report('custom.503', 1);
+    await m.flush();
+
+    expect(m.stats.dropped).toBe(1);
+    expect(m.stats.flushed).toBe(0);
+    expect(m.stats.lastError).toBeNull();
+  });
+
   it('stop 取消 rAF 并断开 PerformanceObserver，停止后不再采样', () => {
     const rig = makeRig();
     const m = createSimMonitor(rig.host, {});
@@ -273,5 +290,71 @@ describe('SimMonitor · 前端埋点 SDK（M3）', () => {
 
     await m.flush();
     expect(samplesOf(rig)).toEqual([{ name: 'custom.ok', value: 1 }]);
+  });
+
+  it('subscribe 收到实时快照（FPS / 内存），snapshot getter 同步最新值', () => {
+    const rig = makeRig();
+    const m = createSimMonitor(rig.host, { sampleIntervalMs: 500, flushIntervalMs: 100_000 });
+    const seen: SimMonitorSnapshot[] = [];
+    m.subscribe((snapshot) => seen.push(snapshot));
+    m.start();
+
+    // 30 帧 × 16.67ms ≈ 500ms，跨过采样窗口触发一次 FPS + 内存采样
+    for (let i = 0; i < 30; i++) {
+      rig.advance(16.67);
+      rig.tick();
+    }
+
+    expect(seen.length).toBeGreaterThan(0);
+    const last = seen[seen.length - 1]!;
+    expect(last.fps).toBeGreaterThan(0);
+    expect(last.jsHeapUsed).toBe(USED_HEAP);
+    expect(last.jsHeapTotal).toBe(TOTAL_HEAP);
+    expect(m.snapshot.fps).toBe(last.fps);
+  });
+
+  it('连续指标维护滚动窗口均值（fpsAvg 抗瞬时抖动），首屏指标不进窗口', () => {
+    const rig = makeRig();
+    const m = createSimMonitor(rig.host, { sampleIntervalMs: 100, flushIntervalMs: 100_000 });
+    m.start();
+
+    // 3 个采样窗口（每窗口 6 帧 × 16.67ms ≈ 100ms），各产生一次 FPS + 内存采样
+    for (let w = 0; w < 3; w++) {
+      for (let i = 0; i < 6; i++) {
+        rig.advance(16.67);
+        rig.tick();
+      }
+    }
+
+    expect(m.snapshot.fps).toBeGreaterThan(0);
+    expect(m.snapshot.fpsAvg).toBeGreaterThan(0);
+    // 窗口内 fps 稳定 ~60，均值应贴近瞬时
+    expect(Math.abs(m.snapshot.fpsAvg - m.snapshot.fps)).toBeLessThan(10);
+    expect(m.snapshot.jsHeapUsedAvg).toBe(USED_HEAP);
+    expect(m.snapshot.jsHeapTotalAvg).toBe(TOTAL_HEAP);
+  });
+
+  it('取消订阅后不再收到实时快照回调', () => {
+    const rig = makeRig();
+    const m = createSimMonitor(rig.host, { sampleIntervalMs: 200, flushIntervalMs: 100_000 });
+    let calls = 0;
+    const unsubscribe = m.subscribe(() => {
+      calls += 1;
+    });
+    m.start();
+
+    for (let i = 0; i < 20; i++) {
+      rig.advance(16.67);
+      rig.tick();
+    }
+    expect(calls).toBeGreaterThan(0);
+
+    unsubscribe();
+    const before = calls;
+    for (let i = 0; i < 30; i++) {
+      rig.advance(16.67);
+      rig.tick();
+    }
+    expect(calls).toBe(before);
   });
 });

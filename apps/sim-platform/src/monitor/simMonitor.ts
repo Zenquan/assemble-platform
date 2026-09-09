@@ -16,7 +16,9 @@
 import type {
   SimMonitor,
   SimMonitorHost,
+  SimMonitorListener,
   SimMonitorOptions,
+  SimMonitorSnapshot,
   SimMonitorStats,
   TelemetrySample,
 } from './types';
@@ -118,10 +120,79 @@ export function createSimMonitor(host: SimMonitorHost, options: SimMonitorOption
     lastError: null,
   };
 
+  // 最新实时快照 + 订阅者（性能页实时展示用，与上报通道解耦）
+  const latest: SimMonitorSnapshot = {
+    fps: 0,
+    fpsAvg: 0,
+    jsHeapUsed: 0,
+    jsHeapUsedAvg: 0,
+    jsHeapTotal: 0,
+    jsHeapTotalAvg: 0,
+    lcp: 0,
+    cls: 0,
+    fid: 0,
+  };
+  const listeners = new Set<SimMonitorListener>();
+
+  // 连续指标（fps / 内存）的滚动窗口：只对持续采样的量做均值平滑，
+  // LCP/CLS/FID 是首屏一次性指标，不进窗口、保持「最新=最差」语义。
+  const WINDOW_SIZE = 10;
+  const fpsWindow: number[] = [];
+  const heapUsedWindow: number[] = [];
+  const heapTotalWindow: number[] = [];
+
+  function pushAvg(windowArr: number[], value: number): number {
+    windowArr.push(value);
+    if (windowArr.length > WINDOW_SIZE) windowArr.shift();
+    let sum = 0;
+    for (const v of windowArr) sum += v;
+    return sum / windowArr.length;
+  }
+
+  function applyToLatest(name: string, value: number): void {
+    switch (name) {
+      case FPS_METRIC:
+        latest.fps = value;
+        latest.fpsAvg = pushAvg(fpsWindow, value);
+        break;
+      case MEMORY_USED_METRIC:
+        latest.jsHeapUsed = value;
+        latest.jsHeapUsedAvg = pushAvg(heapUsedWindow, value);
+        break;
+      case MEMORY_TOTAL_METRIC:
+        latest.jsHeapTotal = value;
+        latest.jsHeapTotalAvg = pushAvg(heapTotalWindow, value);
+        break;
+      case LCP_METRIC:
+        latest.lcp = value;
+        break;
+      case CLS_METRIC:
+        latest.cls = value;
+        break;
+      case FID_METRIC:
+        latest.fid = value;
+        break;
+    }
+  }
+
+  function emit(): void {
+    if (listeners.size === 0) return;
+    const snap = { ...latest };
+    for (const listener of listeners) {
+      try {
+        listener(snap);
+      } catch {
+        /* 监听器异常不得中断采集 */
+      }
+    }
+  }
+
   function enqueue(name: string, value: number): void {
     if (!Number.isFinite(value)) return;
     samples.push({ name, value });
     stats.enqueued += 1;
+    applyToLatest(name, value);
+    emit();
     if (samples.length >= flushSize) void flush();
   }
 
@@ -137,9 +208,15 @@ export function createSimMonitor(host: SimMonitorHost, options: SimMonitorOption
           body: JSON.stringify({ samples: batch }),
           keepalive: true,
         });
-        if (!res.ok) throw new Error(`telemetry flush failed: HTTP ${res.status}`);
-        stats.flushed += batch.length;
-        stats.batches += 1;
+        if (res.ok) {
+          stats.flushed += batch.length;
+          stats.batches += 1;
+        } else if (res.status === 503) {
+          // 503 = 网关未就绪（本地 dev 未起 gateway），属预期降级：静默丢弃，不记 lastError。
+          stats.dropped += batch.length;
+        } else {
+          throw new Error(`telemetry flush failed: HTTP ${res.status}`);
+        }
       } catch (err) {
         stats.dropped += batch.length;
         stats.lastError = err;
@@ -209,6 +286,15 @@ export function createSimMonitor(host: SimMonitorHost, options: SimMonitorOption
     flush,
     get stats() {
       return { ...stats };
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    get snapshot() {
+      return { ...latest };
     },
   };
 }

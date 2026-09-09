@@ -27,3 +27,8 @@ export function initSimMonitor(options: SimMonitorOptions = {}): SimMonitor {
   singleton.start();
   return singleton;
 }
+
+/** 取全局单例（未初始化返回 null）；性能页/诊断面板读取实时快照与订阅用 */
+export function getSimMonitor(): SimMonitor | null {
+  return singleton;
+}

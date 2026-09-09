@@ -198,6 +198,8 @@ class BabylonScene implements SceneManager {
   private camera: ArcRotateCamera | null = null;
   private viewId: CameraViewId = 'iso';
   private _rendering = false;
+  /** 最近一次采样到的渲染帧率（每帧经 engine.getFps 刷新，供门面健康快照） */
+  private _fps = 0;
   /** partId -> 不可见拾取/碰撞代理；可见模型只存在于 visualRoots。 */
   private meshes = new Map<string, Mesh>();
   /** partId -> GLB 可见根节点。 */
@@ -238,6 +240,31 @@ class BabylonScene implements SceneManager {
 
   get isMounted(): boolean {
     return this.engine !== null && this.scene !== null;
+  }
+
+  /** 最近一次采样渲染帧率（未渲染恒 0），供门面 health() 读取 */
+  get fps(): number {
+    return this._fps;
+  }
+
+  /** 渲染规模统计：draw call / 活动网格 / 上帧顶点数（未挂载时全 0） */
+  getRenderStats(): { drawCalls: number; activeMeshes: number; totalVertices: number } {
+    if (!this.scene || !this.engine) {
+      return { drawCalls: 0, activeMeshes: 0, totalVertices: 0 };
+    }
+    // Babylon 无公开 draw call 计数，经内部 PerfCounter（_drawCalls.current = 上一帧）
+    // 读取；异常/未就绪时回落为活动网格数近似。
+    const internalDrawCalls = (
+      this.engine as unknown as { _drawCalls?: { current: number } }
+    )._drawCalls?.current;
+    return {
+      drawCalls:
+        typeof internalDrawCalls === 'number' && internalDrawCalls > 0
+          ? internalDrawCalls
+          : this.scene.getActiveMeshes().length,
+      activeMeshes: this.scene.getActiveMeshes().length,
+      totalVertices: this.scene.getTotalVertices(),
+    };
   }
 
   /** 视口 canvas（供 pointer 监听挂载）；未挂载返回 null */
@@ -422,6 +449,8 @@ class BabylonScene implements SceneManager {
         // S2 · 每帧驱动点：动画推进器（引擎注册）先于 scene.render 结算本帧零件位
         this.onFrame?.();
         this.scene.render();
+        // 性能页数据源：每帧刷新渲染帧率（getFps 为引擎内置平滑帧率）
+        this._fps = this.engine?.getFps() ?? 0;
       }
     });
   }
@@ -1364,7 +1393,6 @@ export class BabylonSimEngine implements SimEngine {
 
   private _activeLineId: string | null = null;
   private _initialized = false;
-  private _fps = 0;
   /** S2 · 装配过程动画驱动器（纯逻辑，每帧由 scene.onFrame 推进） */
   private _animator: AssemblyAnimator | null = null;
 
@@ -1531,11 +1559,15 @@ export class BabylonSimEngine implements SimEngine {
   }
 
   health(): EngineHealth {
+    const stats = this.scene.getRenderStats();
     return {
-      ok: this._initialized && (this.scene.isMounted || !this.scene.isMounted),
+      ok: this._initialized,
       backend: 'babylon',
       activeLineId: this._activeLineId,
-      fps: this._fps,
+      fps: this.scene.fps,
+      drawCalls: stats.drawCalls,
+      activeMeshes: stats.activeMeshes,
+      totalVertices: stats.totalVertices,
       assembledParts: this.assembly.assembledPartIds.length,
       totalParts: this.assembly.bom?.parts.length ?? 0,
       rendering: this.scene.isMounted,

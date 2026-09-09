@@ -68,6 +68,10 @@ describe('createSimEngine 门面工厂', () => {
     expect(after.ok).toBe(true);
     expect(after.backend).toBe('noop');
     expect(after.activeLineId).toBe('L1');
+    // Noop 无渲染，渲染统计恒 0（性能页据此判定"无活跃渲染"）
+    expect(after.drawCalls).toBe(0);
+    expect(after.activeMeshes).toBe(0);
+    expect(after.totalVertices).toBe(0);
   });
 
   it('门面正确暴露 BabylonSimEngine 类（仅引用，不实例化以免启 WebGL）', () => {

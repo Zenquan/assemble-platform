@@ -70,7 +70,7 @@ export interface ModeSwitchResult {
   reason?: string;
 }
 
-/** 引擎运行状态（顶栏"引擎实时/引擎在线"徽标数据源） */
+/** 引擎运行状态（顶栏"引擎实时/引擎在线"徽标 + 性能页数据源） */
 export interface EngineHealth {
   ok: boolean;
   /** 渲染后端标识：本轮 'noop'，接入 Babylon 后为 'babylon' */
@@ -78,6 +78,12 @@ export interface EngineHealth {
   /** 已初始化的产线 id（未加载则为 null） */
   activeLineId: string | null;
   fps: number;
+  /** 上一帧 draw call 数（Babylon 内部计数；noop 恒 0） */
+  drawCalls: number;
+  /** 场景活动网格数（渲染对象规模，noop 恒 0） */
+  activeMeshes: number;
+  /** 上一帧渲染顶点总数（noop 恒 0） */
+  totalVertices: number;
   /** 已装配零件数 / 总数 */
   assembledParts: number;
   totalParts: number;

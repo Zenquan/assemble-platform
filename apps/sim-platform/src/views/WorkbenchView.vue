@@ -12,7 +12,7 @@ import { fetchLine, fetchLineBom } from '@/api/lines';
 import { fetchTaktSimulation } from '@/api/takt';
 import { runOfflinePrecheck } from '@/api/interference';
 import type { InterferenceHit, InterferenceReport, ProductionLine } from '@assemble/domain';
-import { createSimEngine, type SimEngine } from '@/engine';
+import { createSimEngine, registerActiveEngine, type SimEngine } from '@/engine';
 import { deriveBomTreeState, stationsOf, type BomTreeModel } from '@/engine/bomtree';
 import { deriveTaktPanel, type TaktPanelModel } from '@/engine/taktpanel';
 import BomTreePanel from '@/components/BomTreePanel.vue';
@@ -110,6 +110,7 @@ async function loadWorkbench(nextLineId: string) {
     engine.value = eng;
     backend.value = eng.backend;
     (window as unknown as { __sim?: SimEngine }).__sim = eng;
+    registerActiveEngine(eng);
     const health = await eng.init({ container: canvasHost.value, line: loadedLine, bom });
     if (unmounted || version !== loadVersion) {
       eng.dispose();
@@ -250,6 +251,7 @@ onBeforeUnmount(() => {
   unmounted = true;
   loadVersion += 1;
   window.clearInterval(pollTimer);
+  registerActiveEngine(null);
   engine.value?.dispose();
   engine.value = null;
 });

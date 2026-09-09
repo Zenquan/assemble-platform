@@ -27,6 +27,7 @@ const router = useRouter();
     </span>
     <div class="hbtns">
       <slot name="actions">
+        <button class="hbtn" type="button" @click="router.push({ name: 'performance' })">性能</button>
         <button class="hbtn" type="button" @click="router.push({ name: 'model-assets' })">导入模型</button>
         <button class="hbtn prim" type="button" @click="router.push({ name: 'line-config', query: { new: '1' } })">＋ 新建产线</button>
       </slot>

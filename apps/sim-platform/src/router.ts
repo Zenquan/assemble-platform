@@ -26,6 +26,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/ModelAssetsView.vue'),
     meta: { title: '模型资产' },
   },
+  {
+    path: '/perf',
+    name: 'performance',
+    component: () => import('@/views/PerformanceView.vue'),
+    meta: { title: '性能监视' },
+  },
 ];
 
 export const router = createRouter({

@@ -8,6 +8,30 @@ Corrections, insights, and knowledge gaps captured during development.
 
 ---
 
+## LRN-20260909-001
+
+- **Category**: best_practice
+- **Status**: pending
+- **Context**: 前端/渲染侧性能可视化（新增 /perf 性能监视页 + 引擎 fps/draw call/顶点统计接线）时，需在 Babylon v9 里拿渲染统计。发现 Babylon v9 的 `EngineInstrumentation` 只暴露 `gpuFrameTimeCounter` / `shaderCompilationTimeCounter`，**没有 drawCallsCounter**；`Engine` 的 draw call 计数只在内部 `_drawCalls: PerfCounter`（无公开 getter）。
+- **Insight**: Babylon v9 拿渲染规模的正解是公开 API 组合：`engine.getFps()`（AbstractEngine 方法，平滑帧率）+ `scene.getActiveMeshes().length`（活动网格）+ `scene.getTotalVertices()`（上帧顶点数）；精确 draw call 需经 `(engine as any)._drawCalls.current` 内部计数器读取，读取失败回落为活动网格数近似。引擎 health 快照按此扩展，noop 替身恒 0。
+- **Action**: 在 `BabylonScene` 加 `fps` getter + `getRenderStats()`，render loop 每帧刷新 `_fps`；`EngineHealth` 增 `drawCalls/activeMeshes/totalVertices`；性能页经 `registerActiveEngine/getActiveEngine` 跨页读渲染快照、经 `SimMonitor.subscribe` 读前端指标（双通道本地实时、不依赖 gateway）。
+- **Related Files**: apps/sim-platform/src/engine/babylon.ts, engine/types.ts, engine/noop.ts, engine/index.ts, monitor/simMonitor.ts, monitor/types.ts, views/PerformanceView.vue, router.ts, components/AppHeader.vue, vite.config.ts
+- **Resolution**: 待提交后回填 commit 号。
+
+---
+
+## LRN-20260909-002
+
+- **Category**: knowledge_gap
+- **Status**: resolved
+- **Context**: 本地 dev（`pnpm dev`）未起 gateway 时，vite proxy 把 POST `/telemetry` 转发到 127.0.0.1:7100 连接失败，http-proxy 默认回 **500** 而非 503，前端 `res.ok=false` 抛 `telemetry flush failed: HTTP 500`，性能页显示红色错误行（把"本地无网关"误判为真错误）。
+- **Insight**: vite `server.proxy` 底层 http-proxy 在目标 ECONNREFUSED 且无 error 监听器时默认 `writeHead(500)`。要表达"网关未就绪"这类可预期降级，须在 `configure` 里监听 `error` 事件自定义回 503，前端对 503 静默（不计 lastError），与真 5xx 区分。
+- **Action**: vite.config.ts 抽 `gatewayUnavailable` configure，/telemetry、/metrics 连接失败回 503 + `GATEWAY_UNAVAILABLE` 信封；simMonitor flush 里 503 静默丢弃不记 lastError，其余非 2xx 仍记错；补 503 静默单测。
+- **Related Files**: apps/sim-platform/vite.config.ts, src/monitor/simMonitor.ts, src/monitor/test/simMonitor.test.ts
+- **Resolution**: typecheck 通过 + 102 测试全绿，待提交后回填 commit 号。
+
+---
+
 ## LRN-20260906-001
 
 - **Category**: best_practice

@@ -58,6 +58,31 @@ export interface SimMonitorStats {
   lastError: unknown;
 }
 
+/** 最新一次采样到的实时指标快照（供性能页订阅展示，不依赖上报链路） */
+export interface SimMonitorSnapshot {
+  /** 最近采样窗口的帧率 */
+  fps: number;
+  /** 最近 N 个采样窗口的平均帧率（滚动平滑，抗瞬时抖动） */
+  fpsAvg: number;
+  /** JS 堆已用字节（Chrome 才有，否则 0） */
+  jsHeapUsed: number;
+  /** 最近 N 个采样窗口的平均已用堆（滚动平滑） */
+  jsHeapUsedAvg: number;
+  /** JS 堆总量字节 */
+  jsHeapTotal: number;
+  /** 最近 N 个采样窗口的平均总堆（滚动平滑） */
+  jsHeapTotalAvg: number;
+  /** LCP ms（首屏最大内容元素渲染耗时，一次性指标；未观测到为 0） */
+  lcp: number;
+  /** 累计布局偏移（首屏加载指标；未观测到为 0） */
+  cls: number;
+  /** FID ms（首屏首次输入延迟，一次性指标；未观测到为 0） */
+  fid: number;
+}
+
+/** 实时快照监听器（采样窗口到期即回调最新快照） */
+export type SimMonitorListener = (snapshot: SimMonitorSnapshot) => void;
+
 /** SimMonitor 实例句柄 */
 export interface SimMonitor {
   /** 启动采集（幂等） */
@@ -70,4 +95,8 @@ export interface SimMonitor {
   flush(): Promise<void>;
   /** 只读运行统计快照 */
   readonly stats: SimMonitorStats;
+  /** 订阅实时指标快照，返回取消订阅函数（性能页/诊断面板用） */
+  subscribe(listener: SimMonitorListener): () => void;
+  /** 最近一次实时指标快照 */
+  readonly snapshot: SimMonitorSnapshot;
 }
