@@ -38,12 +38,28 @@
 ## 界面速览
 
 <div align="center">
-  <img src="docs/line-select-v0.2.0-frontend.png" width="47%" alt="产线选择页" />
-  <img src="docs/s4-bom-takt-assembled.png" width="47%" alt="装配工作台：BOM 树 + 节拍面板" />
-  <img src="docs/s3-drag-blocked.png" width="60%" alt="手动拖拽：实时干涉拦截" />
+
+**v0.5 平台闭环 · 产线选择 → 模型资产 → 产线配置 → 进入工作台 → 性能监视**
+
+<img src="docs/ui-line-select.png" width="47%" alt="产线选择 · 5 条产线卡片 + 离线预检快照" />
+<img src="docs/ui-model-assets.png" width="47%" alt="模型资产库 · 13 项内置 GLB + 自定义上传" />
+
+<br/>
+
+<img src="docs/ui-line-config.png" width="47%" alt="产线配置中心 · 工艺 / 工位节拍 / 设备 GLB / 坐标" />
+<img src="docs/ui-perf.png" width="47%" alt="性能监视 · 渲染侧 + 前端侧 + 上报状态" />
+
+<br/>
+
+<img src="docs/ui-workbench-loading.png" width="32%" alt="装配工作台 · GLB 加载动画" />
+<img src="docs/ui-workbench-ready.png" width="64%" alt="装配工作台 · BOM 装配 + 3D 渲染 + 干涉拦截 + 节拍" />
+
 </div>
 
-> 截图来自版本演进过程中的功能验证留档，最新交互以代码与 `docs/sim-platform-design.md` 为准。
+> 工作台左侧 BOM 装配树随每一步自动联动；中栏实时 3D 装配（真实 GLB 资产），
+> 右侧 3 条 ERROR 来自同套 `clearance-core` 的离线整线预检（与左侧实时点选命中共用同一算法），
+> 节拍面板给出目标产能 / 当前产能 / 瓶颈工位。性能监视页实时 FPS、JS 堆内存、LCP/CLS/FID 与
+> `gateway /telemetry` 上报状态，本地 dev 时「无活跃渲染场景」提示与「丢弃」计数均属设计预期。
 
 ## 关键设计
 
