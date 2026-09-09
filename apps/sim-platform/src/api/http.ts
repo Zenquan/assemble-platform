@@ -39,11 +39,40 @@ export interface RequestOptions {
 }
 
 // ── 凭证管理：登录后 setAuthToken 注入，所有请求自动带 Authorization: Bearer ──
+const TOKEN_STORAGE_KEY = 'sim.auth.token';
+
 let authToken: string | undefined;
 
-/** 设置访问令牌（登录成功后调用）；传 undefined 清除登录态 */
+/** 未授权（401）统一回调：由路由层注册，用于强制跳回登录页 */
+let unauthorizedHandler: (() => void) | null = null;
+
+/** 注册 401 统一处理（如跳转登录页）；传 null 注销 */
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
+/** 设置访问令牌（登录成功后调用）；传 undefined 清除登录态并同步抹掉持久化 */
 export function setAuthToken(token: string | undefined): void {
   authToken = token;
+  if (typeof localStorage === 'undefined') return;
+  try {
+    if (token) localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    else localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // 存储不可用（隐私模式/受限环境）时仅保留内存态，不影响会话
+  }
+}
+
+/** 应用启动时从持久化恢复令牌（刷新保活）；无持久化则返回 undefined */
+export function restoreAuthToken(): string | undefined {
+  if (authToken) return authToken;
+  if (typeof localStorage === 'undefined') return undefined;
+  try {
+    authToken = localStorage.getItem(TOKEN_STORAGE_KEY) ?? undefined;
+  } catch {
+    // 忽略：读取失败视同未登录
+  }
+  return authToken;
 }
 
 /** 读取当前令牌（供登录态判断 / 持久化） */
@@ -71,9 +100,10 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     throw new ApiError({ code: 'NETWORK_ERROR', message: '无法连接服务，请确认后端已启动', status: 0 });
   }
 
-  // 401：凭证失效/未认证 → 清除本地令牌并抛统一错误，供路由层跳登录
+  // 401：凭证失效/未认证 → 清除本地令牌 + 触发统一回调（路由层据此强制跳登录页），再抛统一错误
   if (res.status === 401) {
     setAuthToken(undefined);
+    unauthorizedHandler?.();
     throw new ApiError({ code: 'UNAUTHORIZED', message: '登录已过期，请重新登录', status: 401 });
   }
 

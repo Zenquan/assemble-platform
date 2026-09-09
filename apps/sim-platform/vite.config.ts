@@ -50,6 +50,8 @@ export default defineConfig(({ mode }) => {
         '/interference': { target: env['VITE_INTERFERENCE_TARGET'] ?? 'http://127.0.0.1:7102', changeOrigin: true },
         '/takt': { target: env['VITE_TAKT_TARGET'] ?? 'http://127.0.0.1:7104', changeOrigin: true },
         '/model': { target: env['VITE_MODEL_TARGET'] ?? 'http://127.0.0.1:7103', changeOrigin: true },
+        // 鉴权：登录/验签/角色查询转发 auth-svc(7105)，本地 dev 也可走通登录流
+        '/auth': { target: env['VITE_AUTH_TARGET'] ?? 'http://127.0.0.1:7105', changeOrigin: true },
         // 可观测性：SimMonitor 上报 /telemetry、拉取聚合 /metrics 都转发 gateway。
         // 本地需单独起 gateway（PORT=7100 node services/gateway/dist/server.js），
         // 未起时 proxy 连接失败回 503，前端静默降级，不影响业务与性能页本地实时数据。
