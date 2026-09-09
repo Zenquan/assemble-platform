@@ -29,6 +29,7 @@ const engine = ref<SimEngine | null>(null);
 const line = ref<ProductionLine | null>(null);
 const engineState = ref('初始化…');
 const backend = ref<'babylon' | 'noop'>('noop');
+const isLoading = ref(true);
 const stepText = ref('');
 const loadError = ref('');
 const assembledCount = ref(0);
@@ -68,6 +69,7 @@ let loadVersion = 0;
 async function loadWorkbench(nextLineId: string) {
   if (!canvasHost.value || unmounted) return;
   const version = ++loadVersion;
+  isLoading.value = true;
   lineId.value = nextLineId;
   engine.value?.dispose();
   engine.value = null;
@@ -125,6 +127,7 @@ async function loadWorkbench(nextLineId: string) {
     stepText.value = eng.backend === 'babylon'
       ? `已加载 ${health.totalParts} 个 GLB 零件 · 手动拖拽下一件装配（滚轮缩放 / 左键旋转）`
       : '当前环境无 WebGL，已回落 Noop 占位；请在浏览器中打开以启用 3D 渲染';
+    isLoading.value = false;
     void loadTakt(version, loadedLine);
     void loadInterference(version, nextLineId);
   } catch (e) {
@@ -132,6 +135,7 @@ async function loadWorkbench(nextLineId: string) {
     if (version !== loadVersion) return;
     engine.value = null;
     engineState.value = '引擎离线';
+    isLoading.value = false;
     loadError.value = e instanceof Error ? e.message : '产线或 GLB 装配加载失败';
   }
 }
@@ -402,7 +406,11 @@ function recheckInterference(): void {
           <BomTreePanel :model="bomTree" @select="selectPart" />
         </aside>
         <div ref="canvasHost" class="viewport">
-          <div v-if="loadError" class="vhint err">{{ loadError }}</div>
+          <div v-if="isLoading" class="load-overlay" role="status" aria-live="polite">
+            <span class="load-ring" aria-hidden="true"></span>
+            <span class="load-text">正在加载 GLB 零件…</span>
+          </div>
+          <div v-else-if="loadError" class="vhint err">{{ loadError }}</div>
           <div v-else-if="backend === 'noop'" class="vhint">{{ stepText }}</div>
           <template v-else>
             <div class="hud-top">STEP&nbsp;·&nbsp;装配视口（BOM 树联动 · 当前步骤高亮）</div>
@@ -769,6 +777,36 @@ function recheckInterference(): void {
 }
 .vhint.err {
   color: var(--red);
+}
+.load-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(10, 20, 32, 0.6);
+}
+.load-ring {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 3px solid rgba(94, 234, 212, 0.2);
+  border-top-color: #5eead4;
+  animation: wb-spin 0.9s linear infinite;
+}
+.load-text {
+  color: #99f6e4;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@keyframes wb-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 900px) {
