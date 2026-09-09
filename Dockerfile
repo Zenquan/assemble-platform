@@ -25,11 +25,16 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 WORKDIR /app
 # 运行时依赖 packages/*/dist（main/exports 指向 dist），必须先行编译
+# 注意：observability/security/health 虽被多服务 import，但未在此清单内会导致镜像内
+# 无 dist/*.d.ts，服务 tsc 报 TS2307（Cannot find module）+ 类型增强缺失的次生错误。
 RUN pnpm --filter @assemble/domain build \
   && pnpm --filter @assemble/sim-utils build \
   && pnpm --filter @assemble/clearance-core build \
   && pnpm --filter @assemble/http build \
-  && pnpm --filter @assemble/storage build
+  && pnpm --filter @assemble/storage build \
+  && pnpm --filter @assemble/observability build \
+  && pnpm --filter @assemble/security build \
+  && pnpm --filter @assemble/health build
 # 编译全部后端服务（gateway 最后，独立于其他服务源码）
 RUN pnpm --filter @assemble/assembly-svc build \
   && pnpm --filter @assemble/interference-svc build \
